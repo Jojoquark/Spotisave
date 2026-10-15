@@ -4,7 +4,7 @@ import com.spotisave.app.data.api.SpotifyApiClient
 import com.spotisave.app.data.api.SpotifyDevice
 import com.spotisave.app.data.api.SpotifyPlaybackState
 import com.spotisave.app.data.api.SpotifyPlaylistInfo
-import com.spotisave.app.data.api.SpotifyTrackInfo
+import com.spotisave.app.data.api.SpotifyTrack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -20,14 +20,14 @@ class SpotifyApiParsingTest {
 
     @Test
     fun testSpotifyPlaybackStateDataModel() {
-        val track = SpotifyTrackInfo(
+        val track = SpotifyTrack(
             id = "4iV5W9uYEdYUVa79Axb7Rh",
             name = "Silver Springs",
+            uri = "spotify:track:4iV5W9uYEdYUVa79Axb7Rh",
+            durationMs = 288000L,
             artistName = "Fleetwood Mac, Stevie Nicks",
             albumName = "Rumours",
-            trackUri = "spotify:track:4iV5W9uYEdYUVa79Axb7Rh",
-            coverUrl = "https://i.scdn.co/image/ab67616d0000b273",
-            durationMs = 288000L
+            coverUrl = "https://i.scdn.co/image/ab67616d0000b273"
         )
 
         val state = SpotifyPlaybackState(
@@ -52,14 +52,14 @@ class SpotifyApiParsingTest {
 
     @Test
     fun testSpotifyPlaybackStatePodcastEpisode() {
-        val episode = SpotifyTrackInfo(
+        val episode = SpotifyTrack(
             id = "episode_xyz",
             name = "Folge 142: Deep Dive",
+            uri = "spotify:episode:episode_xyz",
+            durationMs = 3600000L,
             artistName = "Tech Talk Podcast",
             albumName = "Tech Talk Podcast",
-            trackUri = "spotify:episode:episode_xyz",
-            coverUrl = "https://i.scdn.co/image/podcast_cover.jpg",
-            durationMs = 3600000L
+            coverUrl = "https://i.scdn.co/image/podcast_cover.jpg"
         )
 
         val state = SpotifyPlaybackState(

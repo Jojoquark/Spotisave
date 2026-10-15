@@ -207,7 +207,7 @@ async function runTests() {
         console.error('JS Syntax error in sw.js:', e);
     }
     assert(swSyntaxValid, 'sw.js passes full syntax check with 0 errors');
-    assert(swCode.includes("CACHE_NAME = 'spotisave-v2'"), 'sw.js uses bumped cache version spotisave-v2');
+    assert(swCode.includes("CACHE_NAME = 'spotisave-v3'"), 'sw.js uses bumped cache version spotisave-v3');
     assert(swCode.includes('caches.delete'), 'sw.js cleans up stale caches in activate listener');
     assert(swCode.includes("request.method !== 'GET'"), 'sw.js guards fetch to only handle GET requests');
     assert(swCode.includes('api.spotify.com') && swCode.includes('accounts.spotify.com'), 'sw.js never caches Spotify API or Auth requests');

@@ -7,26 +7,77 @@ import android.media.MediaMetadata
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
+import com.spotisave.app.data.api.SpotifyApiClient
+import com.spotisave.app.data.api.SpotifyAuthManager
 import com.spotisave.app.data.model.Bookmark
 import com.spotisave.app.service.SpotifyNotificationListenerService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 object ResumeHelper {
 
     private const val TAG = "ResumeHelper"
 
     /**
-     * Führt die 1-Click-Wiederaufnahme aus:
-     * 1. Steuert via MediaController (falls aktiv) die Hörposition direkt an ohne Reset auf 0:00.
-     * 2. Öffnet die native Spotify-App per Intent (spotify:track:... bzw. spotify:playlist:...).
-     * 3. Fallback auf Spotify Web Player, falls die native App nicht erreichbar ist.
+     * Führt die 1-Click-Wiederaufnahme aus (Hybrid-Modus):
+     * 1. Falls Spotify Web API autorisiert ist: PUT /me/player/play mit context_uri + offset + position_ms.
+     * 2. Falls MediaController aktiv ist: Direktes seekTo & play im laufenden Player ohne Reset auf 0:00.
+     * 3. Primärer nativer Intent an Spotify App (spotify:playlist:... bzw. spotify:track:...).
+     * 4. Robuster Fallback auf Spotify Web Player, falls die App nicht auflösbar ist.
      */
     fun resumeBookmark(context: Context, bookmark: Bookmark) {
         Log.i(TAG, "1-Click Resume für '${bookmark.trackTitle}' an Position ${bookmark.positionMs} ms")
 
+        val authManager = SpotifyAuthManager.getInstance(context)
+        if (authManager.isLoggedIn()) {
+            CoroutineScope(Dispatchers.Main).launch {
+                try {
+                    val apiClient = SpotifyApiClient.getInstance(context)
+                    val result = withContext(Dispatchers.IO) {
+                        apiClient.resumePlayback(
+                            contextUri = bookmark.contextUri,
+                            trackUri = bookmark.trackUri,
+                            positionMs = bookmark.positionMs
+                        )
+                    }
+
+                    if (result.isSuccess) {
+                        Toast.makeText(
+                            context,
+                            "Wiedergabe via Spotify API fortgesetzt bei ${TimeFormatter.formatTime(bookmark.positionMs)}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                        // Optional: Spotify-App in den Vordergrund bringen
+                        val launchIntent = context.packageManager.getLaunchIntentForPackage("com.spotify.music")
+                        if (launchIntent != null) {
+                            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            try { context.startActivity(launchIntent) } catch (_: Exception) {}
+                        }
+                        return@launch
+                    }
+
+                    // Falls Web API fehlschlägt (z.B. Free User oder kein aktives Gerät): nativer Fallback
+                    Log.w(TAG, "Web API Resume fehlgeschlagen, nutze nativen Intent-Fallback")
+                    executeNativeResume(context, bookmark)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Web API Ausnahme beim Resume, nutze nativen Fallback: ${e.message}")
+                    executeNativeResume(context, bookmark)
+                }
+            }
+        } else {
+            // Nicht mit Web API angemeldet -> Sofort nativer Modus
+            executeNativeResume(context, bookmark)
+        }
+    }
+
+    /**
+     * Nativer Intent & MediaController Fallback ohne Web API Abhängigkeit.
+     */
+    fun executeNativeResume(context: Context, bookmark: Bookmark) {
         val mediaController = SpotifyNotificationListenerService.currentMediaController
         val currentTrackUri = mediaController?.metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
             ?: mediaController?.metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)

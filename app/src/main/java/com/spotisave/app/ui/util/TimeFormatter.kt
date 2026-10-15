@@ -39,4 +39,20 @@ object TimeFormatter {
             else -> "vor ${seconds / 86400L} Tagen"
         }
     }
+
+    /**
+     * Formatiert Millisekunden in Stunden und Minuten für Statistiken (z.B. "2 Std. 45 Min.").
+     */
+    fun formatHoursAndMinutes(ms: Long): String {
+        if (ms <= 0L) return "0 Min."
+        val totalMinutes = ms / 60000L
+        val hours = totalMinutes / 60L
+        val minutes = totalMinutes % 60L
+        return if (hours > 0) {
+            if (minutes > 0) "${hours} Std. ${minutes} Min." else "${hours} Std."
+        } else {
+            "${minutes} Min."
+        }
+    }
 }
+

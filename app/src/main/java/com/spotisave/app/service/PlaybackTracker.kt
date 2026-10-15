@@ -67,6 +67,10 @@ object PlaybackTracker {
         }
 
         updateRepositoryState(context, source)
+
+        if (lastContextUri.isNullOrBlank()) {
+            enrichFromSpotifyApi(context)
+        }
     }
 
     fun onPlaybackStateChanged(
@@ -191,6 +195,9 @@ object PlaybackTracker {
 
         try {
             val repository = BookmarkRepository.initialize(context)
+            if (!lastContextUri.isNullOrBlank() && lastTrackUri.isNotBlank() && lastTrackUri != bookmarkId) {
+                repository.deleteBookmark(lastTrackUri)
+            }
             repository.saveBookmark(bookmark)
             lastSaveTimeMs = System.currentTimeMillis()
             Log.i(TAG, "Bookmark gespeichert: '${bookmark.trackTitle}' bei ${bookmark.positionMs} ms ($source)")
@@ -198,4 +205,43 @@ object PlaybackTracker {
             Log.e(TAG, "Fehler beim Speichern des Bookmarks", e)
         }
     }
+
+    fun enrichFromSpotifyApi(context: Context) {
+        val authManager = com.spotisave.app.data.api.SpotifyAuthManager.getInstance(context)
+        if (!authManager.isLoggedIn()) return
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                val apiClient = com.spotisave.app.data.api.SpotifyApiClient.getInstance(context)
+                val stateResult = apiClient.getNowPlaying()
+                val state = stateResult.getOrNull()
+                if (state != null && state.track != null) {
+                    val apiTrack = state.track
+                    val apiContextUri = state.contextUri
+                    if (!apiContextUri.isNullOrBlank()) {
+                        lastContextUri = apiContextUri
+                    }
+                    if (!apiTrack.coverUrl.isNullOrBlank() && lastCoverUrl.isNullOrBlank()) {
+                        lastCoverUrl = apiTrack.coverUrl
+                    }
+                    if (!apiContextUri.isNullOrBlank() && apiContextUri.startsWith("spotify:playlist:")) {
+                        val plId = apiContextUri.removePrefix("spotify:playlist:")
+                        val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
+                        if (plInfo != null) {
+                            lastAlbum = plInfo.name
+                            if (plInfo.coverUrl != null && lastCoverUrl.isNullOrBlank()) {
+                                lastCoverUrl = plInfo.coverUrl
+                            }
+                        }
+                    }
+                    updateRepositoryState(context, "WebApiEnrich")
+                    if (lastPositionMs > 1000L || lastIsPlaying) {
+                        flushBookmark(context, "WebApiEnrich")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "API-Enrichment übersprungen: ${e.message}")
+            }
+        }
+    }
 }
+

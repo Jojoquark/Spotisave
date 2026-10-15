@@ -1,6 +1,7 @@
 package com.spotisave.app
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -20,14 +21,13 @@ class MainActivity : ComponentActivity() {
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { _ ->
-        // Nach Berechtigungsdialog ViewModel aktualisieren
         viewModel.checkPermissions()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Frage Benachrichtigungs-Berechtigung auf Android 13+ an
+        handleOAuthIntent(intent)
         requestNotificationPermissionIfNeeded()
 
         setContent {
@@ -37,9 +37,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleOAuthIntent(intent)
+    }
+
     override fun onResume() {
         super.onResume()
         viewModel.checkPermissions()
+    }
+
+    private fun handleOAuthIntent(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme == "spotisave" && uri.host == "callback") {
+            val code = uri.getQueryParameter("code")
+            val error = uri.getQueryParameter("error")
+            if (!code.isNullOrBlank()) {
+                viewModel.handleAuthCode(code)
+            } else if (!error.isNullOrBlank()) {
+                viewModel.handleAuthError(error)
+            }
+        }
     }
 
     private fun requestNotificationPermissionIfNeeded() {

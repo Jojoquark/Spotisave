@@ -21,12 +21,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,6 +47,8 @@ import com.spotisave.app.data.model.Bookmark
 import com.spotisave.app.ui.screens.components.BookmarkCard
 import com.spotisave.app.ui.screens.components.EmptyStateCard
 import com.spotisave.app.ui.screens.components.HeroCard
+import com.spotisave.app.ui.screens.components.SpotisaveBottomBar
+import com.spotisave.app.ui.screens.components.SpotifyApiSettingsDialog
 import com.spotisave.app.ui.screens.components.StatusBottomSheet
 import com.spotisave.app.ui.theme.AppleSystemGreen
 import com.spotisave.app.ui.theme.CanvasBlack
@@ -59,7 +60,6 @@ import com.spotisave.app.ui.theme.SurfaceCardElevated
 import com.spotisave.app.ui.theme.TextMuted
 import com.spotisave.app.ui.theme.TextPrimary
 import com.spotisave.app.ui.theme.TextSecondary
-import com.spotisave.app.ui.theme.TextTertiary
 import com.spotisave.app.ui.viewmodel.MainViewModel
 
 @Composable
@@ -73,7 +73,14 @@ fun MainScreen(
     val isServiceRunning by viewModel.isServiceRunning.collectAsState()
     val isNotificationGranted by viewModel.isNotificationListenerGranted.collectAsState()
 
+    val selectedTab by viewModel.selectedTab.collectAsState()
+    val isSpotifyLoggedIn by viewModel.isSpotifyLoggedIn.collectAsState()
+    val spotifyClientId by viewModel.spotifyClientId.collectAsState()
+    val authStatusMessage by viewModel.authStatusMessage.collectAsState()
+    val listeningStats by viewModel.listeningStats.collectAsState()
+
     var showStatusSheet by remember { mutableStateOf(false) }
+    var showApiDialog by remember { mutableStateOf(false) }
     var bookmarkToDelete by remember { mutableStateOf<Bookmark?>(null) }
 
     LaunchedEffect(Unit) {
@@ -106,109 +113,163 @@ fun MainScreen(
                         color = TextPrimary
                     )
                     Spacer(modifier = Modifier.width(10.dp))
-                    // Kleiner Statusindikator
+                    // Service & API Status Indikator
                     Box(
                         modifier = Modifier
                             .size(8.dp)
                             .clip(CircleShape)
-                            .background(if (isServiceRunning) SpotifyGreen else TextMuted)
+                            .background(
+                                when {
+                                    isSpotifyLoggedIn -> SpotifyGreen
+                                    isServiceRunning -> AppleSystemGreen
+                                    else -> TextMuted
+                                }
+                            )
                     )
                 }
 
-                // Diagnose / Einstellungen Button (44dp Touch-Target)
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(SurfaceCardElevated)
-                        .border(1.dp, HairlineBorder, CircleShape)
-                        .clickable { showStatusSheet = true },
-                    contentAlignment = Alignment.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Tune,
-                        contentDescription = "Hintergrund-Status öffnen",
-                        tint = TextPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    // Spotify Web API Connect Button (44dp Touch-Target)
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(if (isSpotifyLoggedIn) SurfaceCardElevated else SurfaceCard)
+                            .border(
+                                1.dp,
+                                if (isSpotifyLoggedIn) SpotifyGreen else HairlineBorder,
+                                CircleShape
+                            )
+                            .clickable { showApiDialog = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Key,
+                            contentDescription = "Spotify API Einstellungen",
+                            tint = if (isSpotifyLoggedIn) SpotifyGreen else TextPrimary,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+
+                    // Diagnose / Hintergrunddienst-Status Button (44dp Touch-Target)
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(SurfaceCardElevated)
+                            .border(1.dp, HairlineBorder, CircleShape)
+                            .clickable { showStatusSheet = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = "Hintergrund-Status öffnen",
+                            tint = TextPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
-            // Hauptinhalt
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 40.dp, top = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Top Hero Card "Zuletzt gehört"
-                item {
-                    val matchingBookmark = if (activePlayback != null) {
-                        bookmarks.find { it.trackUri == activePlayback?.trackUri || (it.contextUri != null && it.contextUri == activePlayback?.contextUri) }
-                    } else null
-                    val latest = matchingBookmark ?: bookmarks.firstOrNull()
-                    HeroCard(
-                        activePlayback = activePlayback,
-                        latestBookmark = latest,
-                        onResumeClick = { bm ->
-                            viewModel.resumeBookmark(context, bm)
-                        }
-                    )
-                }
-
-                // Abschnitts-Überschrift
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp, bottom = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Gespeicherte Hörpositionen",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
+            // Tab-basierter Hauptinhalt
+            if (selectedTab == 0) {
+                // TAB 1: Playlists & Zuletzt gehört
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 90.dp, top = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Top Hero Card "Zuletzt gehört"
+                    item {
+                        val matchingBookmark = if (activePlayback != null) {
+                            bookmarks.find { it.trackUri == activePlayback?.trackUri || (it.contextUri != null && it.contextUri == activePlayback?.contextUri) }
+                        } else null
+                        val latest = matchingBookmark ?: bookmarks.firstOrNull()
+                        HeroCard(
+                            activePlayback = activePlayback,
+                            latestBookmark = latest,
+                            onResumeClick = { bm ->
+                                viewModel.resumeBookmark(context, bm)
+                            }
                         )
+                    }
 
-                        if (bookmarks.isNotEmpty()) {
+                    // Abschnitts-Überschrift
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp, bottom = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = "${bookmarks.size}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = SpotifyGreen,
+                                text = "Gespeicherte Hörpositionen",
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(SurfaceCardElevated)
-                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                                color = TextPrimary
+                            )
+
+                            if (bookmarks.isNotEmpty()) {
+                                Text(
+                                    text = "${bookmarks.size}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = SpotifyGreen,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(SurfaceCardElevated)
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Liste aller gespeicherten Bookmarks
+                    if (bookmarks.isEmpty()) {
+                        item {
+                            EmptyStateCard()
+                        }
+                    } else {
+                        items(
+                            items = bookmarks,
+                            key = { it.id }
+                        ) { bookmark ->
+                            BookmarkCard(
+                                bookmark = bookmark,
+                                onResumeClick = { bm ->
+                                    viewModel.resumeBookmark(context, bm)
+                                },
+                                onDeleteClick = { bm ->
+                                    bookmarkToDelete = bm
+                                }
                             )
                         }
                     }
                 }
-
-                // Liste aller gespeicherten Bookmarks
-                if (bookmarks.isEmpty()) {
-                    item {
-                        EmptyStateCard()
+            } else {
+                // TAB 2: Statistiken & Insights Dashboard
+                StatsScreen(
+                    stats = listeningStats,
+                    onResumePlaylist = { bm ->
+                        viewModel.resumeBookmark(context, bm)
+                    },
+                    onCycleRoast = {
+                        viewModel.cycleRoast()
                     }
-                } else {
-                    items(
-                        items = bookmarks,
-                        key = { it.id }
-                    ) { bookmark ->
-                        BookmarkCard(
-                            bookmark = bookmark,
-                            onResumeClick = { bm ->
-                                viewModel.resumeBookmark(context, bm)
-                            },
-                            onDeleteClick = { bm ->
-                                bookmarkToDelete = bm
-                            }
-                        )
-                    }
-                }
+                )
             }
         }
+
+        // Apple HIG Translucent Bottom Navigation Bar
+        SpotisaveBottomBar(
+            selectedTab = selectedTab,
+            onTabSelected = { viewModel.selectTab(it) },
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
 
         // 2-Step Safe Delete Confirmation Dialog
         bookmarkToDelete?.let { bm ->
@@ -264,6 +325,25 @@ fun MainScreen(
                 },
                 onDismissRequest = {
                     showStatusSheet = false
+                    viewModel.checkPermissions()
+                }
+            )
+        }
+
+        // Spotify Web API Settings Dialog
+        if (showApiDialog) {
+            SpotifyApiSettingsDialog(
+                isLoggedIn = isSpotifyLoggedIn,
+                initialClientId = spotifyClientId,
+                authStatusMessage = authStatusMessage,
+                onConnectClick = { id ->
+                    viewModel.startAuthFlow(context, id)
+                },
+                onLogoutClick = {
+                    viewModel.logoutSpotify()
+                },
+                onDismissRequest = {
+                    showApiDialog = false
                     viewModel.checkPermissions()
                 }
             )

@@ -35,7 +35,7 @@ jobs:
       - name: Locate Generated APK
         run: |
           echo "### Generated APK Files"
-          find app/build/outputs/apk -type f -name "*.apk"
+          find . -type f -name "*.apk" || true
 
       - name: Report Failure Details
         if: failure()

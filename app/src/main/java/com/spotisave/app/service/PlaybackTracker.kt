@@ -2,9 +2,15 @@ package com.spotisave.app.service
 
 import android.content.Context
 import android.util.Log
+import com.spotisave.app.data.api.SpotifyApiClient
+import com.spotisave.app.data.api.SpotifyAuthManager
 import com.spotisave.app.data.model.Bookmark
 import com.spotisave.app.data.model.PlaybackStateModel
 import com.spotisave.app.data.repository.BookmarkRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Zentraler Logik-Handler für die Spotify-Wiedergabeerfassung.
@@ -14,6 +20,7 @@ import com.spotisave.app.data.repository.BookmarkRepository
 object PlaybackTracker {
 
     private const val TAG = "PlaybackTracker"
+    private val trackerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     // Zwischengespeicherte Metadaten mit @Volatile für threadsichere Background-Erfassung
     @Volatile private var lastTrackUri: String = ""
@@ -207,11 +214,11 @@ object PlaybackTracker {
     }
 
     fun enrichFromSpotifyApi(context: Context) {
-        val authManager = com.spotisave.app.data.api.SpotifyAuthManager.getInstance(context)
+        val authManager = SpotifyAuthManager.getInstance(context)
         if (!authManager.isLoggedIn()) return
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        trackerScope.launch {
             try {
-                val apiClient = com.spotisave.app.data.api.SpotifyApiClient.getInstance(context)
+                val apiClient = SpotifyApiClient.getInstance(context)
                 val stateResult = apiClient.getNowPlaying()
                 val state = stateResult.getOrNull()
                 if (state != null && state.track != null) {

@@ -2,458 +2,2075 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#121212">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="./manifest.json">
     <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/174/174872.png">
-    <title>Spotify Playlist Saver</title>
+    <title>Spotisave — Spotify Playlist Saver</title>
     <style>
-        :root { --bg: #121212; --card: #181818; --green: #1DB954; --text: #FFFFFF; --sub: #B3B3B3; }
-        * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; }
-        .container { max-width: 480px; margin: 0 auto; }
-        h1 { font-size: 1.35rem; margin: 0 0 4px 0; }
-        .subtext { color: var(--sub); font-size: 0.8rem; margin: 0 0 16px 0; }
-        .setup-box { background: var(--card); padding: 16px; border-radius: 12px; margin-bottom: 16px; }
-        input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #333; background: #222; color: #fff; font-size: 0.9rem; margin: 8px 0 12px 0; }
-        .btn { background: var(--green); color: #000; border: none; border-radius: 24px; padding: 10px 16px; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
-        .btn:active { transform: scale(0.96); }
-        .btn-full { width: 100%; padding: 12px; }
-        .btn-outline { background: transparent; color: var(--text); border: 1px solid #444; }
-        .btn-bg-active { background: #1e2922; color: var(--green); border: 1px solid var(--green); }
-        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; flex-wrap: wrap; }
-        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-right: 6px; box-shadow: 0 0 8px var(--green); }
-        .now-playing { background: #1e2922; border: 1px solid #2d4736; border-radius: 12px; padding: 12px; margin-bottom: 16px; font-size: 0.83rem; display: none; line-height: 1.4; }
-        .card { background: var(--card); border-radius: 12px; padding: 12px; display: flex; align-items: center; gap: 12px; margin-bottom: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        .cover { width: 58px; height: 58px; border-radius: 8px; object-fit: cover; background: #282828; flex-shrink: 0; }
-        .info { flex-grow: 1; overflow: hidden; }
-        .pl-name { font-weight: 700; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .track { color: var(--sub); font-size: 0.82rem; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .time { color: var(--green); font-size: 0.76rem; font-weight: 600; margin-top: 4px; }
-        .del-btn { background: none; border: none; color: #666; font-size: 1.1rem; cursor: pointer; padding: 4px 6px; }
-        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--green); color: #000; padding: 10px 20px; border-radius: 30px; font-weight: 700; font-size: 0.85rem; display: none; z-index: 99; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
-        code { background: #282828; padding: 4px 6px; border-radius: 4px; font-size: 0.78rem; word-break: break-all; display: block; }
+        :root {
+            /* Apple Dark Mode Palette */
+            --bg-canvas: #000000;
+            --bg-surface: #161618;
+            --bg-surface-elevated: #1f1f23;
+            --bg-surface-hover: #26262b;
+            --bg-glass-bar: rgba(18, 18, 20, 0.78);
+            --bg-glass-modal: rgba(28, 28, 30, 0.94);
+            
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-medium: rgba(255, 255, 255, 0.14);
+            --border-highlight: rgba(255, 255, 255, 0.22);
+            --border-accent: rgba(48, 209, 88, 0.35);
+
+            --accent-green: #30D158;
+            --accent-green-dark: #24A143;
+            --accent-green-glow: rgba(48, 209, 88, 0.35);
+            --accent-green-bg: rgba(48, 209, 88, 0.12);
+            --accent-amber: #FF9F0A;
+            --accent-amber-bg: rgba(255, 159, 10, 0.14);
+            --accent-red: #FF453A;
+            --accent-red-bg: rgba(255, 69, 58, 0.12);
+            --accent-blue: #0A84FF;
+
+            --text-primary: #FFFFFF;
+            --text-secondary: rgba(235, 235, 245, 0.62);
+            --text-tertiary: rgba(235, 235, 245, 0.55);
+
+            --font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "SF Pro", system-ui, sans-serif;
+            --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+
+            --radius-xs: 6px;
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+            --radius-full: 9999px;
+
+            --ease-apple: cubic-bezier(0.2, 0.8, 0.2, 1);
+            --transition-fast: 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: var(--font-stack);
+            background-color: var(--bg-canvas);
+            color: var(--text-primary);
+            line-height: 1.45;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* Accessibility & Contrast */
+        @media (prefers-reduced-motion: reduce) {
+            *, ::after, ::before {
+                animation-duration: 0.001ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.001ms !important;
+            }
+        }
+
+        @media (prefers-contrast: more) {
+            :root {
+                --border-subtle: rgba(255, 255, 255, 0.28);
+                --border-medium: rgba(255, 255, 255, 0.45);
+                --text-secondary: rgba(255, 255, 255, 0.88);
+                --text-tertiary: rgba(255, 255, 255, 0.75);
+            }
+        }
+
+        /* FLOATING FUNCTIONAL GLASS HEADER */
+        .nav-header {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: var(--bg-glass-bar);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: max(12px, env(safe-area-inset-top)) 16px 12px 16px;
+        }
+
+        .nav-inner {
+            max-width: 500px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .brand-cluster {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .app-logo-badge {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, #1DB954 0%, #15883e 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(29, 185, 84, 0.3);
+        }
+
+        .brand-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+
+        /* STATUS CAPSULE PILL */
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-full);
+            font-size: 0.76rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: var(--transition-fast);
+            min-height: 36px;
+            user-select: none;
+        }
+
+        .status-pill:hover {
+            background: rgba(255, 255, 255, 0.09);
+            border-color: var(--border-medium);
+            color: var(--text-primary);
+        }
+
+        .status-pill:active {
+            transform: scale(0.96);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--accent-green);
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .status-dot.active::after {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: 50%;
+            background-color: var(--accent-green);
+            opacity: 0.55;
+            animation: pulse-ring 2.4s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+        }
+
+        .status-dot.paused {
+            background-color: var(--accent-amber);
+        }
+        .status-dot.paused::after {
+            display: none;
+        }
+
+        .status-dot.offline {
+            background-color: var(--accent-red);
+        }
+        .status-dot.offline::after {
+            display: none;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.85); opacity: 0.7; }
+            50% { transform: scale(2.1); opacity: 0; }
+            100% { transform: scale(0.85); opacity: 0; }
+        }
+
+        /* APP CONTAINER */
+        .app-container {
+            max-width: 500px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 16px 16px calc(36px + env(safe-area-inset-bottom)) 16px;
+            flex: 1;
+        }
+
+        /* SECTION HEADERS (Apple HIG Grouped Style) */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 20px 0 8px 0;
+            padding: 0 4px;
+        }
+
+        .section-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--text-secondary);
+        }
+
+        .section-action {
+            font-size: 0.78rem;
+            color: var(--accent-green);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            padding: 4px 6px;
+            border-radius: var(--radius-xs);
+            transition: var(--transition-fast);
+        }
+        .section-action:hover {
+            color: #48e26f;
+        }
+
+        /* QUICK ACTION TOOLBAR */
+        .toolbar-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        /* BUTTONS (Apple HIG Compliant 44px Minimum Touch Target) */
+        .btn {
+            min-height: 44px;
+            min-width: 44px;
+            padding: 10px 16px;
+            border-radius: var(--radius-full);
+            border: 1px solid transparent;
+            font-family: inherit;
+            font-size: 0.86rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: var(--transition-fast);
+            user-select: none;
+            text-decoration: none;
+            -webkit-appearance: none;
+        }
+
+        .btn:active {
+            transform: scale(0.97);
+        }
+
+        .btn-primary {
+            background-color: var(--accent-green);
+            color: #000000;
+            border-color: var(--accent-green);
+            box-shadow: 0 2px 10px var(--accent-green-glow);
+        }
+        .btn-primary:hover {
+            background-color: #38dc60;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-primary);
+            border: 1px solid var(--border-subtle);
+        }
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--border-medium);
+        }
+
+        .btn-active-toggle {
+            background: var(--accent-green-bg);
+            color: var(--accent-green);
+            border: 1px solid var(--border-accent);
+        }
+        .btn-active-toggle:hover {
+            background: rgba(48, 209, 88, 0.2);
+        }
+
+        .btn-destructive {
+            background: var(--accent-red-bg);
+            color: var(--accent-red);
+            border: 1px solid rgba(255, 69, 58, 0.25);
+        }
+        .btn-destructive:hover {
+            background: rgba(255, 69, 58, 0.22);
+        }
+
+        .btn-icon-only {
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-subtle);
+            flex-shrink: 0;
+        }
+        .btn-icon-only:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-primary);
+            border-color: var(--border-medium);
+        }
+
+        .btn-sm {
+            min-height: 38px;
+            padding: 8px 14px;
+            font-size: 0.8rem;
+        }
+
+        /* NOW PLAYING HERO CARD */
+        .now-playing-card {
+            background: linear-gradient(180deg, rgba(48, 209, 88, 0.08) 0%, rgba(22, 22, 24, 0.95) 100%);
+            border: 1px solid var(--border-accent);
+            border-radius: var(--radius-lg);
+            padding: 14px 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+            display: none;
+            transition: var(--transition-fast);
+        }
+
+        .np-eyebrow {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .np-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+            color: var(--accent-green);
+        }
+
+        /* EQUALIZER WAVE ANIMATION */
+        .eq-bars {
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 12px;
+            width: 12px;
+        }
+        .eq-bar {
+            width: 2.5px;
+            background: var(--accent-green);
+            border-radius: 1px;
+            animation: eq-bounce 0.9s ease-in-out infinite alternate;
+        }
+        .eq-bar:nth-child(1) { height: 40%; animation-delay: 0.1s; }
+        .eq-bar:nth-child(2) { height: 95%; animation-delay: 0.35s; }
+        .eq-bar:nth-child(3) { height: 60%; animation-delay: 0.2s; }
+        @keyframes eq-bounce {
+            0% { height: 25%; }
+            100% { height: 100%; }
+        }
+
+        .np-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .np-cover {
+            width: 52px;
+            height: 52px;
+            border-radius: var(--radius-md);
+            object-fit: cover;
+            background: #202024;
+            flex-shrink: 0;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .np-details {
+            flex-grow: 1;
+            min-width: 0;
+        }
+
+        .np-title {
+            font-size: 0.92rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .np-subtitle {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .np-progress-row {
+            margin-top: 10px;
+        }
+
+        .np-bar-track {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-full);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .np-bar-fill {
+            height: 100%;
+            background: var(--accent-green);
+            border-radius: var(--radius-full);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .np-time-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.72rem;
+            font-weight: 500;
+            color: var(--text-tertiary);
+            font-variant-numeric: tabular-nums;
+            margin-top: 4px;
+        }
+
+        /* BOOKMARK CARDS (Apple Grouped List Style) */
+        .bookmark-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+            transition: var(--transition-fast);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            position: relative;
+        }
+
+        .bookmark-card:hover {
+            background: var(--bg-surface-hover);
+            border-color: var(--border-medium);
+        }
+
+        .bookmark-cover {
+            width: 58px;
+            height: 58px;
+            border-radius: var(--radius-md);
+            object-fit: cover;
+            background: #202024;
+            flex-shrink: 0;
+            border: 1px solid var(--border-subtle);
+        }
+
+        .bookmark-info {
+            flex-grow: 1;
+            min-width: 0;
+        }
+
+        .bookmark-title {
+            font-size: 0.94rem;
+            font-weight: 600;
+            letter-spacing: -0.2px;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .bookmark-track {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .bookmark-time-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.74rem;
+            font-weight: 600;
+            color: var(--accent-green);
+            background: var(--accent-green-bg);
+            padding: 2px 8px;
+            border-radius: var(--radius-full);
+            margin-top: 5px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .bookmark-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        /* EMPTY STATE (Apple Design Craft) */
+        .empty-state {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-xl);
+            padding: 36px 20px;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .empty-icon-wrap {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px auto;
+            color: var(--text-tertiary);
+        }
+
+        .empty-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .empty-desc {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            max-width: 320px;
+            margin: 0 auto 18px auto;
+        }
+
+        /* SETUP / LOGIN VIEW */
+        .setup-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-xl);
+            padding: 24px 20px;
+            margin-top: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .setup-hero {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .setup-icon {
+            width: 64px;
+            height: 64px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #1DB954 0%, #107532 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 14px auto;
+            box-shadow: 0 4px 16px rgba(29, 185, 84, 0.35);
+        }
+
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        .input-label {
+            display: block;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .text-input {
+            width: 100%;
+            min-height: 44px;
+            padding: 10px 14px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-medium);
+            background: #1c1c1f;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.9rem;
+            transition: var(--transition-fast);
+        }
+        .text-input:focus {
+            outline: none;
+            border-color: var(--accent-green);
+            box-shadow: 0 0 0 3px var(--accent-green-bg);
+        }
+
+        .uri-display-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: #101012;
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 8px 10px 8px 12px;
+            margin-top: 4px;
+        }
+
+        .uri-code {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            word-break: break-all;
+            flex-grow: 1;
+        }
+
+        .copy-btn {
+            min-height: 34px;
+            padding: 6px 12px;
+            border-radius: var(--radius-sm);
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            font-size: 0.76rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            flex-shrink: 0;
+            transition: var(--transition-fast);
+        }
+        .copy-btn:active {
+            transform: scale(0.96);
+        }
+
+        /* MODAL / BOTTOM SHEET (Apple HIG Style) */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 100;
+            display: none;
+            align-items: flex-end;
+            justify-content: center;
+            padding: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        @media (min-width: 520px) {
+            .modal-backdrop {
+                align-items: center;
+                padding: 20px;
+            }
+        }
+
+        .modal-sheet {
+            background: var(--bg-glass-modal);
+            backdrop-filter: blur(28px) saturate(180%);
+            -webkit-backdrop-filter: blur(28px) saturate(180%);
+            border: 1px solid var(--border-medium);
+            border-radius: 24px 24px 0 0;
+            width: 100%;
+            max-width: 480px;
+            padding: 20px 20px calc(24px + env(safe-area-inset-bottom)) 20px;
+            box-shadow: 0 -8px 36px rgba(0, 0, 0, 0.6);
+            transform: translateY(100%);
+            transition: transform 0.28s var(--ease-apple);
+        }
+
+        @media (min-width: 520px) {
+            .modal-sheet {
+                border-radius: 20px;
+                transform: scale(0.95);
+            }
+        }
+
+        .modal-backdrop.open {
+            display: flex;
+        }
+
+        .modal-backdrop.open .modal-sheet {
+            transform: translateY(0);
+        }
+        @media (min-width: 520px) {
+            .modal-backdrop.open .modal-sheet {
+                transform: scale(1);
+            }
+        }
+
+        .modal-grabber {
+            width: 36px;
+            height: 4px;
+            border-radius: var(--radius-full);
+            background: rgba(255, 255, 255, 0.25);
+            margin: 0 auto 16px auto;
+        }
+        @media (min-width: 520px) {
+            .modal-grabber {
+                display: none;
+            }
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .modal-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin: 16px 0;
+        }
+
+        .metric-tile {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+            padding: 10px 12px;
+        }
+
+        .metric-label {
+            font-size: 0.72rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .metric-value {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-top: 4px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* TOAST NOTIFICATION (Apple Capsule Pill) */
+        .toast-pill {
+            position: fixed;
+            bottom: calc(24px + env(safe-area-inset-bottom));
+            left: 50%;
+            transform: translateX(-50%) translateY(120%);
+            background: rgba(36, 36, 40, 0.94);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid var(--border-highlight);
+            color: var(--text-primary);
+            padding: 10px 20px;
+            border-radius: var(--radius-full);
+            font-size: 0.84rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 200;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.28s var(--ease-apple);
+            white-space: nowrap;
+            max-width: 90vw;
+        }
+
+        .toast-pill.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* LOADING SPINNER */
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(0, 0, 0, 0.2);
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* FOOTER BRANDING */
+        .app-footer {
+            margin-top: auto;
+            text-align: center;
+            padding: 24px 0 8px 0;
+            font-size: 0.76rem;
+            color: var(--text-tertiary);
+        }
     </style>
 </head>
 <body>
-<div class="container">
-    <!-- LOGIN / SETUP VIEW -->
-    <div id="login-view" style="display:none;">
-        <h1>Spotify Playlist Saver</h1>
-        <p class="subtext">Android App & Auto-Save im Hintergrund</p>
-        <div class="setup-box">
-            <label style="font-size:0.85rem; font-weight:600;">1. Redirect URI im Spotify Dashboard eintragen:</label>
-            <p style="margin:6px 0 14px 0;"><code id="redirect-display"></code></p>
-            <label style="font-size:0.85rem; font-weight:600;">2. Deine Spotify Client ID:</label>
-            <input type="text" id="client-id-input" placeholder="Client ID hier einfügen...">
-            <button class="btn btn-full" onclick="startAuth()">Mit Spotify verbinden</button>
+
+    <!-- FLOATING FUNCTIONAL GLASS HEADER -->
+    <header class="nav-header">
+        <div class="nav-inner">
+            <div class="brand-cluster">
+                <div class="app-logo-badge" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="#000000">
+                        <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424c-.18.295-.563.387-.857.207-2.35-1.435-5.308-1.76-8.792-.963-.335.077-.67-.133-.746-.468-.077-.334.132-.67.467-.746 3.808-.87 7.076-.496 9.721 1.113.294.18.386.563.207.857zm1.225-2.723c-.226.367-.707.482-1.074.256-2.69-1.653-6.79-2.131-9.97-1.165-.413.125-.85-.107-.975-.52-.125-.414.107-.85.52-.976 3.632-1.102 8.147-.568 11.243 1.331.367.226.482.707.256 1.074zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71c-.494.15-1.018-.13-1.168-.624-.15-.494.13-1.018.624-1.168 3.532-1.072 9.404-.866 13.115 1.337.445.264.59.838.327 1.282-.264.444-.838.59-1.282.327z"/>
+                    </svg>
+                </div>
+                <h1 class="brand-title">Spotisave</h1>
+            </div>
+
+            <button type="button" class="status-pill" id="status-pill" onclick="openInspectorModal()" aria-label="Status-Inspektor öffnen">
+                <span class="status-dot active" id="header-status-dot"></span>
+                <span id="header-status-label">Live-Tracking</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN APP CONTENT -->
+    <main class="app-container">
+
+        <!-- LOGIN / SETUP VIEW -->
+        <section id="login-view" style="display:none;">
+            <div class="setup-hero">
+                <div class="setup-icon" aria-hidden="true">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="#000000">
+                        <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424c-.18.295-.563.387-.857.207-2.35-1.435-5.308-1.76-8.792-.963-.335.077-.67-.133-.746-.468-.077-.334.132-.67.467-.746 3.808-.87 7.076-.496 9.721 1.113.294.18.386.563.207.857zm1.225-2.723c-.226.367-.707.482-1.074.256-2.69-1.653-6.79-2.131-9.97-1.165-.413.125-.85-.107-.975-.52-.125-.414.107-.85.52-.976 3.632-1.102 8.147-.568 11.243 1.331.367.226.482.707.256 1.074zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71c-.494.15-1.018-.13-1.168-.624-.15-.494.13-1.018.624-1.168 3.532-1.072 9.404-.866 13.115 1.337.445.264.59.838.327 1.282-.264.444-.838.59-1.282.327z"/>
+                    </svg>
+                </div>
+                <h2 style="font-size:1.35rem; font-weight:700; letter-spacing:-0.4px; margin-bottom:4px;">Mit Spotify verbinden</h2>
+                <p style="font-size:0.84rem; color:var(--text-secondary);">Sichere deine Hörpositionen sekundengenau und setze Playlists nahtlos fort.</p>
+            </div>
+
+            <div class="setup-card">
+                <div class="input-group">
+                    <label class="input-label" for="redirect-display">1. Redirect URI für dein Spotify Dashboard:</label>
+                    <div class="uri-display-row">
+                        <span class="uri-code" id="redirect-display"></span>
+                        <button type="button" class="copy-btn" onclick="copyRedirectUri()">
+                            <span id="copy-btn-text">Kopieren</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label class="input-label" for="client-id-input">2. Deine Spotify Client ID:</label>
+                    <input type="text" id="client-id-input" class="text-input" placeholder="z.B. a1b2c3d4e5f6..." autocomplete="off" spellcheck="false">
+                </div>
+
+                <button type="button" class="btn btn-primary" style="width:100%; margin-top:8px;" onclick="startAuth()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#000000" aria-hidden="true">
+                        <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424c-.18.295-.563.387-.857.207-2.35-1.435-5.308-1.76-8.792-.963-.335.077-.67-.133-.746-.468-.077-.334.132-.67.467-.746 3.808-.87 7.076-.496 9.721 1.113.294.18.386.563.207.857zm1.225-2.723c-.226.367-.707.482-1.074.256-2.69-1.653-6.79-2.131-9.97-1.165-.413.125-.85-.107-.975-.52-.125-.414.107-.85.52-.976 3.632-1.102 8.147-.568 11.243 1.331.367.226.482.707.256 1.074zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71c-.494.15-1.018-.13-1.168-.624-.15-.494.13-1.018.624-1.168 3.532-1.072 9.404-.866 13.115 1.337.445.264.59.838.327 1.282-.264.444-.838.59-1.282.327z"/>
+                    </svg>
+                    <span>Mit Spotify anmelden</span>
+                </button>
+
+                <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border-subtle); font-size:0.75rem; color:var(--text-tertiary); text-align:center;">
+                    Client ID kostenlos im <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener" style="color:var(--accent-green); text-decoration:none;">Spotify Developer Dashboard ↗</a> anlegen.
+                </div>
+            </div>
+        </section>
+
+        <!-- MAIN APP VIEW -->
+        <section id="app-view" style="display:none;">
+
+            <!-- TOOLBAR BUTTONS -->
+            <div class="toolbar-grid">
+                <button type="button" id="keep-alive-btn" class="btn btn-secondary" onclick="toggleKeepAlive()">
+                    <span id="keep-alive-icon">⚡</span>
+                    <span id="keep-alive-label">Fokus-Schutz inaktiv</span>
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="checkNowPlaying(true)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                    </svg>
+                    <span>Jetzt sichern</span>
+                </button>
+            </div>
+
+            <!-- NOW PLAYING HERO CARD -->
+            <article id="now-playing-box" class="now-playing-card" aria-label="Aktuelle Wiedergabe">
+                <div class="np-eyebrow">
+                    <div class="np-badge">
+                        <div class="eq-bars" aria-hidden="true">
+                            <div class="eq-bar"></div>
+                            <div class="eq-bar"></div>
+                            <div class="eq-bar"></div>
+                        </div>
+                        <span id="np-status-label">Aktuell in Wiedergabe</span>
+                    </div>
+                    <span id="np-sync-label" style="font-size:0.72rem; color:var(--text-tertiary);">Live-Auto-Save</span>
+                </div>
+
+                <div class="np-content">
+                    <img id="np-cover-img" class="np-cover" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='52' height='52' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='1.5'><rect width='24' height='24' fill='%231c1c1f'/><path d='M9 18V5l12-2v13'/><circle cx='6' cy='18' r='3'/><circle cx='18' cy='16' r='3'/></svg>" alt="Album Cover" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'52\' height=\'52\' fill=\'%23333\'><rect width=\'52\' height=\'52\'/></svg>'">
+                    <div class="np-details">
+                        <div class="np-title" id="np-track-name">—</div>
+                        <div class="np-subtitle" id="np-meta-line">—</div>
+                    </div>
+                </div>
+
+                <div class="np-progress-row">
+                    <div class="np-bar-track">
+                        <div class="np-bar-fill" id="np-bar-fill"></div>
+                    </div>
+                    <div class="np-time-row">
+                        <span id="np-time-current">0:00</span>
+                        <span id="np-time-duration">0:00</span>
+                    </div>
+                </div>
+            </article>
+
+            <!-- BOOKMARKS SECTION -->
+            <div class="section-header">
+                <h2 class="section-title">Gespeicherte Playlists</h2>
+                <button type="button" class="section-action" onclick="checkNowPlaying(true)">Aktualisieren</button>
+            </div>
+
+            <!-- BOOKMARKS LIST -->
+            <div id="bookmarks-list" role="list"></div>
+
+            <!-- FOOTER SETTINGS -->
+            <footer class="app-footer">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="logout()">
+                    Abmelden / Client ID wechseln
+                </button>
+                <div style="margin-top:12px;">Spotisave • Apple HIG Craft PWA</div>
+            </footer>
+        </section>
+
+    </main>
+
+    <!-- STATUS INSPECTOR BOTTOM SHEET / MODAL -->
+    <div class="modal-backdrop" id="inspector-modal" onclick="closeInspectorOnBackdrop(event)">
+        <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="inspector-title">
+            <div class="modal-grabber"></div>
+            <div class="modal-header">
+                <h3 class="modal-title" id="inspector-title">Hintergrund-Synchronisation</h3>
+                <button type="button" class="btn btn-icon-only" onclick="closeInspectorModal()" aria-label="Schließen">✕</button>
+            </div>
+
+            <p style="font-size:0.8rem; color:var(--text-secondary); line-height:1.4;">
+                Spotisave hält deine Hörposition im 5-Sekunden-Takt fest, selbst wenn die App im Hintergrund liegt.
+            </p>
+
+            <div class="metric-grid">
+                <div class="metric-tile">
+                    <div class="metric-label">Web Worker</div>
+                    <div class="metric-value" id="m-worker-status" style="color:var(--accent-green);">Aktiv</div>
+                </div>
+                <div class="metric-tile">
+                    <div class="metric-label">Web Lock</div>
+                    <div class="metric-value" id="m-lock-status">Gehalten ✓</div>
+                </div>
+                <div class="metric-tile">
+                    <div class="metric-label">Bildschirm-Schutz</div>
+                    <div class="metric-value" id="m-wakelock-status">Aktiv</div>
+                </div>
+                <div class="metric-tile">
+                    <div class="metric-label">Zyklen (Ticks)</div>
+                    <div class="metric-value" id="m-ticks-count">0</div>
+                </div>
+                <div class="metric-tile">
+                    <div class="metric-label">Letzte Prüfung</div>
+                    <div class="metric-value" id="m-last-check">Gerade eben</div>
+                </div>
+                <div class="metric-tile">
+                    <div class="metric-label">Zuletzt gesichert</div>
+                    <div class="metric-value" id="m-last-save">Noch keine</div>
+                </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:8px; margin-top:16px;">
+                <button type="button" class="btn btn-primary" onclick="checkNowPlaying(true); closeInspectorModal();">
+                    Jetzt manuellen Check ausführen
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeInspectorModal()">
+                    Fertig
+                </button>
+            </div>
         </div>
     </div>
 
-    <!-- MAIN APP VIEW -->
-    <div id="app-view" style="display:none;">
-        <div class="top-bar">
-            <div>
-                <h1>Playlist Bookmarks</h1>
-                <p class="subtext" style="margin:0;"><span class="status-dot"></span><span id="bg-status-text">Hintergrund-Worker aktiv</span></p>
+    <!-- 1-CLICK INTELLIGENT RESUME FALLBACK SHEET -->
+    <div class="modal-backdrop" id="fallback-modal" onclick="closeFallbackOnBackdrop(event)">
+        <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="fallback-title">
+            <div class="modal-grabber"></div>
+            <div class="modal-header">
+                <h3 class="modal-title" id="fallback-title">Spotify-Wiedergabe</h3>
+                <button type="button" class="btn btn-icon-only" onclick="closeFallbackModal()" aria-label="Schließen">✕</button>
             </div>
-            <div style="display:flex; gap:6px;">
-                <button id="keep-alive-btn" class="btn btn-bg-active" onclick="enableKeepAlive()">⚡ Fokus-Schutz aktiv</button>
-                <button class="btn btn-outline" onclick="checkNowPlaying(true)">Sichern</button>
+
+            <p id="fallback-desc" style="font-size:0.84rem; color:var(--text-secondary); line-height:1.45; margin-bottom:16px;">
+                Kein aktives Spotify-Gerät erreichbar. Starte die Wiedergabe mit 1 Klick direkt in der Spotify-App oder im Web Player:
+            </p>
+
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <a id="fallback-app-btn" href="#" class="btn btn-primary" onclick="handleFallbackAppClick(event)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#000000" aria-hidden="true">
+                        <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.586 14.424c-.18.295-.563.387-.857.207-2.35-1.435-5.308-1.76-8.792-.963-.335.077-.67-.133-.746-.468-.077-.334.132-.67.467-.746 3.808-.87 7.076-.496 9.721 1.113.294.18.386.563.207.857zm1.225-2.723c-.226.367-.707.482-1.074.256-2.69-1.653-6.79-2.131-9.97-1.165-.413.125-.85-.107-.975-.52-.125-.414.107-.85.52-.976 3.632-1.102 8.147-.568 11.243 1.331.367.226.482.707.256 1.074zm.105-2.835C14.692 8.95 9.375 8.775 6.297 9.71c-.494.15-1.018-.13-1.168-.624-.15-.494.13-1.018.624-1.168 3.532-1.072 9.404-.866 13.115 1.337.445.264.59.838.327 1.282-.264.444-.838.59-1.282.327z"/>
+                    </svg>
+                    <span>In Spotify App öffnen ↗</span>
+                </a>
+                <a id="fallback-web-btn" href="#" target="_blank" rel="noopener" class="btn btn-secondary">
+                    Im Spotify Web Player öffnen ↗
+                </a>
+                <button type="button" id="fallback-retry-btn" class="btn btn-secondary" onclick="retryActiveResume()">
+                    Erneut über Web-API versuchen
+                </button>
             </div>
-        </div>
-
-        <div id="now-playing-box" class="now-playing"></div>
-        <div id="bookmarks-list"></div>
-
-        <div style="margin-top: 24px; text-align: center;">
-            <button class="btn btn-outline" style="font-size:0.75rem; padding:6px 12px;" onclick="logout()">Abmelden / Client ID ändern</button>
         </div>
     </div>
-</div>
 
-<div id="toast" class="toast"></div>
+    <!-- APPLE CAPSULE TOAST -->
+    <div id="toast" class="toast-pill" role="status" aria-live="polite"></div>
 
-<script>
-// --- SERVICE WORKER REGISTRATION ---
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(console.error);
-    });
-}
-
-const SCOPES = 'user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative';
-const REDIRECT_URI = window.location.origin + window.location.pathname;
-document.getElementById('redirect-display').innerText = REDIRECT_URI;
-
-// --- PKCE AUTH HELPERS ---
-function generateRandomString(length) {
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    const values = crypto.getRandomValues(new Uint8Array(length));
-    return values.reduce((acc, x) => acc + possible[x % possible.length], "");
-}
-
-async function sha256(plain) {
-    const data = new TextEncoder().encode(plain);
-    return window.crypto.subtle.digest('SHA-256', data);
-}
-
-function base64encode(input) {
-    return btoa(String.fromCharCode(...new Uint8Array(input)))
-        .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-}
-
-async function startAuth() {
-    const clientId = document.getElementById('client-id-input').value.trim();
-    if (!clientId) return showToast('Bitte Client ID eingeben!');
-    localStorage.setItem('sp_client_id', clientId);
-
-    const codeVerifier = generateRandomString(64);
-    const hashed = await sha256(codeVerifier);
-    const codeChallenge = base64encode(hashed);
-    localStorage.setItem('sp_code_verifier', codeVerifier);
-
-    const params = new URLSearchParams({
-        response_type: 'code',
-        client_id: clientId,
-        scope: SCOPES,
-        code_challenge_method: 'S256',
-        code_challenge: codeChallenge,
-        redirect_uri: REDIRECT_URI,
-    });
-    window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
-}
-
-async function exchangeToken(code) {
-    const clientId = localStorage.getItem('sp_client_id');
-    const codeVerifier = localStorage.getItem('sp_code_verifier');
-    const res = await fetch('https://accounts.spotify.com/api/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-            client_id: clientId,
-            grant_type: 'authorization_code',
-            code: code,
-            redirect_uri: REDIRECT_URI,
-            code_verifier: codeVerifier,
-        })
-    });
-    const data = await res.json();
-    if (data.access_token) {
-        saveTokens(data);
-        window.history.replaceState({}, document.title, REDIRECT_URI);
-        initApp();
-    } else {
-        showToast('Auth-Fehler! Prüfe Redirect URI & Client ID.');
-        showLogin();
-    }
-}
-
-async function refreshAccessToken() {
-    const clientId = localStorage.getItem('sp_client_id');
-    const refreshToken = localStorage.getItem('sp_refresh_token');
-    if (!refreshToken) return null;
-
-    try {
-        const res = await fetch('https://accounts.spotify.com/api/token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                client_id: clientId,
-                grant_type: 'refresh_token',
-                refresh_token: refreshToken
-            })
+    <script>
+    // --- SERVICE WORKER REGISTRATION ---
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(console.error);
         });
-        const data = await res.json();
-        if (data.access_token) {
-            saveTokens(data);
-            return data.access_token;
-        }
-    } catch (e) {}
-    return null;
-}
+    }
 
-function saveTokens(data) {
-    localStorage.setItem('sp_access_token', data.access_token);
-    if (data.refresh_token) localStorage.setItem('sp_refresh_token', data.refresh_token);
-    localStorage.setItem('sp_token_expiry', Date.now() + (data.expires_in * 1000) - 60000);
-}
-
-async function spFetch(endpoint, options = {}) {
-    let token = localStorage.getItem('sp_access_token');
-    const expiry = Number(localStorage.getItem('sp_token_expiry') || 0);
-    if (Date.now() > expiry) token = await refreshAccessToken();
-
-    options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
-    let res = await fetch(`https://api.spotify.com/v1${endpoint}`, options);
-    if (res.status === 401) {
-        token = await refreshAccessToken();
-        if (token) {
-            options.headers['Authorization'] = `Bearer ${token}`;
-            res = await fetch(`https://api.spotify.com/v1${endpoint}`, options);
+    // --- TACTILE FEEDBACK (Apple Taptic Engine emulation) ---
+    function triggerHaptic(type = 'light') {
+        if ('vibrate' in navigator) {
+            try {
+                if (type === 'light') navigator.vibrate(10);
+                else if (type === 'medium') navigator.vibrate(18);
+                else if (type === 'success') navigator.vibrate([10, 40, 15]);
+                else if (type === 'error') navigator.vibrate([20, 50, 20]);
+            } catch (e) {}
         }
     }
-    return res;
-}
 
-// --- BOOKMARK & AUTO-SAVE LOGIC ---
-function getBookmarks() {
-    return JSON.parse(localStorage.getItem('sp_bookmarks') || '{}');
-}
+    // --- CONSTANTS & CONFIG ---
+    const SCOPES = 'user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative';
+    const REDIRECT_URI = window.location.origin + window.location.pathname;
+    const redirectEl = document.getElementById('redirect-display');
+    if (redirectEl) redirectEl.innerText = REDIRECT_URI;
 
-function getPlaylistCache() {
-    return JSON.parse(localStorage.getItem('sp_pl_cache') || '{}');
-}
+    // --- PKCE AUTH HELPERS (RFC 7636 compliant) ---
+    function generateRandomString(length) {
+        const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        const cryptoObj = window.crypto || crypto;
+        const values = cryptoObj.getRandomValues(new Uint8Array(length));
+        return Array.from(values).map(x => possible[x % possible.length]).join('');
+    }
 
-async function fetchPlaylistInfo(contextUri) {
-    const cache = getPlaylistCache();
-    if (cache[contextUri]) return cache[contextUri];
+    async function sha256(plain) {
+        const data = new TextEncoder().encode(plain);
+        const cryptoObj = window.crypto || crypto;
+        return cryptoObj.subtle.digest('SHA-256', data);
+    }
 
-    const plId = contextUri.split(':').pop();
-    try {
-        const res = await spFetch(`/playlists/${plId}?fields=name,images`);
-        if (res.ok) {
+    function base64encode(input) {
+        const bytes = new Uint8Array(input);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary)
+            .replace(/=/g, '')
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_');
+    }
+
+    async function copyRedirectUri() {
+        triggerHaptic('light');
+        try {
+            await navigator.clipboard.writeText(REDIRECT_URI);
+            const copyBtnText = document.getElementById('copy-btn-text');
+            if (copyBtnText) copyBtnText.innerText = 'Kopiert! ✓';
+            setTimeout(() => { if (copyBtnText) copyBtnText.innerText = 'Kopieren'; }, 2200);
+            showToast('Redirect URI in die Zwischenablage kopiert');
+        } catch (e) {
+            showToast('Kopieren fehlgeschlagen: ' + REDIRECT_URI);
+        }
+    }
+
+    async function startAuth() {
+        triggerHaptic('medium');
+        const clientIdInput = document.getElementById('client-id-input');
+        const clientId = clientIdInput ? clientIdInput.value.trim() : '';
+        if (!clientId) return showToast('Bitte gib deine Spotify Client ID ein!');
+        localStorage.setItem('sp_client_id', clientId);
+
+        const codeVerifier = generateRandomString(64);
+        const hashed = await sha256(codeVerifier);
+        const codeChallenge = base64encode(hashed);
+        localStorage.setItem('sp_code_verifier', codeVerifier);
+
+        const params = new URLSearchParams({
+            response_type: 'code',
+            client_id: clientId,
+            scope: SCOPES,
+            code_challenge_method: 'S256',
+            code_challenge: codeChallenge,
+            redirect_uri: REDIRECT_URI,
+        });
+        window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
+    }
+
+    async function exchangeToken(code) {
+        const clientId = localStorage.getItem('sp_client_id');
+        const codeVerifier = localStorage.getItem('sp_code_verifier');
+        if (!clientId || !codeVerifier) {
+            showToast('Client ID oder Verifier fehlt. Bitte neu anmelden.');
+            return showLogin();
+        }
+
+        try {
+            const res = await fetch('https://accounts.spotify.com/api/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    client_id: clientId,
+                    grant_type: 'authorization_code',
+                    code: code,
+                    redirect_uri: REDIRECT_URI,
+                    code_verifier: codeVerifier,
+                })
+            });
             const data = await res.json();
-            const info = {
-                id: plId,
-                name: data.name || `Playlist ${plId.slice(0, 6)}`,
-                image: (data.images && data.images.length) ? data.images[0].url : ''
-            };
-            cache[contextUri] = info;
-            localStorage.setItem('sp_pl_cache', JSON.stringify(cache));
-            return info;
-        }
-    } catch (e) {}
-    return { id: plId, name: `Playlist (${plId.slice(0, 6)})`, image: '' };
-}
-
-let lastSaveTimestamp = 0;
-
-async function checkNowPlaying(manual = false) {
-    try {
-        const res = await spFetch('/me/player');
-        const npBox = document.getElementById('now-playing-box');
-
-        if (res.status === 204 || !res.ok) {
-            npBox.style.display = 'block';
-            npBox.innerHTML = `Spotify pausiert/geschlossen • Letzte Stände sind sicher gespeichert.`;
-            if (manual) showToast('Spotify spielt gerade nichts ab.');
-            return;
-        }
-
-        const data = await res.json();
-        if (!data || !data.item) return;
-
-        // Nur speichern, solange Spotify aktiv abspielt (oder manuell gedrückt wurde)
-        if (!data.is_playing && !manual) {
-            npBox.style.display = 'block';
-            npBox.innerHTML = `⏸️ Spotify pausiert (${data.item.name}) • Auto-Save wartet auf Wiedergabe.`;
-            return;
-        }
-
-        const track = data.item;
-        const context = data.context;
-        const progress = data.progress_ms || 0;
-
-        if (context && context.type === 'playlist') {
-            const plInfo = await fetchPlaylistInfo(context.uri);
-            const bookmarks = getBookmarks();
-            bookmarks[plInfo.id] = {
-                playlist_id: plInfo.id,
-                playlist_name: plInfo.name,
-                playlist_image: plInfo.image,
-                context_uri: context.uri,
-                track_name: track.name,
-                artist_name: track.artists[0].name,
-                track_uri: track.uri,
-                progress_ms: progress,
-                updated_at: Date.now()
-            };
-            localStorage.setItem('sp_bookmarks', JSON.stringify(bookmarks));
-            lastSaveTimestamp = Date.now();
-
-            if (!document.hidden) {
-                renderBookmarks();
-                npBox.style.display = 'block';
-                npBox.innerHTML = `🟢 <strong>Speichert live:</strong> ${plInfo.name}<br>${track.name} (${formatTime(progress)})`;
+            if (data.access_token) {
+                saveTokens(data);
+                window.history.replaceState({}, document.title, REDIRECT_URI);
+                initApp();
+                showToast('Erfolgreich mit Spotify verbunden!');
+            } else {
+                showToast('Auth-Fehler: ' + (data.error_description || data.error || 'Prüfe Client ID'));
+                showLogin();
             }
-            if (manual) showToast(`Gespeichert: ${plInfo.name}`);
-        } else {
-            if (!document.hidden) {
-                npBox.style.display = 'block';
-                npBox.innerHTML = `🎵 Läuft gerade (Einzelsong/Album): <strong>${track.name}</strong><br>Deine Playlisten bleiben unberührt gespeichert.`;
-            }
-            if (manual) showToast('Aktuell läuft keine Playlist!');
+        } catch (e) {
+            showToast('Netzwerkfehler bei der Anmeldung');
+            showLogin();
         }
-    } catch (e) {
-        console.error('Auto-Save Check Fehler:', e);
     }
-}
 
-async function resumeBookmark(playlistId) {
-    const bookmarks = getBookmarks();
-    const b = bookmarks[playlistId];
-    if (!b) return;
+    let refreshPromise = null;
+    async function refreshAccessToken() {
+        if (refreshPromise) return refreshPromise;
+        const clientId = localStorage.getItem('sp_client_id');
+        const refreshToken = localStorage.getItem('sp_refresh_token');
+        if (!refreshToken || !clientId) return null;
 
-    showToast(`Starte ${b.playlist_name}...`);
-    const body = JSON.stringify({
-        context_uri: b.context_uri,
-        offset: { uri: b.track_uri },
-        position_ms: b.progress_ms
-    });
+        refreshPromise = (async () => {
+            try {
+                const res = await fetch('https://accounts.spotify.com/api/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        client_id: clientId,
+                        grant_type: 'refresh_token',
+                        refresh_token: refreshToken
+                    })
+                });
+                const data = await res.json();
+                if (data.access_token) {
+                    saveTokens(data);
+                    return data.access_token;
+                } else if (data.error === 'invalid_grant' || res.status === 400 || res.status === 401) {
+                    localStorage.removeItem('sp_access_token');
+                    localStorage.removeItem('sp_refresh_token');
+                }
+            } catch (e) {
+                console.error('Token Refresh Fehler:', e);
+            }
+            return null;
+        })().finally(() => {
+            refreshPromise = null;
+        });
 
-    let res = await spFetch('/me/player/play', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: body
-    });
+        return refreshPromise;
+    }
 
-    if (res.status === 404) {
-        const devRes = await spFetch('/me/player/devices');
-        const devData = await devRes.json();
-        if (devData.devices && devData.devices.length > 0) {
-            const devId = devData.devices[0].id;
-            res = await spFetch(`/me/player/play?device_id=${devId}`, {
+    function saveTokens(data) {
+        localStorage.setItem('sp_access_token', data.access_token);
+        if (data.refresh_token) localStorage.setItem('sp_refresh_token', data.refresh_token);
+        const expiresInSec = Number(data.expires_in) || 3600;
+        // Expiry abzüglich 60 Sekunden Puffer
+        localStorage.setItem('sp_token_expiry', Date.now() + (expiresInSec * 1000) - 60000);
+    }
+
+    async function spFetch(endpoint, options = {}) {
+        let token = localStorage.getItem('sp_access_token');
+        const expiry = Number(localStorage.getItem('sp_token_expiry') || 0);
+        if (!token || Date.now() > expiry) {
+            token = await refreshAccessToken();
+        }
+        if (!token) {
+            return { ok: false, status: 401, json: async () => ({ error: 'Unauthorized' }) };
+        }
+
+        options.headers = { ...(options.headers || {}), 'Authorization': `Bearer ${token}` };
+        try {
+            let res = await fetch(`https://api.spotify.com/v1${endpoint}`, options);
+            if (res.status === 401) {
+                token = await refreshAccessToken();
+                if (token) {
+                    options.headers['Authorization'] = `Bearer ${token}`;
+                    res = await fetch(`https://api.spotify.com/v1${endpoint}`, options);
+                }
+            }
+            return res;
+        } catch (e) {
+            return { ok: false, status: 0, error: e, json: async () => ({ error: 'Network Error' }) };
+        }
+    }
+
+    // --- ENGINE & STATE TRACKING METRICS ---
+    const engineState = {
+        ticks: 0,
+        lastCheckTimestamp: 0,
+        lastSaveTimestamp: 0,
+        workerRunning: false,
+        lockHeld: false,
+        wakeLockActive: false,
+        isChecking: false,
+        currentStatus: 'IDLE', // IDLE, PLAYING, PAUSED, OFFLINE
+        pendingResume: null
+    };
+    if (typeof window !== 'undefined') window.engineState = engineState;
+
+    let rateLimitUntil = 0;
+
+    function getBookmarks() {
+        try {
+            return JSON.parse(localStorage.getItem('sp_bookmarks') || '{}');
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function getPlaylistCache() {
+        try {
+            return JSON.parse(localStorage.getItem('sp_pl_cache') || '{}');
+        } catch (e) {
+            return {};
+        }
+    }
+
+    async function fetchPlaylistInfo(contextUri) {
+        const cache = getPlaylistCache();
+        if (cache[contextUri]) return cache[contextUri];
+
+        const plId = contextUri.split(':').pop();
+        try {
+            const res = await spFetch(`/playlists/${plId}?fields=name,images`);
+            if (res.ok) {
+                const data = await res.json();
+                const info = {
+                    id: plId,
+                    name: data.name || `Playlist (${plId.slice(0, 6)})`,
+                    image: (data.images && data.images.length) ? data.images[0].url : ''
+                };
+                cache[contextUri] = info;
+                try { localStorage.setItem('sp_pl_cache', JSON.stringify(cache)); } catch (e) {}
+                return info;
+            }
+        } catch (e) {}
+
+        const fallbackInfo = { id: plId, name: `Playlist (${plId.slice(0, 6)})`, image: '' };
+        cache[contextUri] = fallbackInfo;
+        try { localStorage.setItem('sp_pl_cache', JSON.stringify(cache)); } catch (e) {}
+        return fallbackInfo;
+    }
+
+    // --- TIME FORMATTING (Apple Typography with Tabular Figures) ---
+    function formatTime(ms) {
+        if (!ms || isNaN(ms) || ms < 0) return '0:00';
+        const totalSec = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSec / 3600);
+        const mins = Math.floor((totalSec % 3600) / 60);
+        const secs = totalSec % 60;
+        const formattedSecs = secs < 10 ? `0${secs}` : `${secs}`;
+
+        if (hours > 0) {
+            const formattedMins = mins < 10 ? `0${mins}` : `${mins}`;
+            return `${hours}:${formattedMins}:${formattedSecs}`;
+        }
+        return `${mins}:${formattedSecs}`;
+    }
+
+    function formatRelativeTime(timestamp, mockNow) {
+        if (!timestamp) return 'Noch nie';
+        const now = mockNow || Date.now();
+        const diffSec = Math.floor((now - timestamp) / 1000);
+        if (diffSec < 5) return 'Gerade eben';
+        if (diffSec < 60) return `Vor ${diffSec} Sek.`;
+        const diffMin = Math.floor(diffSec / 60);
+        if (diffMin < 60) return `Vor ${diffMin} Min.`;
+        const diffHours = Math.floor(diffMin / 60);
+        if (diffHours < 24) return `Vor ${diffHours} Std.`;
+        return `Vor ${Math.floor(diffHours / 24)} Tg.`;
+    }
+
+    // --- CHECK NOW PLAYING & AUTO-SAVE LOOP ---
+    async function checkNowPlaying(manual = false) {
+        if (engineState.isChecking) return;
+
+        if (Date.now() < rateLimitUntil) {
+            if (manual) showToast('Spotify Rate-Limit aktiv. Bitte kurz warten.');
+            return;
+        }
+
+        engineState.isChecking = true;
+
+        if (!navigator.onLine) {
+            updateHeaderStatus('OFFLINE', 'Offline');
+            engineState.isChecking = false;
+            if (manual) showToast('Keine Internetverbindung');
+            return;
+        }
+
+        try {
+            engineState.lastCheckTimestamp = Date.now();
+            const res = await spFetch('/me/player?additional_types=track,episode');
+            const npCard = document.getElementById('now-playing-box');
+
+            if (res.status === 401) {
+                updateHeaderStatus('OFFLINE', 'Abgemeldet');
+                if (npCard) npCard.style.display = 'none';
+                if (manual) {
+                    showToast('Sitzung abgelaufen. Bitte neu anmelden.');
+                    showLogin();
+                }
+                return;
+            }
+
+            if (res.status === 429) {
+                const retryAfterSec = Number(res.headers?.get ? res.headers.get('Retry-After') : 5) || 5;
+                rateLimitUntil = Date.now() + (retryAfterSec * 1000);
+                updateHeaderStatus('PAUSED', `Pause (${retryAfterSec}s)`);
+                if (manual) showToast(`Zu viele Anfragen. Bitte ${retryAfterSec}s warten.`);
+                return;
+            }
+
+            if (res.status === 204 || !res.ok) {
+                updateHeaderStatus('IDLE', 'Bereit (Wartet)');
+                if (npCard) npCard.style.display = 'none';
+                if (manual) showToast('Spotify spielt aktuell nichts ab');
+                return;
+            }
+
+            let data;
+            try {
+                data = await res.json();
+            } catch (jsonErr) {
+                updateHeaderStatus('IDLE', 'Bereit');
+                if (npCard) npCard.style.display = 'none';
+                return;
+            }
+
+            if (!data || !data.item) {
+                updateHeaderStatus('IDLE', 'Bereit');
+                if (npCard) npCard.style.display = 'none';
+                return;
+            }
+
+            const track = data.item;
+            const context = data.context;
+            const progress = Number(data.progress_ms) || 0;
+            const duration = Number(track.duration_ms) || 1;
+            const isPlaying = Boolean(data.is_playing);
+
+            // Safe artist / creator extraction
+            let artistName = 'Unbekannter Interpret';
+            if (Array.isArray(track.artists) && track.artists.length > 0) {
+                artistName = track.artists.map(a => a.name).filter(Boolean).join(', ');
+            } else if (track.show && track.show.name) {
+                artistName = track.show.name;
+            }
+
+            // Safe cover artwork extraction
+            let trackImg = '';
+            if (track.album && Array.isArray(track.album.images) && track.album.images.length > 0) {
+                trackImg = track.album.images[0].url;
+            } else if (track.images && Array.isArray(track.images) && track.images.length > 0) {
+                trackImg = track.images[0].url;
+            } else if (track.show && Array.isArray(track.show.images) && track.show.images.length > 0) {
+                trackImg = track.show.images[0].url;
+            }
+
+            // Update Now Playing Hero Card
+            if (npCard && !document.hidden) {
+                npCard.style.display = 'block';
+                const trackNameEl = document.getElementById('np-track-name');
+                if (trackNameEl) trackNameEl.innerText = track.name || 'Unbekannter Titel';
+
+                let contextTypeLabel = 'Titel';
+                if (context) {
+                    if (context.type === 'playlist') contextTypeLabel = 'Playlist';
+                    else if (context.type === 'album') contextTypeLabel = 'Album';
+                    else if (context.type === 'show') contextTypeLabel = 'Podcast';
+                }
+                const metaLineEl = document.getElementById('np-meta-line');
+                if (metaLineEl) metaLineEl.innerText = `${artistName} • ${contextTypeLabel}`;
+
+                const coverImg = document.getElementById('np-cover-img');
+                if (coverImg && trackImg && coverImg.src !== trackImg) {
+                    coverImg.src = trackImg;
+                }
+
+                const percent = Math.min(100, Math.max(0, (progress / duration) * 100));
+                const barFill = document.getElementById('np-bar-fill');
+                if (barFill) barFill.style.width = `${percent}%`;
+
+                const timeCurEl = document.getElementById('np-time-current');
+                const timeDurEl = document.getElementById('np-time-duration');
+                if (timeCurEl) timeCurEl.innerText = formatTime(progress);
+                if (timeDurEl) timeDurEl.innerText = formatTime(duration);
+
+                const statusLabel = document.getElementById('np-status-label');
+                const eqBars = document.querySelector('.eq-bars');
+                if (isPlaying) {
+                    if (statusLabel) statusLabel.innerText = 'Wiedergabe aktiv';
+                    if (eqBars) eqBars.style.display = 'flex';
+                } else {
+                    if (statusLabel) statusLabel.innerText = 'Wiedergabe pausiert';
+                    if (eqBars) eqBars.style.display = 'none';
+                }
+            }
+
+            // Bookmark saving logic: handles Playlists AND Albums
+            if (context && (context.type === 'playlist' || context.type === 'album')) {
+                let entityId = context.uri.split(':').pop();
+                let entityName = '';
+                let entityImage = trackImg;
+
+                if (context.type === 'playlist') {
+                    const plInfo = await fetchPlaylistInfo(context.uri);
+                    entityId = plInfo.id;
+                    entityName = plInfo.name;
+                    entityImage = plInfo.image || trackImg;
+                } else {
+                    entityName = (track.album && track.album.name) ? track.album.name : `Album (${entityId.slice(0, 6)})`;
+                }
+
+                const bookmarks = getBookmarks();
+                const existing = bookmarks[entityId];
+
+                // Bookmark if track changed, progress changed by >= 2s, or manual trigger
+                const trackChanged = !existing || existing.track_uri !== track.uri;
+                const progressChanged = !existing || Math.abs((existing.progress_ms || 0) - progress) >= 2000;
+
+                if (trackChanged || progressChanged || manual) {
+                    bookmarks[entityId] = {
+                        playlist_id: entityId,
+                        playlist_name: entityName,
+                        playlist_image: entityImage,
+                        context_uri: context.uri,
+                        context_type: context.type,
+                        track_name: track.name || 'Unbekannter Titel',
+                        artist_name: artistName,
+                        track_uri: track.uri,
+                        progress_ms: progress,
+                        duration_ms: duration,
+                        updated_at: Date.now()
+                    };
+                    localStorage.setItem('sp_bookmarks', JSON.stringify(bookmarks));
+                    engineState.lastSaveTimestamp = Date.now();
+
+                    if (!document.hidden) {
+                        renderBookmarks();
+                    }
+                    if (manual) {
+                        triggerHaptic('success');
+                        showToast(`Gespeichert: ${entityName} (${formatTime(progress)})`);
+                    }
+                }
+
+                updateHeaderStatus(isPlaying ? 'PLAYING' : 'PAUSED', isPlaying ? 'Auto-Save aktiv' : 'Pausiert');
+            } else {
+                updateHeaderStatus(isPlaying ? 'PLAYING' : 'PAUSED', isPlaying ? 'Einzeltitel aktiv' : 'Pausiert');
+                if (manual) showToast(`Läuft: ${track.name} (Keine Playlist/Album)`);
+            }
+        } catch (e) {
+            console.error('Check Error:', e);
+        } finally {
+            engineState.isChecking = false;
+            updateInspectorMetrics();
+        }
+    }
+
+    // --- STATUS PILL ADAPTATION ---
+    function updateHeaderStatus(state, label) {
+        engineState.currentStatus = state;
+        const dot = document.getElementById('header-status-dot');
+        const text = document.getElementById('header-status-label');
+        if (!dot || !text) return;
+
+        dot.className = 'status-dot';
+        if (state === 'PLAYING') {
+            dot.classList.add('active');
+            text.innerText = 'Live-Tracking';
+        } else if (state === 'PAUSED') {
+            dot.classList.add('paused');
+            text.innerText = 'Pausiert';
+        } else if (state === 'OFFLINE') {
+            dot.classList.add('offline');
+            text.innerText = label || 'Offline';
+        } else {
+            text.innerText = 'Standby';
+        }
+    }
+
+    // --- 1-CLICK INTELLIGENT RESUME FALLBACK ENGINE ---
+    async function resumeBookmark(playlistId) {
+        triggerHaptic('medium');
+        const bookmarks = getBookmarks();
+        const b = bookmarks[playlistId];
+        if (!b) return;
+
+        const cardBtn = document.getElementById(`resume-btn-${playlistId}`);
+        const originalContent = cardBtn ? cardBtn.innerHTML : '';
+        if (cardBtn) {
+            cardBtn.innerHTML = `<span class="spinner"></span> <span>Startet...</span>`;
+            cardBtn.disabled = true;
+        }
+
+        showToast(`Wiederaufnahme: ${b.playlist_name}...`);
+        engineState.pendingResume = b;
+
+        try {
+            const body = JSON.stringify({
+                context_uri: b.context_uri,
+                offset: b.track_uri ? { uri: b.track_uri } : undefined,
+                position_ms: Number(b.progress_ms) || 0
+            });
+
+            let targetDeviceId = null;
+            let res = await spFetch('/me/player/play', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: body
             });
-        } else {
-            return showToast('Öffne zuerst kurz die Spotify-App!');
+
+            // 1. Fallback: 404 No Active Device -> Suche verfügbare Geräte
+            if (res.status === 404) {
+                const devRes = await spFetch('/me/player/devices');
+                if (devRes.ok) {
+                    const devData = await devRes.json();
+                    if (devData.devices && devData.devices.length > 0) {
+                        const targetDevice = devData.devices.find(d => d.is_active) || devData.devices[0];
+                        targetDeviceId = targetDevice.id;
+                        res = await spFetch(`/me/player/play?device_id=${targetDeviceId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: body
+                        });
+                    }
+                }
+            }
+
+            // 2. Fallback: 400 Bad Request (z.B. Track versetzt oder Playlist geändert)
+            // Behalte targetDeviceId bei, falls in Fallback 1 ermittelt!
+            if (res.status === 400 && b.track_uri) {
+                const endpoint = targetDeviceId ? `/me/player/play?device_id=${targetDeviceId}` : '/me/player/play';
+                res = await spFetch(endpoint, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        uris: [b.track_uri],
+                        position_ms: Number(b.progress_ms) || 0
+                    })
+                });
+            }
+
+            // Erfolg
+            if (res.ok || res.status === 204) {
+                triggerHaptic('success');
+                showToast(`Fortgesetzt bei ${formatTime(b.progress_ms)}!`);
+                setTimeout(() => checkNowPlaying(false), 800);
+                return;
+            }
+
+            // 3. Intelligenter 1-Click Fallback bei 403 (Free User) oder verbleibendem 404
+            triggerHaptic('error');
+            openFallbackSheet(b, res.status);
+
+        } catch (e) {
+            console.error('Resume Fehler:', e);
+            openFallbackSheet(b, 0);
+        } finally {
+            if (cardBtn) {
+                cardBtn.innerHTML = originalContent;
+                cardBtn.disabled = false;
+            }
         }
     }
 
-    if (res.ok || res.status === 204) {
-        showToast(`Fortgesetzt bei ${formatTime(b.progress_ms)}!`);
-    } else {
-        showToast('Fehler beim Starten (Spotify Premium aktiv?)');
+    function openFallbackSheet(bookmark, status) {
+        const modal = document.getElementById('fallback-modal');
+        const desc = document.getElementById('fallback-desc');
+        const appBtn = document.getElementById('fallback-app-btn');
+        const webBtn = document.getElementById('fallback-web-btn');
+        if (!modal || !desc || !appBtn || !webBtn) return;
+
+        if (status === 403) {
+            desc.innerHTML = `<strong>Spotify Premium erforderlich:</strong> Die Spotify Web-API verlangt ein Premium-Abo für Fernsteuerung. Öffne die Playlist mit 1 Klick direkt in der Spotify-App:`;
+        } else if (status === 404) {
+            desc.innerHTML = `<strong>Kein aktives Spotify-Gerät erreichbar:</strong> Öffne Spotify auf deinem Smartphone oder Mac, oder starte die Wiedergabe mit 1 Klick:`;
+        } else {
+            desc.innerHTML = `Wiedergabe konnte über die API nicht gestartet werden. Öffne <strong>${escapeHtml(bookmark.playlist_name)}</strong> direkt:`;
+        }
+
+        // Native Deep Link
+        const spotifyUri = bookmark.context_uri || bookmark.track_uri || `spotify:playlist:${bookmark.playlist_id}`;
+        appBtn.href = spotifyUri;
+        appBtn.setAttribute('data-uri', spotifyUri);
+
+        // Web Link
+        if (bookmark.context_uri && bookmark.context_uri.includes(':album:')) {
+            const albumId = bookmark.context_uri.split(':').pop();
+            webBtn.href = `https://open.spotify.com/album/${albumId}`;
+        } else if (bookmark.playlist_id) {
+            webBtn.href = `https://open.spotify.com/playlist/${bookmark.playlist_id}`;
+        } else if (bookmark.track_uri) {
+            const trackId = bookmark.track_uri.split(':').pop();
+            webBtn.href = `https://open.spotify.com/track/${trackId}`;
+        } else {
+            webBtn.href = 'https://open.spotify.com/';
+        }
+
+        modal.classList.add('open');
     }
-}
 
-function deleteBookmark(playlistId) {
-    const bookmarks = getBookmarks();
-    delete bookmarks[playlistId];
-    localStorage.setItem('sp_bookmarks', JSON.stringify(bookmarks));
-    renderBookmarks();
-}
-
-function formatTime(ms) {
-    const totalSec = Math.floor(ms / 1000);
-    const mins = Math.floor(totalSec / 60);
-    const secs = totalSec % 60;
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-}
-
-function renderBookmarks() {
-    const list = document.getElementById('bookmarks-list');
-    const bookmarks = Object.values(getBookmarks()).sort((a, b) => b.updated_at - a.updated_at);
-
-    if (bookmarks.length === 0) {
-        list.innerHTML = `<p class="subtext">Noch keine Playlist gespeichert. Spiel einfach eine Playlist auf Spotify ab!</p>`;
-        return;
+    function handleFallbackAppClick(event) {
+        triggerHaptic('medium');
+        setTimeout(() => closeFallbackModal(), 400);
     }
 
-    list.innerHTML = bookmarks.map(b => `
-        <div class="card">
-            ${b.playlist_image ? `<img class="cover" src="${b.playlist_image}" alt="Cover">` : `<div class="cover"></div>`}
-            <div class="info">
-                <div class="pl-name">${b.playlist_name}</div>
-                <div class="track">${b.track_name} • ${b.artist_name}</div>
-                <div class="time">Gespeichert bei ${formatTime(b.progress_ms)}</div>
-            </div>
-            <button class="btn" onclick="resumeBookmark('${b.playlist_id}')">Resume</button>
-            <button class="del-btn" onclick="deleteBookmark('${b.playlist_id}')" title="Löschen">✕</button>
-        </div>
-    `).join('');
-}
+    async function retryActiveResume() {
+        closeFallbackModal();
+        if (engineState.pendingResume) {
+            await resumeBookmark(engineState.pendingResume.playlist_id);
+        }
+    }
 
-// --- HINTERGRUND KEEP-ALIVE ENGINE (WEB WORKER + WEB LOCKS) ---
-let bgWorker = null;
-let lockHeld = false;
+    function closeFallbackModal() {
+        const modal = document.getElementById('fallback-modal');
+        if (modal) modal.classList.remove('open');
+    }
 
-function startBackgroundEngine() {
-    // 1. Web Lock anfordern (verhindert das Einfrieren durch Chromium im Hintergrund)
-    if ('locks' in navigator && !lockHeld) {
-        lockHeld = true;
-        navigator.locks.request('spotify_saver_background_lock', () => {
-            return new Promise(() => {}); // Hält den Lock dauerhaft offen
+    function closeFallbackOnBackdrop(e) {
+        if (e.target.id === 'fallback-modal') closeFallbackModal();
+    }
+
+    // --- BOOKMARK MANAGEMENT & 2-STEP CONFIRMATION ---
+    let pendingDeleteId = null;
+    let pendingDeleteTimer = null;
+
+    function confirmDeleteBookmark(playlistId) {
+        triggerHaptic('light');
+        const bookmarks = getBookmarks();
+        const b = bookmarks[playlistId];
+        if (!b) return;
+
+        if (pendingDeleteId === playlistId) {
+            if (pendingDeleteTimer) clearTimeout(pendingDeleteTimer);
+            delete bookmarks[playlistId];
+            localStorage.setItem('sp_bookmarks', JSON.stringify(bookmarks));
+            pendingDeleteId = null;
+            triggerHaptic('success');
+            renderBookmarks();
+            showToast(`Bookmark "${b.playlist_name}" entfernt`);
+        } else {
+            pendingDeleteId = playlistId;
+            showToast('Nochmal tippen zum endgültigen Löschen');
+            renderBookmarks();
+            if (pendingDeleteTimer) clearTimeout(pendingDeleteTimer);
+            pendingDeleteTimer = setTimeout(() => {
+                if (pendingDeleteId === playlistId) {
+                    pendingDeleteId = null;
+                    renderBookmarks();
+                }
+            }, 3500);
+        }
+    }
+
+    function renderBookmarks() {
+        const list = document.getElementById('bookmarks-list');
+        if (!list) return;
+        const bookmarks = Object.values(getBookmarks()).sort((a, b) => b.updated_at - a.updated_at);
+
+        if (bookmarks.length === 0) {
+            list.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon-wrap" aria-hidden="true">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18V5l12-2v13"></path>
+                            <circle cx="6" cy="18" r="3"></circle>
+                            <circle cx="18" cy="16" r="3"></circle>
+                        </svg>
+                    </div>
+                    <div class="empty-title">Keine gespeicherten Playlists</div>
+                    <div class="empty-desc">Starte die Wiedergabe in Spotify. Spotisave sichert deinen genauen Fortschritt bei jedem Trackwechsel.</div>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="checkNowPlaying(true)">
+                        Jetzt prüfen
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        list.innerHTML = bookmarks.map(b => {
+            const isDeleting = pendingDeleteId === b.playlist_id;
+            return `
+            <article class="bookmark-card" role="listitem">
+                <img class="bookmark-cover" src="${b.playlist_image || ''}" alt="Cover" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'58\' height=\'58\' fill=\'%23282828\'><rect width=\'58\' height=\'58\'/><text x=\'50%25\' y=\'50%25\' fill=\'%23666\' font-size=\'20\' dominant-baseline=\'middle\' text-anchor=\'middle\'>🎵</text></svg>'">
+                <div class="bookmark-info">
+                    <div class="bookmark-title">${escapeHtml(b.playlist_name)}</div>
+                    <div class="bookmark-track">${escapeHtml(b.track_name)} • ${escapeHtml(b.artist_name)}</div>
+                    <div class="bookmark-time-badge">
+                        <span>▶</span>
+                        <span>${formatTime(b.progress_ms)}</span>
+                    </div>
+                </div>
+                <div class="bookmark-actions">
+                    <button type="button" id="resume-btn-${b.playlist_id}" class="btn btn-primary btn-sm" onclick="resumeBookmark('${b.playlist_id}')" aria-label="${escapeHtml(b.playlist_name)} fortsetzen">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="#000000" aria-hidden="true">
+                            <path d="M8 5v14l11-7z"/>
+                        </svg>
+                        <span>Resume</span>
+                    </button>
+                    <button type="button" class="btn btn-icon-only ${isDeleting ? 'btn-destructive' : ''}" onclick="confirmDeleteBookmark('${b.playlist_id}')" title="${isDeleting ? 'Wirklich löschen?' : 'Löschen'}" aria-label="${isDeleting ? 'Löschen bestätigen' : 'Löschen'}">
+                        ${isDeleting ? `
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        ` : `
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                        `}
+                    </button>
+                </div>
+            </article>
+            `;
+        }).join('');
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/[&<>"']/g, m => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[m]));
+    }
+
+    // --- BACKGROUND KEEP-ALIVE ENGINE (WEB WORKER + WEB LOCKS + WAKELOCK) ---
+    let bgWorker = null;
+    let wakeLockSentinel = null;
+
+    function startBackgroundEngine() {
+        if (engineState.workerRunning) return;
+
+        // 1. Web Locks API
+        if ('locks' in navigator && !engineState.lockHeld) {
+            engineState.lockHeld = true;
+            navigator.locks.request('spotify_saver_background_lock', () => {
+                return new Promise(() => {});
+            }).catch(console.error);
+        }
+
+        // 2. Dedicated Web Worker Thread
+        if (!bgWorker) {
+            try {
+                const workerCode = `
+                    setInterval(() => {
+                        postMessage('tick');
+                    }, 5000);
+                `;
+                const blob = new Blob([workerCode], { type: 'application/javascript' });
+                const blobUrl = URL.createObjectURL(blob);
+                bgWorker = new Worker(blobUrl);
+                bgWorker.onmessage = () => {
+                    engineState.ticks++;
+                    checkNowPlaying(false);
+                    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.controller.postMessage({ type: 'HEARTBEAT' });
+                    }
+                };
+                engineState.workerRunning = true;
+            } catch (e) {
+                console.warn('Web Worker nicht initialisierbar:', e);
+            }
+        }
+    }
+
+    async function requestScreenWakeLock() {
+        if ('wakeLock' in navigator) {
+            try {
+                if (wakeLockSentinel) {
+                    try { await wakeLockSentinel.release(); } catch (e) {}
+                }
+                wakeLockSentinel = await navigator.wakeLock.request('screen');
+                engineState.wakeLockActive = true;
+                wakeLockSentinel.addEventListener('release', () => {
+                    wakeLockSentinel = null;
+                    engineState.wakeLockActive = false;
+                    updateKeepAliveButton();
+                    updateInspectorMetrics();
+                });
+            } catch (e) {
+                engineState.wakeLockActive = false;
+            }
+        }
+        updateKeepAliveButton();
+        updateInspectorMetrics();
+    }
+
+    function updateKeepAliveButton() {
+        const btn = document.getElementById('keep-alive-btn');
+        const icon = document.getElementById('keep-alive-icon');
+        const label = document.getElementById('keep-alive-label');
+        if (!btn || !label) return;
+
+        if (engineState.wakeLockActive) {
+            btn.classList.add('btn-active-toggle');
+            if (icon) icon.innerText = '⚡';
+            label.innerText = 'Fokus-Schutz aktiv';
+        } else {
+            btn.classList.remove('btn-active-toggle');
+            if (icon) icon.innerText = '💤';
+            label.innerText = 'Fokus-Schutz inaktiv';
+        }
+    }
+
+    async function toggleKeepAlive() {
+        triggerHaptic('medium');
+        if (engineState.wakeLockActive) {
+            if (wakeLockSentinel) {
+                try {
+                    await wakeLockSentinel.release();
+                } catch (e) {}
+                wakeLockSentinel = null;
+            }
+            engineState.wakeLockActive = false;
+            updateKeepAliveButton();
+            updateInspectorMetrics();
+            showToast('Bildschirm-Schutz deaktiviert');
+        } else {
+            startBackgroundEngine();
+            await requestScreenWakeLock();
+            updateKeepAliveButton();
+            updateInspectorMetrics();
+            showToast('Fokus-Schutz & Hintergrund-Worker aktiv');
+        }
+    }
+
+    // Visibility-Change: Reaktivieren bei Tab-Fokus
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+            if (localStorage.getItem('sp_access_token')) {
+                renderBookmarks();
+                checkNowPlaying(false);
+                if (engineState.wakeLockActive && !wakeLockSentinel) {
+                    requestScreenWakeLock();
+                }
+            }
+        }
+    });
+
+    window.addEventListener('online', () => {
+        showToast('Wieder online');
+        checkNowPlaying(false);
+    });
+
+    window.addEventListener('offline', () => {
+        updateHeaderStatus('OFFLINE', 'Offline');
+        showToast('Keine Internetverbindung');
+    });
+
+    // --- STATUS INSPECTOR MODAL ---
+    function openInspectorModal() {
+        triggerHaptic('light');
+        updateInspectorMetrics();
+        const modal = document.getElementById('inspector-modal');
+        if (modal) modal.classList.add('open');
+    }
+
+    function closeInspectorModal() {
+        const modal = document.getElementById('inspector-modal');
+        if (modal) modal.classList.remove('open');
+    }
+
+    function closeInspectorOnBackdrop(e) {
+        if (e.target.id === 'inspector-modal') closeInspectorModal();
+    }
+
+    function updateInspectorMetrics() {
+        const mWorker = document.getElementById('m-worker-status');
+        const mLock = document.getElementById('m-lock-status');
+        const mWake = document.getElementById('m-wakelock-status');
+        const mTicks = document.getElementById('m-ticks-count');
+        const mLastCheck = document.getElementById('m-last-check');
+        const mLastSave = document.getElementById('m-last-save');
+
+        if (mWorker) mWorker.innerText = engineState.workerRunning ? 'Aktiv (5s Takt)' : 'Gestoppt';
+        if (mLock) mLock.innerText = engineState.lockHeld ? 'Gehalten ✓' : 'Nicht aktiv';
+        if (mWake) mWake.innerText = engineState.wakeLockActive ? 'Aktiv ✓' : 'Standby';
+        if (mTicks) mTicks.innerText = String(engineState.ticks);
+        if (mLastCheck) mLastCheck.innerText = formatRelativeTime(engineState.lastCheckTimestamp);
+        if (mLastSave) mLastSave.innerText = formatRelativeTime(engineState.lastSaveTimestamp);
+    }
+
+    // --- APPLE HIG SHEET TOUCH GESTURES (Swipe down to dismiss) ---
+    function setupSheetGestures(modalId, sheetQuery, closeFn) {
+        const modal = document.getElementById(modalId);
+        if (!modal || !modal.querySelector) return;
+        const sheet = modal.querySelector(sheetQuery);
+        if (!sheet || !sheet.addEventListener) return;
+
+        let startY = 0;
+        let currentTranslate = 0;
+        let isDragging = false;
+
+        sheet.addEventListener('touchstart', (e) => {
+            if (sheet.scrollTop > 0) return;
+            startY = e.touches[0].clientY;
+            isDragging = true;
+            sheet.style.transition = 'none';
+        }, { passive: true });
+
+        sheet.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            const deltaY = e.touches[0].clientY - startY;
+            if (deltaY > 0) {
+                currentTranslate = deltaY;
+                sheet.style.transform = `translateY(${deltaY}px)`;
+            }
+        }, { passive: true });
+
+        sheet.addEventListener('touchend', () => {
+            if (!isDragging) return;
+            isDragging = false;
+            sheet.style.transition = '';
+            if (currentTranslate > 80) {
+                sheet.style.transform = '';
+                closeFn();
+            } else {
+                sheet.style.transform = '';
+            }
+            currentTranslate = 0;
         });
     }
 
-    // 2. Eigener Web-Worker-Thread für den 5-Sekunden-Takt (wird im Hintergrund nicht wie Window-Timer gedrosselt)
-    if (!bgWorker) {
-        const workerCode = `
-            setInterval(() => {
-                postMessage('tick');
-            }, 5000);
-        `;
-        const blob = new Blob([workerCode], { type: 'application/javascript' });
-        bgWorker = new Worker(URL.createObjectURL(blob));
-        bgWorker.onmessage = () => {
-            checkNowPlaying(false);
-            // Service Worker anpingen
-            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage({ type: 'HEARTBEAT' });
-            }
-        };
-    }
-}
+    setupSheetGestures('inspector-modal', '.modal-sheet', closeInspectorModal);
+    setupSheetGestures('fallback-modal', '.modal-sheet', closeFallbackModal);
 
-async function enableKeepAlive() {
-    startBackgroundEngine();
-    // Optional: Screen WakeLock falls die App offen liegt
-    if ('wakeLock' in navigator) {
-        try { await navigator.wakeLock.request('screen'); } catch (e) {}
-    }
-    showToast('Hintergrund-Schutz aktiv!');
-}
+    // Desktop Escape Key Dismissal
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeInspectorModal();
+            closeFallbackModal();
+        }
+    });
 
-// Sofort aktualisieren, wenn die App wieder in den Vordergrund geholt wird
-document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && localStorage.getItem('sp_access_token')) {
+    // --- TOAST NOTIFICATIONS ---
+    let toastTimeout = null;
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        if (!t) return;
+        t.innerText = msg;
+        t.classList.add('show');
+        if (toastTimeout) clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => {
+            t.classList.remove('show');
+        }, 2600);
+    }
+
+    // --- VIEW MANAGEMENT ---
+    function showLogin() {
+        const loginView = document.getElementById('login-view');
+        const appView = document.getElementById('app-view');
+        if (loginView) loginView.style.display = 'block';
+        if (appView) appView.style.display = 'none';
+        const savedId = localStorage.getItem('sp_client_id');
+        const inputEl = document.getElementById('client-id-input');
+        if (savedId && inputEl) {
+            inputEl.value = savedId;
+        }
+    }
+
+    function logout() {
+        triggerHaptic('medium');
+        localStorage.removeItem('sp_access_token');
+        localStorage.removeItem('sp_refresh_token');
+        localStorage.removeItem('sp_token_expiry');
+        if (wakeLockSentinel) {
+            try { wakeLockSentinel.release(); } catch (e) {}
+            wakeLockSentinel = null;
+            engineState.wakeLockActive = false;
+        }
+        updateKeepAliveButton();
+        showLogin();
+        showToast('Abgemeldet');
+    }
+
+    function initApp() {
+        const loginView = document.getElementById('login-view');
+        const appView = document.getElementById('app-view');
+        if (loginView) loginView.style.display = 'none';
+        if (appView) appView.style.display = 'block';
         renderBookmarks();
         checkNowPlaying(false);
+        startBackgroundEngine();
+        requestScreenWakeLock().then(() => {
+            updateKeepAliveButton();
+            updateInspectorMetrics();
+        });
     }
-});
 
-function showToast(msg) {
-    const t = document.getElementById('toast');
-    t.innerText = msg;
-    t.style.display = 'block';
-    setTimeout(() => { t.style.display = 'none'; }, 2800);
-}
-
-function showLogin() {
-    document.getElementById('login-view').style.display = 'block';
-    document.getElementById('app-view').style.display = 'none';
-    const savedId = localStorage.getItem('sp_client_id');
-    if (savedId) document.getElementById('client-id-input').value = savedId;
-}
-
-function logout() {
-    localStorage.removeItem('sp_access_token');
-    localStorage.removeItem('sp_refresh_token');
-    showLogin();
-}
-
-function initApp() {
-    document.getElementById('login-view').style.display = 'none';
-    document.getElementById('app-view').style.display = 'block';
-    renderBookmarks();
-    checkNowPlaying(false);
-    startBackgroundEngine();
-}
-
-const urlParams = new URLSearchParams(window.location.search);
-if (urlParams.has('code')) {
-    exchangeToken(urlParams.get('code'));
-} else if (localStorage.getItem('sp_access_token')) {
-    initApp();
-} else {
-    showLogin();
-}
-</script>
+    // --- INITIALIZATION ---
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('error')) {
+        showToast('Anmeldung abgebrochen: ' + urlParams.get('error'));
+        window.history.replaceState({}, document.title, REDIRECT_URI);
+        showLogin();
+    } else if (urlParams.has('code')) {
+        exchangeToken(urlParams.get('code'));
+    } else if (localStorage.getItem('sp_access_token')) {
+        initApp();
+    } else {
+        showLogin();
+    }
+    </script>
 </body>
 </html>

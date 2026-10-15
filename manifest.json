@@ -1,14 +1,14 @@
 {
   "id": "./index.html",
-  "name": "Spotify Playlist Saver",
-  "short_name": "SpotSaver",
-  "description": "Speichert automatisch deine aktuelle Position in Spotify-Playlisten im Hintergrund.",
+  "name": "Spotisave — Spotify Playlist Saver",
+  "short_name": "Spotisave",
+  "description": "Automatische Hintergrund-Erfassung und 1-Click-Wiederaufnahme von Spotify-Playlisten nach Apple HIG-Designstandards.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#121212",
-  "theme_color": "#1DB954",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "categories": ["music", "utilities"],
   "icons": [
     {

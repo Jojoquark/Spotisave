@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "io.github.jojoquark.twa",
+        "sha256_cert_fingerprints": ["BB:1E:8A:BD:96:F7:5D:A2:8E:17:C8:85:68:46:D2:49:57:15:2F:DD:24:9F:60:CB:21:9C:7B:4E:79:39:5F:07"]
+      }
+    }]

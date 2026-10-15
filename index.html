@@ -1080,7 +1080,7 @@
     }
 
     // --- CONSTANTS & CONFIG ---
-    const SCOPES = 'user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative';
+    const SCOPES = 'user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative user-read-recently-played';
     const REDIRECT_URI = window.location.origin + window.location.pathname;
     const redirectEl = document.getElementById('redirect-display');
     if (redirectEl) redirectEl.innerText = REDIRECT_URI;
@@ -1383,6 +1383,49 @@
             }
 
             if (res.status === 204 || !res.ok) {
+                try {
+                    const recentRes = await spFetch('/me/player/recently-played?limit=1');
+                    if (recentRes && recentRes.ok) {
+                        const recentData = await recentRes.json();
+                        if (recentData && recentData.items && recentData.items.length > 0) {
+                            const lastItem = recentData.items[0];
+                            const rTrack = lastItem.track;
+                            const rContext = lastItem.context;
+                            if (rTrack && rContext && (rContext.type === 'playlist' || rContext.type === 'album')) {
+                                let rEntityId = rContext.uri.split(':').pop();
+                                const bookmarks = getBookmarks();
+                                if (!bookmarks[rEntityId]) {
+                                    let rEntityName = '';
+                                    let rEntityImage = (rTrack.album && rTrack.album.images && rTrack.album.images[0]) ? rTrack.album.images[0].url : '';
+                                    if (rContext.type === 'playlist') {
+                                        const plInfo = await fetchPlaylistInfo(rContext.uri);
+                                        rEntityId = plInfo.id;
+                                        rEntityName = plInfo.name;
+                                        rEntityImage = plInfo.image || rEntityImage;
+                                    } else {
+                                        rEntityName = (rTrack.album && rTrack.album.name) ? rTrack.album.name : `Album (${rEntityId.slice(0, 6)})`;
+                                    }
+                                    bookmarks[rEntityId] = {
+                                        playlist_id: rEntityId,
+                                        playlist_name: rEntityName,
+                                        playlist_image: rEntityImage,
+                                        context_uri: rContext.uri,
+                                        context_type: rContext.type,
+                                        track_name: rTrack.name || 'Unbekannter Titel',
+                                        artist_name: (rTrack.artists && rTrack.artists[0]) ? rTrack.artists[0].name : '',
+                                        track_uri: rTrack.uri,
+                                        progress_ms: 0,
+                                        duration_ms: rTrack.duration_ms || 0,
+                                        updated_at: new Date(lastItem.played_at).getTime() || Date.now()
+                                    };
+                                    localStorage.setItem('sp_bookmarks', JSON.stringify(bookmarks));
+                                    if (!document.hidden) renderBookmarks();
+                                }
+                            }
+                        }
+                    }
+                } catch (recentErr) {}
+
                 updateHeaderStatus('IDLE', 'Bereit (Wartet)');
                 if (npCard) npCard.style.display = 'none';
                 if (manual) showToast('Spotify spielt aktuell nichts ab');

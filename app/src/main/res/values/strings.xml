@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Spotisave</string>
+    <string name="notification_listener_label">Spotisave Spotify-Erkennung</string>
+    <string name="channel_name">Spotisave Hintergrunddienst</string>
+    <string name="channel_description">Erfasst Spotify-Hörpositionen kontinuierlich im Hintergrund</string>
+    <string name="notification_title">Spotisave aktiv</string>
+    <string name="notification_text">Überwacht Spotify-Wiedergabe im Hintergrund</string>
+    <string name="hero_title">Zuletzt gehört</string>
+    <string name="resume_button">Fortfahren</string>
+    <string name="bookmarks_header">Gespeicherte Hörpositionen</string>
+    <string name="empty_bookmarks_title">Keine Hörpositionen</string>
+    <string name="empty_bookmarks_subtitle">Starte Spotify und höre eine Playlist oder ein Hörbuch. Spotisave sichert deinen Fortschritt automatisch im Hintergrund.</string>
+</resources>

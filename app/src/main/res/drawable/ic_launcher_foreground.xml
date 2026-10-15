@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Spotify style circle with bookmark ribbon icon -->
+    <path
+        android:fillColor="#1DB954"
+        android:pathData="M54,24 C37.43,24 24,37.43 24,54 C24,70.57 37.43,84 54,84 C70.57,84 84,70.57 84,54 C84,37.43 70.57,24 54,24 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M44,38 L64,38 C65.1,38 66,38.9 66,40 L66,70 L54,62 L42,70 L42,40 C42,38.9 42.9,38 44,38 Z" />
+</vector>

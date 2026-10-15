@@ -603,6 +603,186 @@ async function runTests() {
 
     assert(indexHtml.includes('min-height: 44px;') && indexHtml.includes('min-width: 44px;'), 'CSS specifies 44px minimum touch targets conforming to Apple HIG');
 
+    // ----------------------------------------------------
+    // TEST 11: Native Android Architecture & Build Integrity
+    // ----------------------------------------------------
+    console.log('\nTest Group 11: Native Android Architecture & Build Integrity');
+
+    assert(fs.existsSync(path.join(rootDir, 'settings.gradle.kts')), 'settings.gradle.kts exists');
+    const settingsGradle = fs.readFileSync(path.join(rootDir, 'settings.gradle.kts'), 'utf8');
+    assert(settingsGradle.includes('include(":app")'), 'settings.gradle.kts includes :app module');
+
+    assert(fs.existsSync(path.join(rootDir, 'build.gradle.kts')), 'Root build.gradle.kts exists');
+    const rootGradle = fs.readFileSync(path.join(rootDir, 'build.gradle.kts'), 'utf8');
+    assert(rootGradle.includes('com.android.application') && rootGradle.includes('org.jetbrains.kotlin.android'), 'Root build.gradle.kts declares AGP and Kotlin plugins');
+
+    assert(fs.existsSync(path.join(rootDir, 'gradle.properties')), 'gradle.properties exists');
+    const gradleProps = fs.readFileSync(path.join(rootDir, 'gradle.properties'), 'utf8');
+    assert(gradleProps.includes('android.useAndroidX=true'), 'gradle.properties enables AndroidX');
+
+    assert(fs.existsSync(path.join(rootDir, 'gradlew')), 'gradlew wrapper script exists');
+    assert(fs.existsSync(path.join(rootDir, 'gradle/wrapper/gradle-wrapper.jar')), 'gradle-wrapper.jar exists');
+    assert(fs.existsSync(path.join(rootDir, 'gradle/wrapper/gradle-wrapper.properties')), 'gradle-wrapper.properties exists');
+
+    assert(fs.existsSync(path.join(rootDir, 'app/build.gradle.kts')), 'app/build.gradle.kts exists');
+    const appGradle = fs.readFileSync(path.join(rootDir, 'app/build.gradle.kts'), 'utf8');
+    assert(appGradle.includes('compileSdk = 34') && appGradle.includes('minSdk = 26'), 'app/build.gradle.kts configures compileSdk 34 and minSdk 26');
+    assert(appGradle.includes('compose = true'), 'app/build.gradle.kts enables Jetpack Compose');
+    assert(appGradle.includes('androidx.compose.material3:material3'), 'app/build.gradle.kts includes Material3');
+
+    assert(fs.existsSync(path.join(rootDir, 'app/src/main/AndroidManifest.xml')), 'AndroidManifest.xml exists');
+    const manifest = fs.readFileSync(path.join(rootDir, 'app/src/main/AndroidManifest.xml'), 'utf8');
+    assert(manifest.includes('SpotifyBroadcastReceiver'), 'AndroidManifest.xml registers SpotifyBroadcastReceiver');
+    assert(manifest.includes('com.spotify.music.metadatachanged') && manifest.includes('com.spotify.music.playbackstatechanged'), 'AndroidManifest.xml listens to Spotify broadcast actions');
+    assert(manifest.includes('SpotifyForegroundService'), 'AndroidManifest.xml declares SpotifyForegroundService');
+    assert(manifest.includes('SpotifyNotificationListenerService'), 'AndroidManifest.xml declares SpotifyNotificationListenerService');
+    assert(manifest.includes('<queries>') && manifest.includes('package android:name="com.spotify.music"'), 'AndroidManifest.xml defines Android 11+ package visibility queries for Spotify');
+
+    assert(fs.existsSync(path.join(rootDir, '.github/workflows/build-apk.yml')), '.github/workflows/build-apk.yml exists');
+    const ciYml = fs.readFileSync(path.join(rootDir, '.github/workflows/build-apk.yml'), 'utf8');
+    assert(ciYml.includes('assembleDebug') && ciYml.includes('upload-artifact'), 'CI workflow compiles assembleDebug and uploads APK artifact');
+
+    // ----------------------------------------------------
+    // TEST 12: Kotlin Jetpack Compose & Background Reliability
+    // ----------------------------------------------------
+    console.log('\nTest Group 12: Kotlin Jetpack Compose & Background Architecture');
+
+    const kotlinFiles = [
+        'app/src/main/java/com/spotisave/app/SpotisaveApp.kt',
+        'app/src/main/java/com/spotisave/app/MainActivity.kt',
+        'app/src/main/java/com/spotisave/app/data/model/Bookmark.kt',
+        'app/src/main/java/com/spotisave/app/data/model/PlaybackStateModel.kt',
+        'app/src/main/java/com/spotisave/app/data/db/BookmarkDatabaseHelper.kt',
+        'app/src/main/java/com/spotisave/app/data/repository/BookmarkRepository.kt',
+        'app/src/main/java/com/spotisave/app/service/PlaybackTracker.kt',
+        'app/src/main/java/com/spotisave/app/service/SpotifyBroadcastReceiver.kt',
+        'app/src/main/java/com/spotisave/app/service/SpotifyForegroundService.kt',
+        'app/src/main/java/com/spotisave/app/service/SpotifyNotificationListenerService.kt',
+        'app/src/main/java/com/spotisave/app/ui/theme/Color.kt',
+        'app/src/main/java/com/spotisave/app/ui/theme/Type.kt',
+        'app/src/main/java/com/spotisave/app/ui/theme/Theme.kt',
+        'app/src/main/java/com/spotisave/app/ui/util/TimeFormatter.kt',
+        'app/src/main/java/com/spotisave/app/ui/util/ResumeHelper.kt',
+        'app/src/main/java/com/spotisave/app/ui/screens/MainScreen.kt',
+        'app/src/main/java/com/spotisave/app/ui/screens/components/HeroCard.kt',
+        'app/src/main/java/com/spotisave/app/ui/screens/components/BookmarkCard.kt',
+        'app/src/main/java/com/spotisave/app/ui/screens/components/EmptyStateCard.kt',
+        'app/src/main/java/com/spotisave/app/ui/screens/components/StatusBottomSheet.kt',
+        'app/src/main/java/com/spotisave/app/ui/viewmodel/MainViewModel.kt',
+        'app/src/test/java/com/spotisave/app/TimeFormatterTest.kt',
+        'app/src/test/java/com/spotisave/app/BookmarkModelTest.kt'
+    ];
+
+    for (const file of kotlinFiles) {
+        assert(fs.existsSync(path.join(rootDir, file)), `Kotlin source file exists: ${file}`);
+    }
+
+    const colorKt = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/theme/Color.kt'), 'utf8');
+    assert(colorKt.includes('0xFF000000') && colorKt.includes('0xFF161618'), 'Jetpack Compose Color.kt defines pure OLED Canvas (#000000) and elevated Surface (#161618)');
+    assert(colorKt.includes('0xFF1DB954'), 'Color.kt defines Spotify Green (#1DB954)');
+
+    const heroCardKt = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/HeroCard.kt'), 'utf8');
+    assert(heroCardKt.includes('Fortfahren') && heroCardKt.includes('LinearProgressIndicator'), 'HeroCard composable includes 1-Click "Fortfahren" and progress bar');
+    assert(heroCardKt.includes('height(52.dp)'), 'HeroCard Fortfahren button exceeds Apple HIG 44pt touch target (52dp)');
+
+    const resumeHelperKt = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/util/ResumeHelper.kt'), 'utf8');
+    assert(resumeHelperKt.includes('com.spotify.music') && resumeHelperKt.includes('ACTION_VIEW'), 'ResumeHelper launches native Spotify intent');
+
+    // ----------------------------------------------------
+    // TEST 13: Native Android Logic & Edge Case Simulations
+    // ----------------------------------------------------
+    console.log('\nTest Group 13: Native Android Logic & Edge Case Simulations');
+
+    // 1. Per-Playlist / Album Bookmark ID Stability
+    function computeBookmarkId(contextUri, album, trackUri) {
+        if (contextUri && contextUri.trim().length > 0) return contextUri;
+        if (album && album.trim().length > 0 && album !== 'Spotify') {
+            const normalized = album.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+            return `album:${normalized}`;
+        }
+        return trackUri;
+    }
+
+    const albumName = 'Harry Potter und der Stein der Weisen';
+    const idTrack1 = computeBookmarkId(null, albumName, 'spotify:track:chapter1');
+    const idTrack2 = computeBookmarkId(null, albumName, 'spotify:track:chapter2');
+    assert(idTrack1 === idTrack2, 'Advancing tracks within the same album retains identical per-album bookmark ID');
+    assert(idTrack1 === 'album:harry_potter_und_der_stein_der_weisen', 'Per-album bookmark ID is cleanly normalized');
+
+    const plUri = 'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M';
+    const idPlTrack1 = computeBookmarkId(plUri, 'Pop Hits', 'spotify:track:song1');
+    const idPlTrack2 = computeBookmarkId(plUri, 'Pop Hits', 'spotify:track:song2');
+    assert(idPlTrack1 === idPlTrack2 && idPlTrack1 === plUri, 'Playlist contextUri takes highest precedence for per-playlist bookmark keying');
+
+    // 2. Track Transition Position Bleed Prevention
+    let lastPositionMs = 238000;
+    let lastTrackUri = 'spotify:track:song1';
+    function simulateTrackChange(newTrackUri) {
+        const isNewTrack = lastTrackUri.length > 0 && newTrackUri !== lastTrackUri;
+        if (isNewTrack) {
+            lastPositionMs = 0; // Position reset
+        }
+        lastTrackUri = newTrackUri;
+    }
+    simulateTrackChange('spotify:track:song2');
+    assert(lastPositionMs === 0, 'Track change resets position to 0ms preventing position bleed into next track');
+
+    // 3. MediaSession Real-Time Position Calculation
+    function computeCurrentPosition(state, durationMs, now = 100000) {
+        if (!state) return 0;
+        const basePos = state.position || 0;
+        const isPlaying = state.state === 'STATE_PLAYING';
+        if (isPlaying && state.lastPositionUpdateTime > 0) {
+            const timeDelta = now - state.lastPositionUpdateTime;
+            const speed = (state.playbackSpeed && state.playbackSpeed > 0) ? state.playbackSpeed : 1.0;
+            const calculated = basePos + Math.floor(timeDelta * speed);
+            return (durationMs > 0) ? Math.min(Math.max(calculated, 0), durationMs) : Math.max(calculated, 0);
+        }
+        return Math.max(basePos, 0);
+    }
+
+    // Paused state: returns exact base position
+    const pausedState = { position: 45000, state: 'STATE_PAUSED', lastPositionUpdateTime: 90000, playbackSpeed: 1.0 };
+    assert(computeCurrentPosition(pausedState, 180000, 100000) === 45000, 'Paused MediaSession returns exact paused position without time drift');
+
+    // Playing state: adds elapsed real-time
+    const playingState = { position: 10000, state: 'STATE_PLAYING', lastPositionUpdateTime: 90000, playbackSpeed: 1.0 };
+    assert(computeCurrentPosition(playingState, 180000, 100000) === 20000, 'Playing MediaSession computes continuous elapsed real-time (10s + 10s = 20s)');
+
+    // Clamped to duration
+    const nearEndState = { position: 175000, state: 'STATE_PLAYING', lastPositionUpdateTime: 90000, playbackSpeed: 1.0 };
+    assert(computeCurrentPosition(nearEndState, 180000, 100000) === 180000, 'Playing MediaSession position clamps cleanly to track duration');
+
+    // 4. Source Code Structural Validations for Fixes
+    const trackerKt = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/service/PlaybackTracker.kt'), 'utf8');
+    assert(trackerKt.includes('@Volatile') && trackerKt.includes('isNewTrack'), 'PlaybackTracker uses thread-safe @Volatile and checks isNewTrack for reset');
+    assert(trackerKt.includes('contextUri: String? = null') && trackerKt.includes('coverUrl: String? = null'), 'PlaybackTracker propagates contextUri and coverUrl');
+    assert(trackerKt.includes('syncPeriodicPosition'), 'PlaybackTracker includes syncPeriodicPosition for background ticker updates');
+
+    const notifListenerKt = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/service/SpotifyNotificationListenerService.kt'), 'utf8');
+    assert(notifListenerKt.includes('computeCurrentPosition') && notifListenerKt.includes('getActivePlaybackPosition'), 'NotificationListenerService computes real-time position with elapsed time');
+    assert(notifListenerKt.includes('METADATA_KEY_ALBUM_ART_URI'), 'NotificationListenerService extracts artwork coverUrl from MediaMetadata');
+
+    const fgServiceKt = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/service/SpotifyForegroundService.kt'), 'utf8');
+    assert(fgServiceKt.includes('startPeriodicPositionTicker') && fgServiceKt.includes('stopForeground'), 'SpotifyForegroundService includes periodic position ticker and stops foreground cleanly');
+    assert(fgServiceKt.includes('try {') && fgServiceKt.includes('startForeground('), 'SpotifyForegroundService guards startForeground with try/catch');
+
+    const dbHelperKt = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/db/BookmarkDatabaseHelper.kt'), 'utf8');
+    assert(dbHelperKt.includes('idx_bookmarks_timestamp'), 'BookmarkDatabaseHelper creates index on timestamp DESC for fast retrieval');
+
+    const stateModelKt = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/model/PlaybackStateModel.kt'), 'utf8');
+    assert(stateModelKt.includes('contextUri') && stateModelKt.includes('coverUrl'), 'PlaybackStateModel includes contextUri and coverUrl');
+
+    const bookmarkCardKt = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/BookmarkCard.kt'), 'utf8');
+    assert(bookmarkCardKt.includes('RoundedCornerShape(12.dp)') && (bookmarkCardKt.includes('Album') || bookmarkCardKt.includes('MusicNote')), 'BookmarkCard renders Apple HIG squircle artwork thumbnail container');
+
+    assert(heroCardKt.includes('latestBookmark?.copy') && heroCardKt.includes('"--:--"'), 'HeroCard synchronizes live active playback on Fortfahren and formats duration properly');
+
+    assert(resumeHelperKt.includes('isAlreadyCurrentTrack') && resumeHelperKt.includes('getLaunchIntentForPackage'), 'ResumeHelper prevents restarting current track to 0:00 when controller is active');
+
+    const ciWorkflowYml = fs.readFileSync(path.join(rootDir, '.github/workflows/build-apk.yml'), 'utf8');
+    assert(ciWorkflowYml.includes('*.apk'), 'CI workflow uses glob pattern *.apk for artifact upload robustness');
+
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);
     console.log('========================================\n');

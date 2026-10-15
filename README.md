@@ -1,36 +1,37 @@
 # Spotisave
 
-Spotisave ist eine moderne Progressive Web App (PWA) zur automatischen Erfassung und 1-Click-Wiederaufnahme von Spotify-Playlisten und Hörpositionen nach **Apple Human Interface Guidelines (HIG)**.
+Spotisave ist eine 100% native Android App (Kotlin + Jetpack Compose) sowie Progressive Web App (PWA) zur automatischen Erfassung und 1-Click-Wiederaufnahme von Spotify-Playlisten und Hörpositionen nach **Apple Human Interface Guidelines (HIG)** und SwiftUI-inspirierten deklarativen Design-Prinzipien.
 
-## Highlights & Features
+## Native Android App (Kotlin + Jetpack Compose)
 
-- **Apple HIG Dark Mode Ästhetik & Interaktion**:
-  - Deep OLED Black (`#000000`), abgesetzte Inset-Cards (`#161618`) und Hairline-Borders (`1px solid rgba(255, 255, 255, 0.08)`).
-  - Apple SF Pro Typografie-Hierarchie mit Tabular-Figures für exakte Zeitangaben.
-  - Floating Functional Glass Header mit `backdrop-filter: blur(20px) saturate(180%)`.
-  - Swipe-down-to-dismiss Touch-Geste auf allen Bottom Sheets (iOS Sheet-Verhalten) und Escape-Taste auf Desktop.
-  - Animierte Equalizer-Wellen und pulsierender Live-Status-Dot.
-  - Taptic-Engine Haptik-Simulation (`navigator.vibrate`) bei Klicks & Aktionen.
-  - 44px Mindestgröße für berührungssensitive Bedienelemente (Touch Targets) ohne künstliche Skalierungsverbote (`viewport-fit=cover`).
-  - Vollständige Barrierefreiheit für `prefers-reduced-motion` und `prefers-contrast: more` (Kontrast > 5:1 selbst für kleinste Beschriftungen).
+Die native Android App löst das Problem des Browser-Throttlings und ermöglicht zuverlässige Hintergrund-Synchronisation selbst bei ausgeschaltetem/gesperrtem Bildschirm in der Hosentasche:
 
-- **Hintergrund-Synchronisation & Worker-Tracking**:
-  - Dedizierter Web-Worker (5-Sekunden-Takt) gegen Browser-Throttling.
-  - Echter 2-Wege Fokus-Schutz-Toggle (Aktivieren / Deaktivieren von Screen WakeLock mit dynamischem Button-Status).
-  - Pausen-Schutz: Sichert Hörpositionen selbst bei pausierter Wiedergabe, sodass keine Positionen verloren gehen.
-  - Chromium Web Locks (`spotify_saver_background_lock`) & Screen WakeLock Integration.
-  - Status-Inspektor (Modal-Sheet) mit Live-Kennzahlen (Worker-Status, Ticks, letzter Sync, WakeLock).
-  - Service Worker (`sw.js` v2) mit Cache-Invalidierung, `ignoreSearch` Offline-Navigation und API-Request-Filterung.
+- **Robuste Hintergrund-Architektur (Android 8–14+)**:
+  - `SpotifyBroadcastReceiver`: Reagiert auf Spotify-System-Broadcasts (`com.spotify.music.metadatachanged`, `com.spotify.music.playbackstatechanged`, `com.spotify.music.queuechanged`).
+  - `SpotifyForegroundService`: Hält den Tracking-Prozess bei gesperrtem Bildschirm aktiv, registriert den Receiver dynamisch und schützt vor aggressiven OEM-Taskkillern.
+  - `SpotifyNotificationListenerService`: Systemweiter Fallback, der Spotify-MediaSessions direkt liest und PlaybackState/Metadata auswertet – vollständig ausgenommen von Android Doze / Standby-Limits.
+  - `BookmarkDatabaseHelper` & `BookmarkRepository`: ACID-konforme SQLite-Persistierung mit reaktiven `StateFlow`-Streams für die Compose-UI.
+- **Apple HIG UI / Jetpack Compose Ästhetik**:
+  - Deep OLED Canvas (`#000000`), abgesetzte Inset-Cards (`#161618`) und Hairline-Borders (`1.dp solid rgba(255, 255, 255, 0.12)`).
+  - Top Hero Card ("Zuletzt gehört") mit pulsierendem Live-Statusindikator, Fortschrittsbalken und prominentem 52dp 1-Click "Fortfahren"-Button.
+  - Gespeicherte Lesezeichen-Karten mit relativem Zeitstempel, Fortschrittsbalken und 2-stufiger Löschbestätigung.
+  - Mindestens 44dp Berührungsflächen (Touch Targets) für alle Steuerelemente.
+  - Status & Diagnose Bottom Sheet zur Verwaltung des Dienstes und Systemberechtigungen.
+- **1-Click Resume**:
+  - Direkte Wiederaufnahme über native Spotify-Intents (`spotify:track:...` / `spotify:playlist:...`) mit automatischer MediaController Transport-Ansteuerung und Web-Fallback.
+- **Cloud CI / GitHub Actions**:
+  - Automatisierter Workflow `.github/workflows/build-apk.yml` baut auf Push/PR via `./gradlew testDebugUnitTest assembleDebug` und lädt die signierbare Debug-APK als Artefakt hoch.
 
-- **Intelligente 1-Click Resume Fallback Engine**:
-  - 1. Versuch: Direkte Wiedergabe über Spotify Web-API (`/me/player/play`).
-  - 2. Versuch: Automatische Geräteerkennung bei 404 (suche aktive/verfügbare Spotify Connect Geräte).
-  - 3. Versuch: Direkter Track-URI Fallback bei 400 (behält ermitteltes Zielgerät bei).
-  - 4. Versuch: Apple Action Sheet mit 1-Click Deep Link zur nativen Spotify App (`spotify:track:...`) oder Web Player (`https://open.spotify.com/...`).
+## Web PWA Fallback
+
+Die ursprüngliche Web PWA bleibt im Repository als leichtgewichtiger Fallback erhalten:
+- Single-File Architektur (`index.html`) mit Service Worker (`sw.js`).
+- PKCE OAuth 2.0 Authentifizierung (RFC 7636).
+- Web Worker & Chromium Web Locks für Browser-basierte Sitzungen.
 
 ## Automatisierte Tests ausführen
 
-Zur Überprüfung von Syntax, PKCE-Kryptografie (RFC 7636), Hintergrund-Loop, 1-Click Fallback-Entscheidungsbaum, Safe-Delete, Screen WakeLock und Apple HIG Farbkontrasten (70 Tests in 10 Testgruppen):
+Zur Überprüfung von nativer Android-Architektur, Manifest, Gradle-Konfigurationen, Kotlin-Modellen, HTML/JS-Syntax, PKCE-Kryptografie, Fallback-Entscheidungsbaum, Apple HIG Farbkontrasten und nativer MediaSession/Background-Simulation (139 Tests in 13 Testgruppen):
 
 ```bash
 node test/verify.js

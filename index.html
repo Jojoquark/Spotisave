@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#121212">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/174/174872.png">
+    <title>Spotify Playlist Saver</title>
+    <style>
+        :root { --bg: #121212; --card: #181818; --green: #1DB954; --text: #FFFFFF; --sub: #B3B3B3; }
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; }
+        .container { max-width: 480px; margin: 0 auto; }
+        h1 { font-size: 1.35rem; margin: 0 0 4px 0; }
+        .subtext { color: var(--sub); font-size: 0.8rem; margin: 0 0 16px 0; }
+        .setup-box { background: var(--card); padding: 16px; border-radius: 12px; margin-bottom: 16px; }
+        input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #333; background: #222; color: #fff; font-size: 0.9rem; margin: 8px 0 12px 0; }
+        .btn { background: var(--green); color: #000; border: none; border-radius: 24px; padding: 10px 16px; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+        .btn:active { transform: scale(0.96); }
+        .btn-full { width: 100%; padding: 12px; }
+        .btn-outline { background: transparent; color: var(--text); border: 1px solid #444; }
+        .btn-bg-active { background: #1e2922; color: var(--green); border: 1px solid var(--green); }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px; flex-wrap: wrap; }
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-right: 6px; box-shadow: 0 0 8px var(--green); }
+        .now-playing { background: #1e2922; border: 1px solid #2d4736; border-radius: 12px; padding: 12px; margin-bottom: 16px; font-size: 0.83rem; display: none; line-height: 1.4; }
+        .card { background: var(--card); border-radius: 12px; padding: 12px; display: flex; align-items: center; gap: 12px; margin-bottom: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .cover { width: 58px; height: 58px; border-radius: 8px; object-fit: cover; background: #282828; flex-shrink: 0; }
+        .info { flex-grow: 1; overflow: hidden; }
+        .pl-name { font-weight: 700; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .track { color: var(--sub); font-size: 0.82rem; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .time { color: var(--green); font-size: 0.76rem; font-weight: 600; margin-top: 4px; }
+        .del-btn { background: none; border: none; color: #666; font-size: 1.1rem; cursor: pointer; padding: 4px 6px; }
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--green); color: #000; padding: 10px 20px; border-radius: 30px; font-weight: 700; font-size: 0.85rem; display: none; z-index: 99; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        code { background: #282828; padding: 4px 6px; border-radius: 4px; font-size: 0.78rem; word-break: break-all; display: block; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- LOGIN / SETUP VIEW -->
+    <div id="login-view" style="display:none;">
+        <h1>Spotify Playlist Saver</h1>
+        <p class="subtext">Android App & Auto-Save im Hintergrund</p>
+        <div class="setup-box">
+            <label style="font-size:0.85rem; font-weight:600;">1. Redirect URI im Spotify Dashboard eintragen:</label>
+            <p style="margin:6px 0 14px 0;"><code id="redirect-display"></code></p>
+            <label style="font-size:0.85rem; font-weight:600;">2. Deine Spotify Client ID:</label>
+            <input type="text" id="client-id-input" placeholder="Client ID hier einfügen...">
+            <button class="btn btn-full" onclick="startAuth()">Mit Spotify verbinden</button>
+        </div>
+    </div>
+
+    <!-- MAIN APP VIEW -->
+    <div id="app-view" style="display:none;">
+        <div class="top-bar">
+            <div>
+                <h1>Playlist Bookmarks</h1>
+                <p class="subtext" style="margin:0;"><span class="status-dot"></span><span id="bg-status-text">Hintergrund-Worker aktiv</span></p>
+            </div>
+            <div style="display:flex; gap:6px;">
+                <button id="keep-alive-btn" class="btn btn-bg-active" onclick="enableKeepAlive()">⚡ Fokus-Schutz aktiv</button>
+                <button class="btn btn-outline" onclick="checkNowPlaying(true)">Sichern</button>
+            </div>
+        </div>
+
+        <div id="now-playing-box" class="now-playing"></div>
+        <div id="bookmarks-list"></div>
+
+        <div style="margin-top: 24px; text-align: center;">
+            <button class="btn btn-outline" style="font-size:0.75rem; padding:6px 12px;" onclick="logout()">Abmelden / Client ID ändern</button>
+        </div>
+    </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// --- SERVICE WORKER REGISTRATION ---
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(console.error);
+    });
+}
+
+const SCOPES = 'user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative';
+const REDIRECT_URI = window.location.origin + window.location.pathname;
+document.getElementById('redirect-display').innerText = REDIRECT_URI;
+
+// --- PKCE AUTH HELPERS ---
+function generateRandomString(length) {
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const values = crypto.getRandomValues(new Uint8Array(length));
+    return values.reduce((acc, x) => acc + possible[x % possible.length], "");
+}
+
+async function sha256(plain) {
+    const data = new TextEncoder().encode(plain);
+    return window.crypto.subtle.digest('SHA-256', data);
+}
+
+function base64encode(input) {
+    return btoa(String.fromCharCode(...new Uint8Array(input)))
+        .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+}
+
+async function startAuth() {
+    const clientId = document.getElementById('client-id-input').value.trim();
+    if (!clientId) return showToast('Bitte Client ID eingeben!');
+    localStorage.setItem('sp_client_id', clientId);
+
+    const codeVerifier = generateRandomString(64);
+    const hashed = await sha256(codeVerifier);
+    const codeChallenge = base64encode(hashed);
+    localStorage.setItem('sp_code_verifier', codeVerifier);
+
+    const params = new URLSearchParams({
+        response_type: 'code',
+        client_id: clientId,
+        scope: SCOPES,
+        code_challenge_method: 'S256',
+        code_challenge: codeChallenge,
+        redirect_uri: REDIRECT_URI,
+    });
+    window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`;
+}
+
+async function exchangeToken(code) {
+    const clientId = localStorage.getItem('sp_client_id');
+    const codeVerifier = localStorage.getItem('sp_code_verifier');
+    const res = await fetch('https://accounts.spotify.com/api/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            client_id: clientId,
+            grant_type: 'authorization_code',
+            code: code,
+            redirect_uri: REDIRECT_URI,
+            code_verifier: codeVerifier,
+        })
+    });
+    const data = await res.json();
+    if (data.access_token) {
+        saveTokens(data);
+        window.history.replaceState({}, document.title, REDIRECT_URI);
+        initApp();
+    } else {
+        showToast('Auth-Fehler! Prüfe Redirect URI & Client ID.');
+        showLogin();
+    }
+}
+
+async function refreshAccessToken() {
+    const clientId = localStorage.getItem('sp_client_id');
+    const refreshToken = localStorage.getItem('sp_refresh_token');
+    if (!refreshToken) return null;
+
+    try {
+        const res = await fetch('https://accounts.spotify.com/api/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                client_id: clientId,
+                grant_type: 'refresh_token',
+                refresh_token: refreshToken
+            })
+        });
+        const data = await res.json();
+        if (data.access_token) {
+            saveTokens(data);
+            return data.access_token;
+        }
+    } catch (e) {}
+    return null;
+}
+
+function saveTokens(data) {
+    localStorage.setItem('sp_access_token', data.access_token);
+    if (data.refresh_token) localStorage.setItem('sp_refresh_token', data.refresh_token);
+    localStorage.setItem('sp_token_expiry', Date.now() + (data.expires_in * 1000) - 60000);
+}
+
+async function spFetch(endpoint, options = {}) {
+    let token = localStorage.getItem('sp_access_token');
+    const expiry = Number(localStorage.getItem('sp_token_expiry') || 0);
+    if (Date.now() > expiry) token = await refreshAccessToken();
+
+    options.headers = { ...options.headers, 'Authorization': `Bearer ${token}` };
+    let res = await fetch(`https://api.spotify.com/v1${endpoint}`, options);
+    if (res.status === 401) {
+        token = await refreshAccessToken();
+        if (token) {
+            options.headers['Authorization'] = `Bearer ${token}`;
+            res = await fetch(`https://api.spotify.com/v1${endpoint}`, options);
+        }
+    }
+    return res;
+}
+
+// --- BOOKMARK & AUTO-SAVE LOGIC ---
+function getBookmarks() {
+    return JSON.parse(localStorage.getItem('sp_bookmarks') || '{}');
+}
+
+function getPlaylistCache() {
+    return JSON.parse(localStorage.getItem('sp_pl_cache') || '{}');
+}
+
+async function fetchPlaylistInfo(contextUri) {
+    const cache = getPlaylistCache();
+    if (cache[contextUri]) return cache[contextUri];
+
+    const plId = contextUri.split(':').pop();
+    try {
+        const res = await spFetch(`/playlists/${plId}?fields=name,images`);
+        if (res.ok) {
+            const data = await res.json();
+            const info = {
+                id: plId,
+                name: data.name || `Playlist ${plId.slice(0, 6)}`,
+                image: (data.images && data.images.length) ? data.images[0].url : ''
+            };
+            cache[contextUri] = info;
+            localStorage.setItem('sp_pl_cache', JSON.stringify(cache));
+            return info;
+        }
+    } catch (e) {}
+    return { id: plId, name: `Playlist (${plId.slice(0, 6)})`, image: '' };
+}
+
+let lastSaveTimestamp = 0;
+
+async function checkNowPlaying(manual = false) {
+    try {
+        const res = await spFetch('/me/player');
+        const npBox = document.getElementById('now-playing-box');
+
+        if (res.status === 204 || !res.ok) {
+            npBox.style.display = 'block';
+            npBox.innerHTML = `Spotify pausiert/geschlossen • Letzte Stände sind sicher gespeichert.`;
+            if (manual) showToast('Spotify spielt gerade nichts ab.');
+            return;
+        }
+
+        const data = await res.json();
+        if (!data || !data.item) return;
+
+        // Nur speichern, solange Spotify aktiv abspielt (oder manuell gedrückt wurde)
+        if (!data.is_playing && !manual) {
+            npBox.style.display = 'block';
+            npBox.innerHTML = `⏸️ Spotify pausiert (${data.item.name}) • Auto-Save wartet auf Wiedergabe.`;
+            return;
+        }
+
+        const track = data.item;
+        const context = data.context;
+        const progress = data.progress_ms || 0;
+
+        if (context && context.type === 'playlist') {
+            const plInfo = await fetchPlaylistInfo(context.uri);
+            const bookmarks = getBookmarks();
+            bookmarks[plInfo.id] = {
+                playlist_id: plInfo.id,
+                playlist_name: plInfo.name,
+                playlist_image: plInfo.image,
+                context_uri: context.uri,
+                track_name: track.name,
+                artist_name: track.artists[0].name,
+                track_uri: track.uri,
+                progress_ms: progress,
+                updated_at: Date.now()
+            };
+            localStorage.setItem('sp_bookmarks', JSON.stringify(bookmarks));
+            lastSaveTimestamp = Date.now();
+
+            if (!document.hidden) {
+                renderBookmarks();
+                npBox.style.display = 'block';
+                npBox.innerHTML = `🟢 <strong>Speichert live:</strong> ${plInfo.name}<br>${track.name} (${formatTime(progress)})`;
+            }
+            if (manual) showToast(`Gespeichert: ${plInfo.name}`);
+        } else {
+            if (!document.hidden) {
+                npBox.style.display = 'block';
+                npBox.innerHTML = `🎵 Läuft gerade (Einzelsong/Album): <strong>${track.name}</strong><br>Deine Playlisten bleiben unberührt gespeichert.`;
+            }
+            if (manual) showToast('Aktuell läuft keine Playlist!');
+        }
+    } catch (e) {
+        console.error('Auto-Save Check Fehler:', e);
+    }
+}
+
+async function resumeBookmark(playlistId) {
+    const bookmarks = getBookmarks();
+    const b = bookmarks[playlistId];
+    if (!b) return;
+
+    showToast(`Starte ${b.playlist_name}...`);
+    const body = JSON.stringify({
+        context_uri: b.context_uri,
+        offset: { uri: b.track_uri },
+        position_ms: b.progress_ms
+    });
+
+    let res = await spFetch('/me/player/play', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: body
+    });
+
+    if (res.status === 404) {
+        const devRes = await spFetch('/me/player/devices');
+        const devData = await devRes.json();
+        if (devData.devices && devData.devices.length > 0) {
+            const devId = devData.devices[0].id;
+            res = await spFetch(`/me/player/play?device_id=${devId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: body
+            });
+        } else {
+            return showToast('Öffne zuerst kurz die Spotify-App!');
+        }
+    }
+
+    if (res.ok || res.status === 204) {
+        showToast(`Fortgesetzt bei ${formatTime(b.progress_ms)}!`);
+    } else {
+        showToast('Fehler beim Starten (Spotify Premium aktiv?)');
+    }
+}
+
+function deleteBookmark(playlistId) {
+    const bookmarks = getBookmarks();
+    delete bookmarks[playlistId];
+    localStorage.setItem('sp_bookmarks', JSON.stringify(bookmarks));
+    renderBookmarks();
+}
+
+function formatTime(ms) {
+    const totalSec = Math.floor(ms / 1000);
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+}
+
+function renderBookmarks() {
+    const list = document.getElementById('bookmarks-list');
+    const bookmarks = Object.values(getBookmarks()).sort((a, b) => b.updated_at - a.updated_at);
+
+    if (bookmarks.length === 0) {
+        list.innerHTML = `<p class="subtext">Noch keine Playlist gespeichert. Spiel einfach eine Playlist auf Spotify ab!</p>`;
+        return;
+    }
+
+    list.innerHTML = bookmarks.map(b => `
+        <div class="card">
+            ${b.playlist_image ? `<img class="cover" src="${b.playlist_image}" alt="Cover">` : `<div class="cover"></div>`}
+            <div class="info">
+                <div class="pl-name">${b.playlist_name}</div>
+                <div class="track">${b.track_name} • ${b.artist_name}</div>
+                <div class="time">Gespeichert bei ${formatTime(b.progress_ms)}</div>
+            </div>
+            <button class="btn" onclick="resumeBookmark('${b.playlist_id}')">Resume</button>
+            <button class="del-btn" onclick="deleteBookmark('${b.playlist_id}')" title="Löschen">✕</button>
+        </div>
+    `).join('');
+}
+
+// --- HINTERGRUND KEEP-ALIVE ENGINE (WEB WORKER + WEB LOCKS) ---
+let bgWorker = null;
+let lockHeld = false;
+
+function startBackgroundEngine() {
+    // 1. Web Lock anfordern (verhindert das Einfrieren durch Chromium im Hintergrund)
+    if ('locks' in navigator && !lockHeld) {
+        lockHeld = true;
+        navigator.locks.request('spotify_saver_background_lock', () => {
+            return new Promise(() => {}); // Hält den Lock dauerhaft offen
+        });
+    }
+
+    // 2. Eigener Web-Worker-Thread für den 5-Sekunden-Takt (wird im Hintergrund nicht wie Window-Timer gedrosselt)
+    if (!bgWorker) {
+        const workerCode = `
+            setInterval(() => {
+                postMessage('tick');
+            }, 5000);
+        `;
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        bgWorker = new Worker(URL.createObjectURL(blob));
+        bgWorker.onmessage = () => {
+            checkNowPlaying(false);
+            // Service Worker anpingen
+            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({ type: 'HEARTBEAT' });
+            }
+        };
+    }
+}
+
+async function enableKeepAlive() {
+    startBackgroundEngine();
+    // Optional: Screen WakeLock falls die App offen liegt
+    if ('wakeLock' in navigator) {
+        try { await navigator.wakeLock.request('screen'); } catch (e) {}
+    }
+    showToast('Hintergrund-Schutz aktiv!');
+}
+
+// Sofort aktualisieren, wenn die App wieder in den Vordergrund geholt wird
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && localStorage.getItem('sp_access_token')) {
+        renderBookmarks();
+        checkNowPlaying(false);
+    }
+});
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.innerText = msg;
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 2800);
+}
+
+function showLogin() {
+    document.getElementById('login-view').style.display = 'block';
+    document.getElementById('app-view').style.display = 'none';
+    const savedId = localStorage.getItem('sp_client_id');
+    if (savedId) document.getElementById('client-id-input').value = savedId;
+}
+
+function logout() {
+    localStorage.removeItem('sp_access_token');
+    localStorage.removeItem('sp_refresh_token');
+    showLogin();
+}
+
+function initApp() {
+    document.getElementById('login-view').style.display = 'none';
+    document.getElementById('app-view').style.display = 'block';
+    renderBookmarks();
+    checkNowPlaying(false);
+    startBackgroundEngine();
+}
+
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.has('code')) {
+    exchangeToken(urlParams.get('code'));
+} else if (localStorage.getItem('sp_access_token')) {
+    initApp();
+} else {
+    showLogin();
+}
+</script>
+</body>
+</html>

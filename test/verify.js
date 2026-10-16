@@ -994,6 +994,7 @@ async function runTests() {
 
     // Backup & Restore architecture checks
     assert(bookmarkSrc.includes('exportBookmarksToJson') && bookmarkSrc.includes('importBookmarksFromJson'), 'Bookmark model implements exportBookmarksToJson and importBookmarksFromJson');
+    assert(bookmarkSrc.includes('playlist_image') && bookmarkSrc.includes('removePrefix("spotify:playlist:")'), 'Bookmark JSON import supports web-app playlist_image and normalizes raw playlist IDs to spotify:playlist:<id>');
     assert(dbHelperKt.includes('fun importBookmarks(bookmarks: List<Bookmark>): Int') && dbHelperKt.includes('beginTransaction()'), 'BookmarkDatabaseHelper implements transactional importBookmarks');
 
     const repoSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/repository/BookmarkRepository.kt'), 'utf8');
@@ -1002,6 +1003,7 @@ async function runTests() {
 
     const statusSheetSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/StatusBottomSheet.kt'), 'utf8');
     assert(statusSheetSrc.includes('Datensicherung (Backup & Restore)') && statusSheetSrc.includes('backup_export_button') && statusSheetSrc.includes('backup_import_button'), 'StatusBottomSheet provides 1-Click Clipboard Backup & Restore UI');
+    assert(statusSheetSrc.includes('backupStatusIsError') && statusSheetSrc.includes('if (backupStatusIsError) StatusPaused else AppleSystemGreen'), 'StatusBottomSheet differentiates error/warning vs. success semantic colors');
     assert(mainScreenKt.includes('onExportJson') && mainScreenKt.includes('onImportJson'), 'MainScreen wires Backup & Restore callbacks to MainViewModel');
 
     // Apple HIG UI Polish checks
@@ -1009,6 +1011,7 @@ async function runTests() {
     assert(typeKt.includes('tnum'), 'Type.kt enables tabular numerals (tnum) for jitter-free time counters');
     assert(mainScreenKt.includes('size(44.dp)'), 'MainScreen header action buttons meet 44dp Apple HIG minimum touch target');
     assert(bookmarkCardSrc.includes('size(44.dp)') && statusSheetSrc.includes('heightIn(min = 48.dp)'), 'BookmarkCard and StatusBottomSheet action buttons meet 44dp+ Apple HIG minimum touch target');
+    assert(statsScreenKt.includes('fontFeatureSettings = "tnum"') && statsScreenKt.includes('performHapticFeedback') && statsScreenKt.includes('semantics(mergeDescendants = true)'), 'StatsScreen applies tnum tabular numerals, haptic feedback on resume, and merged TalkBack semantics');
 
     // Node simulation of Backup & Restore JSON roundtrip + edge cases
     function simulateExportJson(bookmarks) {
@@ -1022,8 +1025,36 @@ async function runTests() {
         if (!jsonStr || !jsonStr.trim()) return [];
         try {
             const parsed = JSON.parse(jsonStr);
-            const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.bookmarks) ? parsed.bookmarks : Object.values(parsed));
-            return arr.filter(item => item && (item.id || item.playlist_id) && (item.trackTitle || item.track_name) && (item.trackUri || item.track_uri));
+            let entries = [];
+            if (Array.isArray(parsed)) {
+                entries = parsed.map(item => [null, item]);
+            } else if (parsed && Array.isArray(parsed.bookmarks)) {
+                entries = parsed.bookmarks.map(item => [null, item]);
+            } else if (parsed && (parsed.id || parsed.playlist_id) && (parsed.trackTitle || parsed.track_name || parsed.trackUri || parsed.track_uri)) {
+                entries = [[null, parsed]];
+            } else if (parsed && typeof parsed === 'object') {
+                entries = Object.entries(parsed);
+            }
+            const out = [];
+            for (const [fallbackKey, item] of entries) {
+                if (!item || typeof item !== 'object') continue;
+                const rawId = (item.id || item.playlist_id || fallbackKey || '').trim();
+                const contextUri = (item.contextUri || item.context_uri || '').trim() || null;
+                const id = (!rawId && contextUri) ? contextUri :
+                    (contextUri && contextUri.startsWith('spotify:playlist:') && rawId === contextUri.replace('spotify:playlist:', '')) ? contextUri : rawId;
+                const trackTitle = (item.trackTitle || item.track_name || '').trim();
+                const trackUri = (item.trackUri || item.track_uri || '').trim();
+                if (!id || !trackTitle || !trackUri) continue;
+                out.push({
+                    id,
+                    contextUri,
+                    trackTitle,
+                    trackUri,
+                    coverUrl: item.coverUrl || item.cover_url || item.playlist_image || null,
+                    positionMs: Math.max(0, Number(item.positionMs ?? item.progress_ms ?? 0))
+                });
+            }
+            return out;
         } catch {
             return [];
         }
@@ -1033,6 +1064,17 @@ async function runTests() {
     ]);
     const restoredItems = simulateImportJson(backupPayload);
     assert(restoredItems.length === 1 && restoredItems[0].id === 'spotify:playlist:top50' && restoredItems[0].positionMs === 42500, 'JSON Backup & Restore roundtrip preserves bookmark ID and exact millisecond position');
+    const webExportRestored = simulateImportJson(JSON.stringify({
+        '37i9dQZF1DXcBWIGoYBM5M': {
+            playlist_id: '37i9dQZF1DXcBWIGoYBM5M',
+            playlist_image: 'https://i.scdn.co/image/web',
+            context_uri: 'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M',
+            track_name: 'Espresso',
+            track_uri: 'spotify:track:123',
+            progress_ms: 45000
+        }
+    }));
+    assert(webExportRestored.length === 1 && webExportRestored[0].id === 'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M' && webExportRestored[0].coverUrl === 'https://i.scdn.co/image/web', 'Web-app JSON import normalizes playlist ID to spotify:playlist:<id> and preserves playlist_image');
     assert(simulateImportJson('').length === 0 && simulateImportJson('{invalid').length === 0, 'JSON Restore safely rejects empty and malformed inputs without throwing');
 
     console.log('\n========================================');

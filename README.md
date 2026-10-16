@@ -34,10 +34,11 @@ Die native Android App verbindet lokale Android-Systemüberwachung (Broadcasts &
   - `BookmarkDatabaseHelper` & `BookmarkRepository`: ACID-konforme SQLite-Persistierung mit reaktiven `StateFlow`-Streams für die Compose-UI.
 - **Apple HIG UI / Jetpack Compose Ästhetik**:
   - Deep OLED Canvas (`#000000`), abgesetzte Inset-Cards (`#161618`) und Hairline-Borders (`1.dp solid rgba(255, 255, 255, 0.12)`).
-  - Mindestens 44dp Berührungsflächen (Touch Targets) für alle Steuerelemente.
-  - Status & Diagnose Bottom Sheet zur Verwaltung des Dienstes und Systemberechtigungen.
-- **Cloud CI / GitHub Actions**:
-  - Automatisierter Workflow `.github/workflows/build-apk.yml` baut auf Push/PR via `./gradlew testDebugUnitTest assembleDebug` und lädt die signierbare Debug-APK als Artefakt hoch.
+  - Mindestens 44dp Berührungsflächen (Touch Targets), tabellarische Ziffern (`tnum`) für jitterfreie Zeitanzeigen, haptisches Feedback und TalkBack-Semantik.
+  - Status & Diagnose Bottom Sheet zur Verwaltung des Dienstes, Systemberechtigungen sowie **1-Click JSON Backup & Restore** über die Zwischenablage.
+- **Deterministische APK-Signierung & Cloud CI (GitHub Actions)**:
+  - Persistenter Keystore (`app/spotisave.keystore`, 2048-Bit RSA, Alias `spotisave`), fest in `signingConfigs` eingebunden, sodass jedes GitHub Actions Build mit exakt demselben Zertifikat signiert wird und App-Updates nahtlos ohne Signaturkonflikt (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) installiert werden können.
+  - Automatisierter Workflow `.github/workflows/build-apk.yml` baut auf Push/PR via `./gradlew testDebugUnitTest assembleDebug`, prüft die Keystore-Signatur und lädt die signierte APK als Artefakt hoch.
 
 ## Web PWA Fallback
 
@@ -48,7 +49,7 @@ Die ursprüngliche Web PWA bleibt im Repository als leichtgewichtiger Fallback e
 
 ## Automatisierte Tests ausführen
 
-Zur Überprüfung von nativer Android-Architektur, Manifest, Gradle-Konfigurationen, Kotlin-Modellen, PKCE-Kryptografie, Spotify Web API Parsing, Resume-Payloads, StatisticsEngine (Lieblings-Album, Top-Songs, Historie), Playlist-Tracking, Apple HIG Farbkontrasten und nativer MediaSession-Simulation (204 Tests in 14 Testgruppen):
+Zur Überprüfung von nativer Android-Architektur, Manifest, Gradle-Konfigurationen, deterministischer APK-Signierung, JSON Backup/Restore, Kotlin-Modellen, PKCE-Kryptografie, Spotify Web API Parsing, Resume-Payloads, StatisticsEngine (Lieblings-Album, Top-Songs, Historie), Playlist-Tracking, Apple HIG Farbkontrasten und nativer MediaSession-Simulation (223 Tests in 15 Testgruppen):
 
 ```bash
 node test/verify.js

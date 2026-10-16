@@ -78,46 +78,66 @@ data class Bookmark(
 
             val result = mutableListOf<Bookmark>()
             try {
-                val array: JSONArray = when {
-                    trimmed.startsWith("[") -> JSONArray(trimmed)
+                val entries = mutableListOf<Pair<String?, JSONObject>>()
+                when {
+                    trimmed.startsWith("[") -> {
+                        val arr = JSONArray(trimmed)
+                        for (i in 0 until arr.length()) {
+                            val item = arr.optJSONObject(i)
+                            if (item != null) entries.add(null to item)
+                        }
+                    }
                     trimmed.startsWith("{") -> {
                         val obj = JSONObject(trimmed)
                         if (obj.has("bookmarks") && obj.opt("bookmarks") is JSONArray) {
-                            obj.getJSONArray("bookmarks")
-                        } else {
-                            val arr = JSONArray()
-                            if (obj.has("id") && obj.has("trackTitle")) {
-                                arr.put(obj)
-                            } else {
-                                val keys = obj.keys()
-                                while (keys.hasNext()) {
-                                    val k = keys.next()
-                                    val child = obj.optJSONObject(k)
-                                    if (child != null) arr.put(child)
-                                }
+                            val arr = obj.getJSONArray("bookmarks")
+                            for (i in 0 until arr.length()) {
+                                val item = arr.optJSONObject(i)
+                                if (item != null) entries.add(null to item)
                             }
-                            arr
+                        } else if (
+                            (obj.has("id") || obj.has("playlist_id")) &&
+                            (obj.has("trackTitle") || obj.has("track_name") || obj.has("trackUri") || obj.has("track_uri"))
+                        ) {
+                            entries.add(null to obj)
+                        } else {
+                            val keys = obj.keys()
+                            while (keys.hasNext()) {
+                                val k = keys.next()
+                                val child = obj.optJSONObject(k)
+                                if (child != null) entries.add(k to child)
+                            }
                         }
                     }
                     else -> return emptyList()
                 }
 
-                for (i in 0 until array.length()) {
-                    val item = array.optJSONObject(i) ?: continue
-                    val id = item.optString("id", item.optString("playlist_id", "")).trim()
+                for ((fallbackKey, item) in entries) {
+                    val rawId = item.optString("id", item.optString("playlist_id", fallbackKey ?: "")).trim()
                     val trackTitle = item.optString("trackTitle", item.optString("track_name", "")).trim()
                     val artist = item.optString("artist", item.optString("artist_name", "")).trim()
                     val trackUri = item.optString("trackUri", item.optString("track_uri", "")).trim()
 
-                    if (id.isEmpty() || trackTitle.isEmpty() || trackUri.isEmpty()) continue
-
                     val rawContextUri = item.optString("contextUri", item.optString("context_uri", "")).trim()
                     val contextUri = if (rawContextUri.isEmpty() || rawContextUri == "null") null else rawContextUri
+
+                    // Normalize web-app raw playlist IDs to canonical spotify:playlist:<id> so future playback updates in-place
+                    val id = when {
+                        rawId.isEmpty() && !contextUri.isNullOrBlank() -> contextUri
+                        contextUri != null && contextUri.startsWith("spotify:playlist:") &&
+                            rawId == contextUri.removePrefix("spotify:playlist:") -> contextUri
+                        else -> rawId
+                    }
+
+                    if (id.isEmpty() || trackTitle.isEmpty() || trackUri.isEmpty()) continue
 
                     val contextTitle = item.optString("contextTitle", item.optString("playlist_name", "Spotify")).trim()
                         .ifEmpty { "Spotify" }
 
-                    val rawCoverUrl = item.optString("coverUrl", item.optString("cover_url", "")).trim()
+                    val rawCoverUrl = item.optString(
+                        "coverUrl",
+                        item.optString("cover_url", item.optString("playlist_image", ""))
+                    ).trim()
                     val coverUrl = if (rawCoverUrl.isEmpty() || rawCoverUrl == "null") null else rawCoverUrl
 
                     val positionMs = item.optLong("positionMs", item.optLong("progress_ms", 0L)).coerceAtLeast(0L)

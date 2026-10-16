@@ -301,6 +301,9 @@ private fun KpiCard(
             .clip(RoundedCornerShape(18.dp))
             .background(SurfaceCard)
             .border(1.dp, HairlineBorder, RoundedCornerShape(18.dp))
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$title: $value, $subtitle"
+            }
             .padding(16.dp)
     ) {
         Column {
@@ -327,7 +330,8 @@ private fun KpiCard(
                 text = value,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextPrimary
+                color = TextPrimary,
+                style = TextStyle(fontFeatureSettings = "tnum")
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
@@ -452,6 +456,7 @@ private fun TopSongsCard(
     topSongs: List<TopTrackStat>,
     onResume: (Bookmark) -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -512,6 +517,7 @@ private fun TopSongsCard(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Black,
                             color = if (index == 0) SpotifyGreen else TextSecondary,
+                            style = TextStyle(fontFeatureSettings = "tnum"),
                             modifier = Modifier.width(26.dp)
                         )
 
@@ -553,7 +559,8 @@ private fun TopSongsCard(
                             Text(
                                 text = "${song.formattedTotalTime} gehört • Dauer ${song.formattedDuration}",
                                 fontSize = 10.sp,
-                                color = SpotifyGreen
+                                color = SpotifyGreen,
+                                style = TextStyle(fontFeatureSettings = "tnum")
                             )
                         }
 
@@ -565,12 +572,15 @@ private fun TopSongsCard(
                                 .size(44.dp)
                                 .clip(CircleShape)
                                 .background(SurfaceCardElevated)
-                                .clickable { onResume(song.bookmark) },
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onResume(song.bookmark)
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Wiedergeben",
+                                contentDescription = "Wiedergeben: ${song.title}",
                                 tint = SpotifyGreen,
                                 modifier = Modifier.size(22.dp)
                             )
@@ -587,6 +597,7 @@ private fun HistoryCard(
     history: List<HistoryEntry>,
     onResume: (Bookmark) -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -652,7 +663,8 @@ private fun HistoryCard(
                                         text = item.relativeTime,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = SpotifyGreen
+                                        color = SpotifyGreen,
+                                        style = TextStyle(fontFeatureSettings = "tnum")
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -687,6 +699,7 @@ private fun HistoryCard(
                                 text = "${item.artist} (${item.formattedDuration})",
                                 fontSize = 11.sp,
                                 color = TextSecondary,
+                                style = TextStyle(fontFeatureSettings = "tnum"),
                                 maxLines = 1
                             )
                         }
@@ -697,12 +710,15 @@ private fun HistoryCard(
                                 .size(44.dp)
                                 .clip(CircleShape)
                                 .background(SurfaceCardElevated)
-                                .clickable { onResume(item.bookmark) },
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onResume(item.bookmark)
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.PlayArrow,
-                                contentDescription = "Wiedergeben",
+                                contentDescription = "Wiedergeben: ${item.trackTitle}",
                                 tint = TextPrimary,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -959,6 +975,7 @@ private fun TopPlaylistCard(
     stats: ListeningStats,
     onResume: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -1019,7 +1036,8 @@ private fun TopPlaylistCard(
                         text = "Position: ${TimeFormatter.formatTime(stats.topPlaylistProgressMs)}",
                         fontSize = 11.sp,
                         color = SpotifyGreen,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        style = TextStyle(fontFeatureSettings = "tnum")
                     )
                 }
 
@@ -1029,12 +1047,15 @@ private fun TopPlaylistCard(
                         .size(44.dp)
                         .clip(CircleShape)
                         .background(SpotifyGreen)
-                        .clickable { onResume() },
+                        .clickable {
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onResume()
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
-                        contentDescription = "Fortsetzen",
+                        contentDescription = "Fortsetzen: ${stats.topPlaylistTitle ?: "Playlist"}",
                         tint = Color.Black,
                         modifier = Modifier.size(22.dp)
                     )

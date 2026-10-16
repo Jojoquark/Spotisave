@@ -190,6 +190,7 @@ class BookmarkModelTest {
               "37i9dQZF1DXcBWIGoYBM5M": {
                 "playlist_id": "37i9dQZF1DXcBWIGoYBM5M",
                 "playlist_name": "Today's Top Hits",
+                "playlist_image": "https://i.scdn.co/image/web_cover",
                 "track_name": "Espresso",
                 "artist_name": "Sabrina Carpenter",
                 "track_uri": "spotify:track:4cOdK2wGLETKBW3PvgPWqT",
@@ -201,9 +202,40 @@ class BookmarkModelTest {
         """.trimIndent()
         val fromWeb = Bookmark.importBookmarksFromJson(webAppJson)
         assertEquals(1, fromWeb.size)
-        assertEquals("37i9dQZF1DXcBWIGoYBM5M", fromWeb[0].id)
+        assertEquals("spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", fromWeb[0].id)
         assertEquals("Today's Top Hits", fromWeb[0].contextTitle)
         assertEquals("Espresso", fromWeb[0].trackTitle)
+        assertEquals("https://i.scdn.co/image/web_cover", fromWeb[0].coverUrl)
         assertEquals(45_000L, fromWeb[0].positionMs)
+
+        // Map key fallback when child omits id/playlist_id + single web-app object
+        val mapKeyFallbackJson = """
+            {
+              "spotify:playlist:chill_vibes": {
+                "track_name": "Sunset Lover",
+                "artist_name": "Petit Biscuit",
+                "track_uri": "spotify:track:sunset",
+                "progress_ms": 12000
+              }
+            }
+        """.trimIndent()
+        val fromMapKey = Bookmark.importBookmarksFromJson(mapKeyFallbackJson)
+        assertEquals(1, fromMapKey.size)
+        assertEquals("spotify:playlist:chill_vibes", fromMapKey[0].id)
+
+        val singleWebObjJson = """
+            {
+              "playlist_id": "album:ram",
+              "playlist_name": "Random Access Memories",
+              "track_name": "Get Lucky",
+              "artist_name": "Daft Punk",
+              "track_uri": "spotify:track:getlucky",
+              "progress_ms": 60000
+            }
+        """.trimIndent()
+        val fromSingleWeb = Bookmark.importBookmarksFromJson(singleWebObjJson)
+        assertEquals(1, fromSingleWeb.size)
+        assertEquals("album:ram", fromSingleWeb[0].id)
+        assertEquals("Get Lucky", fromSingleWeb[0].trackTitle)
     }
 }

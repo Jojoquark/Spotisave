@@ -79,6 +79,7 @@ fun StatusBottomSheet(
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var backupStatusText by remember { mutableStateOf<String?>(null) }
+    var backupStatusIsError by remember { mutableStateOf(false) }
 
     val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
     val isBatteryIgnored = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -317,8 +318,9 @@ fun StatusBottomSheet(
                                 val json = onExportJson()
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                 clipboard?.setPrimaryClip(ClipData.newPlainText("Spotisave Backup", json))
+                                backupStatusIsError = false
                                 backupStatusText = "Backup in Zwischenablage kopiert ($totalBookmarks Einträge)"
-                                Toast.makeText(context, "Backup kopiert!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Backup kopiert ($totalBookmarks Einträge)!", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier
                                 .weight(1f)
@@ -340,13 +342,19 @@ fun StatusBottomSheet(
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
                                 val clipText = clipboard?.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() ?: ""
                                 if (clipText.isBlank()) {
+                                    backupStatusIsError = true
                                     backupStatusText = "Zwischenablage ist leer"
+                                    Toast.makeText(context, "Zwischenablage ist leer", Toast.LENGTH_SHORT).show()
                                 } else {
                                     onImportJson(clipText) { count ->
-                                        backupStatusText = if (count > 0) {
-                                            "$count Hörpositionen erfolgreich wiederhergestellt"
+                                        if (count > 0) {
+                                            backupStatusIsError = false
+                                            backupStatusText = "$count Hörpositionen erfolgreich wiederhergestellt"
+                                            Toast.makeText(context, "$count Hörpositionen wiederhergestellt!", Toast.LENGTH_SHORT).show()
                                         } else {
-                                            "Kein gültiges Spotisave-Backup in der Zwischenablage gefunden"
+                                            backupStatusIsError = true
+                                            backupStatusText = "Kein gültiges Spotisave-Backup in der Zwischenablage gefunden"
+                                            Toast.makeText(context, "Kein gültiges Backup gefunden", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 }
@@ -372,7 +380,7 @@ fun StatusBottomSheet(
                         Text(
                             text = msg,
                             style = MaterialTheme.typography.labelSmall,
-                            color = AppleSystemGreen
+                            color = if (backupStatusIsError) StatusPaused else AppleSystemGreen
                         )
                     }
                 }

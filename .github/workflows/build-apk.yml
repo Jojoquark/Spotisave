@@ -32,10 +32,11 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace 2>&1 | tee build.log
 
-      - name: Locate Generated APK
+      - name: Locate Generated APK & Verify Signature
         run: |
           echo "### Generated APK Files"
           find . -type f -name "*.apk" || true
+          keytool -list -v -keystore app/spotisave.keystore -storepass spotisave123 | grep -E "(Alias|SHA256)" || true
 
       - name: Report Failure Details
         if: failure()

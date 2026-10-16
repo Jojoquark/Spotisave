@@ -1339,6 +1339,7 @@ async function runTests() {
 
     const statsScreenSrc18 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/StatsScreen.kt'), 'utf8');
     assert(statsScreenSrc18.includes('bottom = 108.dp'), 'StatsScreen provides 108dp bottom content padding for floating bubble clearance');
+    assert(statsScreenSrc18.includes('LocalIsDarkTheme') && statsScreenSrc18.includes('rememberStatsTokens'), 'StatsScreen dynamically adapts text, cards, and specular highlights to Dark and White Modes');
 
     // 8. Web PWA (index.html) White Mode & Floating Bubble
     assert(indexHtml.includes('body.light-mode'), 'index.html defines body.light-mode CSS rules');

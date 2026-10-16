@@ -499,15 +499,16 @@ private fun TopSongsCard(
     topSongs: List<TopTrackStat>,
     onResume: (Bookmark) -> Unit
 ) {
+    val tokens = rememberStatsTokens()
     val haptic = LocalHapticFeedback.current
     val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .background(LiquidGlassDefaults.GlassSurface)
-            .background(LiquidGlassDefaults.MeniscusGleamBrush)
-            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
+            .background(tokens.glassSurface)
+            .background(tokens.meniscusGleam)
+            .border(0.75.dp, tokens.specularRim, cardShape)
             .padding(18.dp)
     ) {
         Column {
@@ -521,7 +522,7 @@ private fun TopSongsCard(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(CircleShape)
-                            .background(SurfaceCardElevated),
+                            .background(tokens.cardElevated),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -536,7 +537,7 @@ private fun TopSongsCard(
                         text = "Meistgehörte Songs",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = tokens.textPrimary
                     )
                 }
 
@@ -544,7 +545,7 @@ private fun TopSongsCard(
                     text = "Top ${topSongs.size}",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextTertiary
+                    color = tokens.textTertiary
                 )
             }
 
@@ -561,7 +562,7 @@ private fun TopSongsCard(
                             text = "#${index + 1}",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Black,
-                            color = if (index == 0) SpotifyGreen else TextSecondary,
+                            color = if (index == 0) SpotifyGreen else tokens.textSecondary,
                             style = TextStyle(fontFeatureSettings = "tnum"),
                             modifier = Modifier.width(26.dp)
                         )
@@ -570,7 +571,7 @@ private fun TopSongsCard(
                         AsyncCoverImage(
                             coverUrl = song.coverUrl,
                             fallbackIcon = Icons.Default.MusicNote,
-                            iconTint = if (index == 0) SpotifyGreen else TextTertiary,
+                            iconTint = if (index == 0) SpotifyGreen else tokens.textTertiary,
                             iconSize = 20.dp,
                             contentDescription = song.title,
                             modifier = Modifier.size(40.dp),
@@ -585,14 +586,14 @@ private fun TopSongsCard(
                                 text = song.title,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = TextPrimary,
+                                color = tokens.textPrimary,
                                 maxLines = 1
                             )
                             Spacer(modifier = Modifier.height(1.dp))
                             Text(
                                 text = "${song.artist} • ${song.contextTitle}",
                                 fontSize = 11.sp,
-                                color = TextSecondary,
+                                color = tokens.textSecondary,
                                 maxLines = 1
                             )
                             Spacer(modifier = Modifier.height(2.dp))
@@ -611,7 +612,7 @@ private fun TopSongsCard(
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(CircleShape)
-                                .background(SurfaceCardElevated)
+                                .background(tokens.cardElevated)
                                 .clickable {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onResume(song.bookmark)
@@ -637,15 +638,16 @@ private fun HistoryCard(
     history: List<HistoryEntry>,
     onResume: (Bookmark) -> Unit
 ) {
+    val tokens = rememberStatsTokens()
     val haptic = LocalHapticFeedback.current
     val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .background(LiquidGlassDefaults.GlassSurface)
-            .background(LiquidGlassDefaults.MeniscusGleamBrush)
-            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
+            .background(tokens.glassSurface)
+            .background(tokens.meniscusGleam)
+            .border(0.75.dp, tokens.specularRim, cardShape)
             .padding(18.dp)
     ) {
         Column {
@@ -659,7 +661,7 @@ private fun HistoryCard(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(CircleShape)
-                            .background(SurfaceCardElevated),
+                            .background(tokens.cardElevated),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -674,14 +676,14 @@ private fun HistoryCard(
                         text = "Genaue Historie",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = tokens.textPrimary
                     )
                 }
 
                 Text(
                     text = "Zuletzt gehört",
                     fontSize = 11.sp,
-                    color = TextTertiary
+                    color = tokens.textTertiary
                 )
             }
 
@@ -698,7 +700,7 @@ private fun HistoryCard(
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(6.dp))
-                                        .background(SurfaceCardElevated)
+                                        .background(tokens.cardElevated)
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
                                     Text(
@@ -723,7 +725,7 @@ private fun HistoryCard(
                                     Text(
                                         text = if (item.bookmark.isPlaylist && item.contextTitle.isNotBlank() && item.contextTitle != "Spotify") "Playlist: ${item.contextTitle}" else item.contextTitle,
                                         fontSize = 10.sp,
-                                        color = if (item.bookmark.isPlaylist) SpotifyGreen else TextTertiary,
+                                        color = if (item.bookmark.isPlaylist) SpotifyGreen else tokens.textTertiary,
                                         fontWeight = if (item.bookmark.isPlaylist) FontWeight.SemiBold else FontWeight.Normal,
                                         maxLines = 1
                                     )
@@ -734,13 +736,13 @@ private fun HistoryCard(
                                 text = item.trackTitle,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = TextPrimary,
+                                color = tokens.textPrimary,
                                 maxLines = 1
                             )
                             Text(
                                 text = "${item.artist} (${item.formattedDuration})",
                                 fontSize = 11.sp,
-                                color = TextSecondary,
+                                color = tokens.textSecondary,
                                 style = TextStyle(fontFeatureSettings = "tnum"),
                                 maxLines = 1
                             )
@@ -751,7 +753,7 @@ private fun HistoryCard(
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(CircleShape)
-                                .background(SurfaceCardElevated)
+                                .background(tokens.cardElevated)
                                 .clickable {
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onResume(item.bookmark)
@@ -761,7 +763,7 @@ private fun HistoryCard(
                             Icon(
                                 imageVector = Icons.Default.PlayArrow,
                                 contentDescription = "Wiedergeben: ${item.trackTitle}",
-                                tint = TextPrimary,
+                                tint = tokens.textPrimary,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -781,14 +783,15 @@ private fun InsightsPersonaCard(
     peakDay: String,
     peakDayMinutes: Int
 ) {
+    val tokens = rememberStatsTokens()
     val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .background(LiquidGlassDefaults.GlassSurface)
-            .background(LiquidGlassDefaults.MeniscusGleamBrush)
-            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
+            .background(tokens.glassSurface)
+            .background(tokens.meniscusGleam)
+            .border(0.75.dp, tokens.specularRim, cardShape)
             .padding(18.dp)
     ) {
         Column {
@@ -802,7 +805,7 @@ private fun InsightsPersonaCard(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(CircleShape)
-                            .background(SurfaceCardElevated),
+                            .background(tokens.cardElevated),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -817,7 +820,7 @@ private fun InsightsPersonaCard(
                         text = "Hör-Persönlichkeit",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = tokens.textPrimary
                     )
                 }
                 Text(
@@ -839,21 +842,21 @@ private fun InsightsPersonaCard(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCardElevated)
+                        .background(tokens.cardElevated)
                         .padding(12.dp)
                 ) {
                     Column {
                         Text(
                             text = "Primäre Hörzeit",
                             fontSize = 11.sp,
-                            color = TextSecondary
+                            color = tokens.textSecondary
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = peakHours,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = TextPrimary
+                            color = tokens.textPrimary
                         )
                     }
                 }
@@ -862,14 +865,14 @@ private fun InsightsPersonaCard(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCardElevated)
+                        .background(tokens.cardElevated)
                         .padding(12.dp)
                 ) {
                     Column {
                         Text(
                             text = "Top-Wochentag",
                             fontSize = 11.sp,
-                            color = TextSecondary
+                            color = tokens.textSecondary
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
@@ -889,7 +892,7 @@ private fun InsightsPersonaCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(SurfaceCardElevated)
+                    .background(tokens.cardElevated)
                     .padding(12.dp)
             ) {
                 Row(
@@ -900,13 +903,13 @@ private fun InsightsPersonaCard(
                     Text(
                         text = "Durchhör-Quote",
                         fontSize = 11.sp,
-                        color = TextSecondary
+                        color = tokens.textSecondary
                     )
                     Text(
                         text = "$completionRate% ($completionLabel)",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = tokens.textPrimary
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -917,7 +920,7 @@ private fun InsightsPersonaCard(
                         .height(5.dp)
                         .clip(RoundedCornerShape(2.5.dp)),
                     color = SpotifyGreen,
-                    trackColor = CanvasBlack
+                    trackColor = if (tokens.isDark) CanvasBlack else Color(0xFFE5E5EA)
                 )
             }
         }
@@ -926,14 +929,15 @@ private fun InsightsPersonaCard(
 
 @Composable
 private fun WeeklyActivityCard(activities: List<DayActivity>) {
+    val tokens = rememberStatsTokens()
     val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .background(LiquidGlassDefaults.GlassSurface)
-            .background(LiquidGlassDefaults.MeniscusGleamBrush)
-            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
+            .background(tokens.glassSurface)
+            .background(tokens.meniscusGleam)
+            .border(0.75.dp, tokens.specularRim, cardShape)
             .padding(18.dp)
     ) {
         Column {
@@ -946,7 +950,7 @@ private fun WeeklyActivityCard(activities: List<DayActivity>) {
                     text = "Wöchentliche Aktivität",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    color = tokens.textPrimary
                 )
                 Icon(
                     imageVector = Icons.Default.Equalizer,
@@ -976,7 +980,7 @@ private fun WeeklyActivityCard(activities: List<DayActivity>) {
                         Text(
                             text = if (day.minutes > 0) "${day.minutes}m" else "0",
                             fontSize = 9.sp,
-                            color = TextTertiary,
+                            color = tokens.textTertiary,
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
 
@@ -994,8 +998,8 @@ private fun WeeklyActivityCard(activities: List<DayActivity>) {
                                 .background(
                                     when {
                                         day.fraction >= 0.8f -> SpotifyGreen
-                                        day.minutes > 0 -> SurfaceCardElevated
-                                        else -> SurfaceCardElevated.copy(alpha = 0.35f)
+                                        day.minutes > 0 -> tokens.cardElevated
+                                        else -> tokens.cardElevated.copy(alpha = 0.35f)
                                     }
                                 )
                         )
@@ -1007,7 +1011,7 @@ private fun WeeklyActivityCard(activities: List<DayActivity>) {
                             text = day.dayName,
                             fontSize = 11.sp,
                             fontWeight = if (day.fraction >= 0.8f) FontWeight.Bold else FontWeight.Medium,
-                            color = if (day.fraction >= 0.8f) TextPrimary else TextSecondary
+                            color = if (day.fraction >= 0.8f) tokens.textPrimary else tokens.textSecondary
                         )
                     }
                 }
@@ -1021,15 +1025,16 @@ private fun TopPlaylistCard(
     stats: ListeningStats,
     onResume: () -> Unit
 ) {
+    val tokens = rememberStatsTokens()
     val haptic = LocalHapticFeedback.current
     val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .background(LiquidGlassDefaults.GlassSurface)
-            .background(LiquidGlassDefaults.MeniscusGleamBrush)
-            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
+            .background(tokens.glassSurface)
+            .background(tokens.meniscusGleam)
+            .border(0.75.dp, tokens.specularRim, cardShape)
             .padding(18.dp)
     ) {
         Column {
@@ -1037,7 +1042,7 @@ private fun TopPlaylistCard(
                 text = "Top-Playlist / Fokus-Station",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextPrimary
+                color = tokens.textPrimary
             )
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -1051,8 +1056,8 @@ private fun TopPlaylistCard(
                     modifier = Modifier
                         .size(54.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCardElevated)
-                        .border(1.dp, HairlineBorder, RoundedCornerShape(12.dp)),
+                        .background(tokens.cardElevated)
+                        .border(1.dp, if (tokens.isDark) HairlineBorder else HairlineBorderSubtle, RoundedCornerShape(12.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -1070,13 +1075,13 @@ private fun TopPlaylistCard(
                         text = stats.topPlaylistTitle ?: "Playlist",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
+                        color = tokens.textPrimary,
                         maxLines = 1
                     )
                     Text(
                         text = stats.topPlaylistArtist ?: "Spotify",
                         fontSize = 12.sp,
-                        color = TextSecondary,
+                        color = tokens.textSecondary,
                         maxLines = 1
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -1115,14 +1120,15 @@ private fun TopPlaylistCard(
 
 @Composable
 private fun TopArtistsCard(artists: List<ArtistStat>) {
+    val tokens = rememberStatsTokens()
     val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .background(LiquidGlassDefaults.GlassSurface)
-            .background(LiquidGlassDefaults.MeniscusGleamBrush)
-            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
+            .background(tokens.glassSurface)
+            .background(tokens.meniscusGleam)
+            .border(0.75.dp, tokens.specularRim, cardShape)
             .padding(18.dp)
     ) {
         Column {
@@ -1136,7 +1142,7 @@ private fun TopArtistsCard(artists: List<ArtistStat>) {
                         modifier = Modifier
                             .size(28.dp)
                             .clip(CircleShape)
-                            .background(SurfaceCardElevated),
+                            .background(tokens.cardElevated),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -1151,7 +1157,7 @@ private fun TopArtistsCard(artists: List<ArtistStat>) {
                         text = "Lieblings-Künstler",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = tokens.textPrimary
                     )
                 }
 
@@ -1159,7 +1165,7 @@ private fun TopArtistsCard(artists: List<ArtistStat>) {
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(SurfaceCardElevated)
+                            .background(tokens.cardElevated)
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
@@ -1184,7 +1190,7 @@ private fun TopArtistsCard(artists: List<ArtistStat>) {
                             text = "#${index + 1}",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (index == 0) SpotifyGreen else TextSecondary,
+                            color = if (index == 0) SpotifyGreen else tokens.textSecondary,
                             modifier = Modifier.width(26.dp)
                         )
 
@@ -1197,13 +1203,13 @@ private fun TopArtistsCard(artists: List<ArtistStat>) {
                                     text = artist.name,
                                     fontSize = 13.sp,
                                     fontWeight = if (index == 0) FontWeight.Bold else FontWeight.Medium,
-                                    color = TextPrimary,
+                                    color = tokens.textPrimary,
                                     maxLines = 1
                                 )
                                 Text(
                                     text = "${artist.count} Titel",
                                     fontSize = 11.sp,
-                                    color = TextTertiary
+                                    color = tokens.textTertiary
                                 )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
@@ -1214,7 +1220,7 @@ private fun TopArtistsCard(artists: List<ArtistStat>) {
                                     .height(4.dp)
                                     .clip(RoundedCornerShape(2.dp)),
                                 color = if (index == 0) SpotifyGreen else AppleSystemGreen,
-                                trackColor = SurfaceCardElevated
+                                trackColor = tokens.cardElevated
                             )
                         }
                     }

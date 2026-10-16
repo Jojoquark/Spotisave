@@ -12,6 +12,7 @@ import com.spotisave.app.SpotisaveApp
 import com.spotisave.app.data.api.SpotifyApiClient
 import com.spotisave.app.data.api.SpotifyAuthManager
 import com.spotisave.app.data.model.Bookmark
+import com.spotisave.app.data.model.HistoryTrackEntry
 import com.spotisave.app.data.model.PlaybackStateModel
 import com.spotisave.app.data.repository.BookmarkRepository
 import com.spotisave.app.data.stats.ListeningStats
@@ -35,6 +36,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val apiClient = SpotifyApiClient.getInstance(application)
 
     val bookmarks: StateFlow<List<Bookmark>> = repository.bookmarks
+    val listeningHistory: StateFlow<List<HistoryTrackEntry>> = repository.listeningHistory
     val activePlayback: StateFlow<PlaybackStateModel?> = repository.activePlayback
     val isServiceRunning: StateFlow<Boolean> = SpotifyForegroundService.isRunning
 
@@ -54,13 +56,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val listeningStats: StateFlow<ListeningStats> = combine(
         bookmarks,
+        repository.listeningHistory,
         activePlayback
-    ) { bmList, playback ->
-        StatisticsEngine.calculateStats(bmList, playback)
+    ) { bmList, histList, playback ->
+        StatisticsEngine.calculateStats(
+            bookmarks = bmList,
+            history = histList,
+            activePlayback = playback
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = StatisticsEngine.calculateStats(emptyList(), null)
+        initialValue = StatisticsEngine.calculateStats(emptyList(), emptyList(), null)
     )
 
     private val _isNotificationListenerGranted = MutableStateFlow(
@@ -139,6 +146,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+        if (authManager.isLoggedIn()) {
+            syncSpotifyHistory()
+        }
     }
 
     fun handleAuthCode(code: String) {
@@ -150,6 +160,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _authStatusMessage.value = "Erfolgreich mit Spotify verbunden!"
                 refreshNowPlayingFromApi()
                 resolveMissingPlaylistTitles()
+                syncSpotifyHistory()
             } else {
                 _authStatusMessage.value = "Fehler: ${result.exceptionOrNull()?.message}"
             }
@@ -229,6 +240,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: Exception) {
                 Log.d("MainViewModel", "Fehler bei resolveMissingPlaylistTitles: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Synchronisiert den Spotify-Hörverlauf (/me/player/recently-played) und speichert neue Tracks in der History DB.
+     */
+    fun syncSpotifyHistory() {
+        if (!authManager.isLoggedIn()) return
+        viewModelScope.launch {
+            try {
+                val result = apiClient.getRecentlyPlayedTracks(50)
+                val tracks = result.getOrNull()
+                if (!tracks.isNullOrEmpty()) {
+                    for (t in tracks) {
+                        repository.recordHistoryEntry(t)
+                    }
+                    Log.i("MainViewModel", "Spotify-History synchronisiert: ${tracks.size} Titel aktualisiert")
+                }
+            } catch (e: Exception) {
+                Log.d("MainViewModel", "Fehler bei syncSpotifyHistory: ${e.message}")
             }
         }
     }

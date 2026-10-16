@@ -3,6 +3,7 @@ package com.spotisave.app.data.repository
 import android.content.Context
 import com.spotisave.app.data.db.BookmarkDatabaseHelper
 import com.spotisave.app.data.model.Bookmark
+import com.spotisave.app.data.model.HistoryTrackEntry
 import com.spotisave.app.data.model.PlaybackStateModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,7 +14,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Zentrales Repository für Lese- und Schreibzugriffe auf Lesezeichen und den Live-Wiedergabestatus.
+ * Zentrales Repository für Lese- und Schreibzugriffe auf Lesezeichen, den Live-Wiedergabestatus
+ * sowie den vollständigen kontinuierlichen Hörverlauf (Listening History).
  * Stellt reaktive StateFlows für Jetpack Compose bereit und synchronisiert mit SQLite.
  */
 class BookmarkRepository private constructor(context: Context) {
@@ -24,11 +26,15 @@ class BookmarkRepository private constructor(context: Context) {
     private val _bookmarks = MutableStateFlow<List<Bookmark>>(emptyList())
     val bookmarks: StateFlow<List<Bookmark>> = _bookmarks.asStateFlow()
 
+    private val _listeningHistory = MutableStateFlow<List<HistoryTrackEntry>>(emptyList())
+    val listeningHistory: StateFlow<List<HistoryTrackEntry>> = _listeningHistory.asStateFlow()
+
     private val _activePlayback = MutableStateFlow<PlaybackStateModel?>(null)
     val activePlayback: StateFlow<PlaybackStateModel?> = _activePlayback.asStateFlow()
 
     init {
         reloadBookmarks()
+        reloadHistory()
     }
 
     fun reloadBookmarks() {
@@ -38,11 +44,26 @@ class BookmarkRepository private constructor(context: Context) {
         }
     }
 
+    fun reloadHistory() {
+        scope.launch {
+            val list = dbHelper.getAllHistory()
+            _listeningHistory.value = list
+        }
+    }
+
     fun saveBookmark(bookmark: Bookmark) {
         scope.launch {
             dbHelper.insertOrUpdate(bookmark)
             val updated = dbHelper.getAllBookmarks()
             _bookmarks.value = updated
+        }
+    }
+
+    fun recordHistoryEntry(entry: HistoryTrackEntry) {
+        scope.launch {
+            dbHelper.insertOrUpdateHistory(entry)
+            val updated = dbHelper.getAllHistory()
+            _listeningHistory.value = updated
         }
     }
 
@@ -77,6 +98,7 @@ class BookmarkRepository private constructor(context: Context) {
         scope.launch {
             dbHelper.clearAll()
             _bookmarks.value = emptyList()
+            _listeningHistory.value = emptyList()
             _activePlayback.value = null
         }
     }

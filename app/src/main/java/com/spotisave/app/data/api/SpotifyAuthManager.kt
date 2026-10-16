@@ -38,7 +38,7 @@ class SpotifyAuthManager(private val context: Context) {
         const val KEY_TOKEN_EXPIRY = "sp_token_expiry"
 
         const val DEFAULT_REDIRECT_URI = "spotisave://callback"
-        const val SCOPES = "user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative user-read-recently-played"
+        const val SCOPES = "user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative user-read-recently-played user-top-read"
         private const val TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token"
         private const val AUTH_ENDPOINT = "https://accounts.spotify.com/authorize"
 

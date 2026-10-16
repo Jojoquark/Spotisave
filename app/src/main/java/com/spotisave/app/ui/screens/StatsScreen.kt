@@ -60,6 +60,7 @@ import com.spotisave.app.ui.theme.AppleSystemGreen
 import com.spotisave.app.ui.theme.CanvasBlack
 import com.spotisave.app.ui.theme.HairlineBorder
 import com.spotisave.app.ui.theme.HairlineBorderSubtle
+import com.spotisave.app.ui.theme.LiquidGlassDefaults
 import com.spotisave.app.ui.theme.SpotifyGreen
 import com.spotisave.app.ui.theme.SurfaceCard
 import com.spotisave.app.ui.theme.SurfaceCardElevated
@@ -243,12 +244,14 @@ fun StatsScreen(
 
 @Composable
 private fun StatsEmptyNoticeCard() {
+    val cardShape = RoundedCornerShape(18.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(SurfaceCard)
-            .border(1.dp, HairlineBorderSubtle, RoundedCornerShape(18.dp))
+            .clip(cardShape)
+            .background(LiquidGlassDefaults.GlassSurface)
+            .background(LiquidGlassDefaults.MeniscusGleamBrush)
+            .border(0.75.dp, LiquidGlassDefaults.SpecularRimSubtle, cardShape)
             .padding(16.dp)
             .testTag("stats_empty_notice_card")
     ) {
@@ -296,11 +299,13 @@ private fun KpiCard(
     iconTint: Color,
     modifier: Modifier = Modifier
 ) {
+    val cardShape = RoundedCornerShape(18.dp)
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(SurfaceCard)
-            .border(1.dp, HairlineBorder, RoundedCornerShape(18.dp))
+            .clip(cardShape)
+            .background(LiquidGlassDefaults.GlassSurface)
+            .background(LiquidGlassDefaults.MeniscusGleamBrush)
+            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
             .semantics(mergeDescendants = true) {
                 contentDescription = "$title: $value, $subtitle"
             }
@@ -345,12 +350,14 @@ private fun KpiCard(
 
 @Composable
 private fun TopAlbumCard(album: AlbumStat) {
+    val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(SurfaceCard)
-            .border(1.dp, HairlineBorder, RoundedCornerShape(20.dp))
+            .clip(cardShape)
+            .background(LiquidGlassDefaults.GlassSurface)
+            .background(LiquidGlassDefaults.MeniscusGleamBrush)
+            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
             .padding(18.dp)
     ) {
         Column {
@@ -457,12 +464,14 @@ private fun TopSongsCard(
     onResume: (Bookmark) -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(SurfaceCard)
-            .border(1.dp, HairlineBorder, RoundedCornerShape(20.dp))
+            .clip(cardShape)
+            .background(LiquidGlassDefaults.GlassSurface)
+            .background(LiquidGlassDefaults.MeniscusGleamBrush)
+            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
             .padding(18.dp)
     ) {
         Column {
@@ -598,12 +607,14 @@ private fun HistoryCard(
     onResume: (Bookmark) -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(SurfaceCard)
-            .border(1.dp, HairlineBorder, RoundedCornerShape(20.dp))
+            .clip(cardShape)
+            .background(LiquidGlassDefaults.GlassSurface)
+            .background(LiquidGlassDefaults.MeniscusGleamBrush)
+            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
             .padding(18.dp)
     ) {
         Column {
@@ -739,12 +750,14 @@ private fun InsightsPersonaCard(
     peakDay: String,
     peakDayMinutes: Int
 ) {
+    val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(SurfaceCard)
-            .border(1.dp, HairlineBorder, RoundedCornerShape(20.dp))
+            .clip(cardShape)
+            .background(LiquidGlassDefaults.GlassSurface)
+            .background(LiquidGlassDefaults.MeniscusGleamBrush)
+            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
             .padding(18.dp)
     ) {
         Column {
@@ -882,12 +895,14 @@ private fun InsightsPersonaCard(
 
 @Composable
 private fun WeeklyActivityCard(activities: List<DayActivity>) {
+    val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(SurfaceCard)
-            .border(1.dp, HairlineBorder, RoundedCornerShape(20.dp))
+            .clip(cardShape)
+            .background(LiquidGlassDefaults.GlassSurface)
+            .background(LiquidGlassDefaults.MeniscusGleamBrush)
+            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
             .padding(18.dp)
     ) {
         Column {
@@ -976,12 +991,14 @@ private fun TopPlaylistCard(
     onResume: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(SurfaceCard)
-            .border(1.dp, HairlineBorder, RoundedCornerShape(20.dp))
+            .clip(cardShape)
+            .background(LiquidGlassDefaults.GlassSurface)
+            .background(LiquidGlassDefaults.MeniscusGleamBrush)
+            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
             .padding(18.dp)
     ) {
         Column {
@@ -1067,12 +1084,14 @@ private fun TopPlaylistCard(
 
 @Composable
 private fun TopArtistsCard(artists: List<ArtistStat>) {
+    val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(SurfaceCard)
-            .border(1.dp, HairlineBorder, RoundedCornerShape(20.dp))
+            .clip(cardShape)
+            .background(LiquidGlassDefaults.GlassSurface)
+            .background(LiquidGlassDefaults.MeniscusGleamBrush)
+            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
             .padding(18.dp)
     ) {
         Column {

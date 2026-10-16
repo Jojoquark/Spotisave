@@ -1,6 +1,7 @@
 package com.spotisave.app
 
 import com.spotisave.app.data.model.Bookmark
+import com.spotisave.app.data.model.HistoryTrackEntry
 import com.spotisave.app.data.model.PlaybackStateModel
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -237,5 +238,41 @@ class BookmarkModelTest {
         assertEquals(1, fromSingleWeb.size)
         assertEquals("album:ram", fromSingleWeb[0].id)
         assertEquals("Get Lucky", fromSingleWeb[0].trackTitle)
+    }
+
+    @Test
+    fun testHistoryTrackEntryJsonSerialization() {
+        val entry = HistoryTrackEntry(
+            id = "hist_test_99",
+            trackUri = "spotify:track:xyz",
+            trackTitle = "Midnight City",
+            artist = "M83",
+            album = "Hurry Up, We're Dreaming",
+            contextUri = "spotify:playlist:night_drive",
+            contextTitle = "Night Drive",
+            coverUrl = "https://i.scdn.co/image/night_cover",
+            durationMs = 240_000L,
+            listenedMs = 240_000L,
+            timestamp = 1700000000000L,
+            source = "Broadcast"
+        )
+
+        val json = entry.toJsonObject()
+        assertEquals("hist_test_99", json.getString("id"))
+        assertEquals("spotify:track:xyz", json.getString("trackUri"))
+        assertEquals("Midnight City", json.getString("trackTitle"))
+
+        val restored = HistoryTrackEntry.fromJsonObject(json)
+        assertEquals(entry.id, restored.id)
+        assertEquals(entry.trackUri, restored.trackUri)
+        assertEquals(entry.trackTitle, restored.trackTitle)
+        assertEquals(entry.artist, restored.artist)
+        assertEquals(entry.album, restored.album)
+        assertEquals(entry.contextUri, restored.contextUri)
+        assertEquals(entry.contextTitle, restored.contextTitle)
+        assertEquals(entry.durationMs, restored.durationMs)
+        assertEquals(entry.listenedMs, restored.listenedMs)
+        assertEquals(entry.timestamp, restored.timestamp)
+        assertEquals(entry.source, restored.source)
     }
 }

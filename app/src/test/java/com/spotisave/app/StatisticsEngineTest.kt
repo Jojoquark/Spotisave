@@ -1,6 +1,7 @@
 package com.spotisave.app
 
 import com.spotisave.app.data.model.Bookmark
+import com.spotisave.app.data.model.HistoryTrackEntry
 import com.spotisave.app.data.model.PlaybackStateModel
 import com.spotisave.app.data.stats.StatisticsEngine
 import org.junit.Assert.assertEquals
@@ -259,5 +260,169 @@ class StatisticsEngineTest {
         // Completion Rate: (120/180 + 90/150 + 240/280 + 220/224) / 4 = (66.6% + 60% + 85.7% + 98.2%) / 4 = 77.6%
         assertTrue("Completion rate > 60%", stats.completionRatePercent in 60..95)
         assertEquals("Fokus-Durchhörer 🎧", stats.completionRateLabel)
+    }
+
+    @Test
+    fun testCalculateStatsWithComprehensiveListeningHistory() {
+        val now = System.currentTimeMillis()
+        // Situation: In SQLite bookmarks exist only 2 bookmarks (1 per playlist)
+        val activeBookmarks = listOf(
+            Bookmark(
+                id = "spotify:playlist:lofi_study",
+                contextUri = "spotify:playlist:lofi_study",
+                contextTitle = "Lo-Fi Study",
+                trackTitle = "Track 5 (Active)",
+                artist = "Lofi Artist",
+                trackUri = "spotify:track:5",
+                positionMs = 150_000L,
+                durationMs = 200_000L,
+                timestamp = now
+            ),
+            Bookmark(
+                id = "spotify:playlist:coding_flow",
+                contextUri = "spotify:playlist:coding_flow",
+                contextTitle = "Coding Flow",
+                trackTitle = "Track B (Active)",
+                artist = "Synth Master",
+                trackUri = "spotify:track:b",
+                positionMs = 180_000L,
+                durationMs = 240_000L,
+                timestamp = now - 60_000L
+            )
+        )
+
+        // But in listening_history all 7 songs previously played in these playlists are logged!
+        val historyEntries = listOf(
+            HistoryTrackEntry(
+                id = "hist_1",
+                trackUri = "spotify:track:1",
+                trackTitle = "Track 1",
+                artist = "Lofi Artist",
+                album = "Study Beats Vol 1",
+                contextUri = "spotify:playlist:lofi_study",
+                contextTitle = "Lo-Fi Study",
+                durationMs = 180_000L,
+                listenedMs = 180_000L,
+                timestamp = now - 500_000L
+            ),
+            HistoryTrackEntry(
+                id = "hist_2",
+                trackUri = "spotify:track:2",
+                trackTitle = "Track 2",
+                artist = "Lofi Artist",
+                album = "Study Beats Vol 1",
+                contextUri = "spotify:playlist:lofi_study",
+                contextTitle = "Lo-Fi Study",
+                durationMs = 190_000L,
+                listenedMs = 190_000L,
+                timestamp = now - 400_000L
+            ),
+            HistoryTrackEntry(
+                id = "hist_3",
+                trackUri = "spotify:track:3",
+                trackTitle = "Track 3",
+                artist = "Lofi Artist",
+                album = "Study Beats Vol 1",
+                contextUri = "spotify:playlist:lofi_study",
+                contextTitle = "Lo-Fi Study",
+                durationMs = 200_000L,
+                listenedMs = 200_000L,
+                timestamp = now - 300_000L
+            ),
+            HistoryTrackEntry(
+                id = "hist_4",
+                trackUri = "spotify:track:4",
+                trackTitle = "Track 4",
+                artist = "Lofi Artist",
+                album = "Study Beats Vol 1",
+                contextUri = "spotify:playlist:lofi_study",
+                contextTitle = "Lo-Fi Study",
+                durationMs = 210_000L,
+                listenedMs = 210_000L,
+                timestamp = now - 200_000L
+            ),
+            HistoryTrackEntry(
+                id = "hist_5",
+                trackUri = "spotify:track:5",
+                trackTitle = "Track 5 (Active)",
+                artist = "Lofi Artist",
+                album = "Study Beats Vol 1",
+                contextUri = "spotify:playlist:lofi_study",
+                contextTitle = "Lo-Fi Study",
+                durationMs = 200_000L,
+                listenedMs = 150_000L,
+                timestamp = now - 100_000L
+            ),
+            HistoryTrackEntry(
+                id = "hist_a",
+                trackUri = "spotify:track:a",
+                trackTitle = "Track A",
+                artist = "Synth Master",
+                album = "Cyberpunk 2099",
+                contextUri = "spotify:playlist:coding_flow",
+                contextTitle = "Coding Flow",
+                durationMs = 240_000L,
+                listenedMs = 240_000L,
+                timestamp = now - 80_000L
+            ),
+            HistoryTrackEntry(
+                id = "hist_b",
+                trackUri = "spotify:track:b",
+                trackTitle = "Track B (Active)",
+                artist = "Synth Master",
+                album = "Cyberpunk 2099",
+                contextUri = "spotify:playlist:coding_flow",
+                contextTitle = "Coding Flow",
+                durationMs = 240_000L,
+                listenedMs = 180_000L,
+                timestamp = now - 60_000L
+            )
+        )
+
+        val stats = StatisticsEngine.calculateStats(
+            bookmarks = activeBookmarks,
+            history = historyEntries
+        )
+
+        // All 7 tracks evaluated instead of only 2!
+        assertEquals(7, stats.totalTracksCount)
+        assertEquals(7, stats.totalBookmarksCount)
+
+        // Total listening time: 180k + 190k + 200k + 210k + 150k + 240k + 180k = 1,350,000 ms = 22.5 min = 22 Min.
+        assertEquals(1_350_000L, stats.totalListeningTimeMs)
+        assertEquals("22 Min.", stats.formattedTotalTime)
+
+        // Top Album evaluated across all tracks
+        assertNotNull(stats.topAlbum)
+        assertEquals("Study Beats Vol 1", stats.topAlbum?.title)
+        assertEquals(5, stats.topAlbum?.playCount)
+
+        // History list contains all 7 entries sorted descending
+        assertEquals(7, stats.history.size)
+        assertEquals("Track B (Active)", stats.history.first().trackTitle)
+    }
+
+    @Test
+    fun testHistoryTrackEntryToBookmarkConversion() {
+        val entry = HistoryTrackEntry(
+            id = "entry_1",
+            trackUri = "spotify:track:abc",
+            trackTitle = "Electric Feel",
+            artist = "MGMT",
+            album = "Oracular Spectacular",
+            contextUri = "spotify:playlist:indie_party",
+            contextTitle = "Indie Party",
+            durationMs = 230_000L,
+            listenedMs = 115_000L
+        )
+
+        val bookmark = entry.toBookmark()
+        assertEquals("spotify:playlist:indie_party", bookmark.id)
+        assertEquals("spotify:playlist:indie_party", bookmark.contextUri)
+        assertEquals("Indie Party", bookmark.contextTitle)
+        assertEquals("Electric Feel", bookmark.trackTitle)
+        assertEquals("spotify:track:abc", bookmark.trackUri)
+        assertEquals(115_000L, bookmark.positionMs)
+        assertEquals(230_000L, bookmark.durationMs)
     }
 }

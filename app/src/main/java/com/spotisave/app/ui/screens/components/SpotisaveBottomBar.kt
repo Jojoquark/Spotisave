@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.spotisave.app.ui.theme.HairlineBorder
+import com.spotisave.app.ui.theme.LiquidGlassDefaults
 import com.spotisave.app.ui.theme.SpotifyGreen
 import com.spotisave.app.ui.theme.TextMuted
 import com.spotisave.app.ui.theme.TextPrimary
@@ -55,16 +56,17 @@ fun SpotisaveBottomBar(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
-    val barShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+    val barShape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(barShape)
             .background(Color(0xF0101012)) // Apple Translucent Glass Dark
+            .background(LiquidGlassDefaults.MeniscusGleamBrush)
             .border(
-                width = 0.5.dp,
-                color = HairlineBorder,
+                width = 0.75.dp,
+                brush = LiquidGlassDefaults.SpecularRimBrush,
                 shape = barShape
             )
             .navigationBarsPadding()

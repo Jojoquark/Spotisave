@@ -51,6 +51,8 @@ import com.spotisave.app.data.model.Bookmark
 import com.spotisave.app.data.model.PlaybackStateModel
 import com.spotisave.app.ui.theme.CanvasBlack
 import com.spotisave.app.ui.theme.HairlineBorder
+import com.spotisave.app.ui.theme.LiquidGlassDefaults
+import com.spotisave.app.ui.theme.liquidGlassSurface
 import com.spotisave.app.ui.theme.SpotifyGreen
 import com.spotisave.app.ui.theme.StatusLivePlaying
 import com.spotisave.app.ui.theme.StatusPaused
@@ -118,21 +120,17 @@ fun HeroCard(
         label = "pulseScale"
     )
 
-    val cardBrush = Brush.verticalGradient(
-        colors = listOf(
-            if (isPlaying) SpotifyGreen.copy(alpha = 0.11f) else SurfaceCardElevated.copy(alpha = 0.45f),
-            SurfaceCard
-        )
-    )
-    val cardBorderColor = if (isPlaying) SpotifyGreen.copy(alpha = 0.40f) else HairlineBorder
+    val borderBrush = if (isPlaying) LiquidGlassDefaults.AccentSpecularRim else LiquidGlassDefaults.SpecularRimBrush
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(SurfaceCard)
-            .background(cardBrush)
-            .border(1.dp, cardBorderColor, RoundedCornerShape(20.dp))
+            .liquidGlassSurface(
+                shape = LiquidGlassDefaults.HeroShape,
+                surfaceColor = LiquidGlassDefaults.GlassSurfaceElevated,
+                borderBrush = borderBrush,
+                borderWidth = 1.dp
+            )
             .padding(20.dp)
             .testTag("hero_card")
     ) {

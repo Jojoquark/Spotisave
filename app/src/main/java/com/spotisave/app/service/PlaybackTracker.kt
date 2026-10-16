@@ -5,6 +5,7 @@ import android.util.Log
 import com.spotisave.app.data.api.SpotifyApiClient
 import com.spotisave.app.data.api.SpotifyAuthManager
 import com.spotisave.app.data.model.Bookmark
+import com.spotisave.app.data.model.HistoryTrackEntry
 import com.spotisave.app.data.model.PlaybackStateModel
 import com.spotisave.app.data.repository.BookmarkRepository
 import kotlinx.coroutines.CoroutineScope
@@ -15,7 +16,8 @@ import kotlinx.coroutines.launch
 /**
  * Zentraler Logik-Handler für die Spotify-Wiedergabeerfassung.
  * Führt Datenströme aus BroadcastReceiver und NotificationListenerService zusammen
- * und persistiert Lesezeichen bei Positionsänderungen, Pausen oder Trackwechseln.
+ * und persistiert Lesezeichen bei Positionsänderungen, Pausen oder Trackwechseln
+ * sowie lückenlose Listening-History aller gespielten Titel.
  */
 object PlaybackTracker {
 
@@ -34,6 +36,7 @@ object PlaybackTracker {
     @Volatile private var lastPositionMs: Long = 0L
     @Volatile private var lastIsPlaying: Boolean = false
     @Volatile private var lastSaveTimeMs: Long = 0L
+    @Volatile private var activeSessionHistoryId: String? = null
 
     // In-Memory Cache für Playlist-Namen (verhindert redundante API-Aufrufe)
     private val playlistNameCache = java.util.concurrent.ConcurrentHashMap<String, String>()
@@ -62,6 +65,7 @@ object PlaybackTracker {
         // Bei Trackwechsel MUSS die Position für den neuen Track zurückgesetzt werden (verhindert Position-Bleed)
         if (isNewTrack) {
             lastPositionMs = 0L
+            activeSessionHistoryId = "${trackUri}_${System.currentTimeMillis()}"
         }
 
         lastTrackUri = trackUri ?: lastTrackUri
@@ -241,10 +245,30 @@ object PlaybackTracker {
                 repository.deleteBookmark(lastTrackUri)
             }
             repository.saveBookmark(bookmark)
+
+            // Vollständigen Verlaufseintrag dauerhaft in listening_history persistieren
+            val sessionId = activeSessionHistoryId ?: "${lastTrackUri}_${System.currentTimeMillis()}"
+            activeSessionHistoryId = sessionId
+            val historyEntry = HistoryTrackEntry(
+                id = sessionId,
+                trackUri = lastTrackUri,
+                trackTitle = lastTrackTitle,
+                artist = lastArtist,
+                album = lastAlbum,
+                contextUri = lastContextUri,
+                contextTitle = resolvedContextTitle,
+                coverUrl = lastCoverUrl,
+                durationMs = lastDurationMs,
+                listenedMs = maxOf(lastPositionMs, 1000L),
+                timestamp = System.currentTimeMillis(),
+                source = source
+            )
+            repository.recordHistoryEntry(historyEntry)
+
             lastSaveTimeMs = System.currentTimeMillis()
-            Log.i(TAG, "Bookmark gespeichert: '${bookmark.trackTitle}' bei ${bookmark.positionMs} ms ($source)")
+            Log.i(TAG, "Bookmark & History gespeichert: '${bookmark.trackTitle}' bei ${bookmark.positionMs} ms ($source)")
         } catch (e: Exception) {
-            Log.e(TAG, "Fehler beim Speichern des Bookmarks", e)
+            Log.e(TAG, "Fehler beim Speichern des Bookmarks/History", e)
         }
     }
 

@@ -12,6 +12,11 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
+import com.spotisave.app.data.model.HistoryTrackEntry
+import com.spotisave.app.data.stats.ArtistStat
 
 data class SpotifyTrack(
     val id: String,
@@ -411,6 +416,197 @@ class SpotifyApiClient(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Unerwarteter Fehler bei resumePlayback", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Ruft die letzten bis zu 50 gespielten Titel des Nutzers ab (/me/player/recently-played?limit=50).
+     */
+    suspend fun getRecentlyPlayedTracks(limit: Int = 50): Result<List<HistoryTrackEntry>> {
+        return try {
+            val clampedLimit = limit.coerceIn(1, 50)
+            val resp = sendRequest("/me/player/recently-played?limit=$clampedLimit")
+            if (resp.code == 200) {
+                val json = JSONObject(resp.body)
+                val items = json.optJSONArray("items") ?: JSONArray()
+                val list = mutableListOf<HistoryTrackEntry>()
+                val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+                    timeZone = TimeZone.getTimeZone("UTC")
+                }
+                val isoFallback = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+                    timeZone = TimeZone.getTimeZone("UTC")
+                }
+
+                for (i in 0 until items.length()) {
+                    val item = items.optJSONObject(i) ?: continue
+                    val trackObj = item.optJSONObject("track") ?: continue
+                    val contextObj = item.optJSONObject("context")
+                    val playedAtStr = item.optString("played_at", "")
+                    val timestamp = try {
+                        isoFormat.parse(playedAtStr)?.time
+                            ?: isoFallback.parse(playedAtStr)?.time
+                            ?: System.currentTimeMillis()
+                    } catch (_: Exception) {
+                        System.currentTimeMillis()
+                    }
+
+                    val trackUri = trackObj.optString("uri", "")
+                    val trackTitle = trackObj.optString("name", "Unbekannter Titel")
+                    val durationMs = trackObj.optLong("duration_ms", 0L)
+
+                    // Interpret
+                    val artistsArr = trackObj.optJSONArray("artists")
+                    val artistNames = mutableListOf<String>()
+                    if (artistsArr != null) {
+                        for (a in 0 until artistsArr.length()) {
+                            val name = artistsArr.optJSONObject(a)?.optString("name") ?: ""
+                            if (name.isNotBlank()) artistNames.add(name)
+                        }
+                    }
+                    val artist = if (artistNames.isNotEmpty()) artistNames.joinToString(", ") else "Unbekannter Interpret"
+
+                    // Album & Cover
+                    var albumName = "Spotify"
+                    var coverUrl: String? = null
+                    val albumObj = trackObj.optJSONObject("album")
+                    if (albumObj != null) {
+                        albumName = albumObj.optString("name", albumName)
+                        val imagesArr = albumObj.optJSONArray("images")
+                        if (imagesArr != null && imagesArr.length() > 0) {
+                            coverUrl = imagesArr.optJSONObject(0)?.optString("url")
+                        }
+                    }
+
+                    val contextUri = contextObj?.optString("uri")
+                    val contextType = contextObj?.optString("type")
+                    val contextTitle = when {
+                        contextType == "playlist" -> "Playlist"
+                        contextType == "album" -> albumName
+                        else -> "Spotify"
+                    }
+
+                    val entryId = "${trackUri}_$timestamp"
+                    list.add(
+                        HistoryTrackEntry(
+                            id = entryId,
+                            trackUri = trackUri,
+                            trackTitle = trackTitle,
+                            artist = artist,
+                            album = albumName,
+                            contextUri = contextUri,
+                            contextTitle = contextTitle,
+                            coverUrl = coverUrl,
+                            durationMs = durationMs,
+                            listenedMs = durationMs,
+                            timestamp = timestamp,
+                            source = "WebApiHistory"
+                        )
+                    )
+                }
+                Result.success(list)
+            } else {
+                Result.failure(Exception("HTTP ${resp.code}: ${resp.body}"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Fehler bei getRecentlyPlayedTracks", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Ruft die Top-Tracks des Nutzers ab (/me/top/tracks).
+     */
+    suspend fun getTopTracks(timeRange: String = "short_term", limit: Int = 50): Result<List<SpotifyTrack>> {
+        return try {
+            val clampedLimit = limit.coerceIn(1, 50)
+            val resp = sendRequest("/me/top/tracks?time_range=$timeRange&limit=$clampedLimit")
+            if (resp.code == 200) {
+                val json = JSONObject(resp.body)
+                val items = json.optJSONArray("items") ?: JSONArray()
+                val list = mutableListOf<SpotifyTrack>()
+                for (i in 0 until items.length()) {
+                    val item = items.optJSONObject(i) ?: continue
+                    val trackId = item.optString("id", "")
+                    val trackName = item.optString("name", "Unbekannter Titel")
+                    val trackUri = item.optString("uri", "")
+                    val durationMs = item.optLong("duration_ms", 0L)
+
+                    val artistsArr = item.optJSONArray("artists")
+                    val artistNames = mutableListOf<String>()
+                    if (artistsArr != null) {
+                        for (a in 0 until artistsArr.length()) {
+                            val n = artistsArr.optJSONObject(a)?.optString("name") ?: ""
+                            if (n.isNotBlank()) artistNames.add(n)
+                        }
+                    }
+                    val artistName = if (artistNames.isNotEmpty()) artistNames.joinToString(", ") else "Unbekannter Interpret"
+
+                    var albumName = "Spotify"
+                    var coverUrl: String? = null
+                    val albumObj = item.optJSONObject("album")
+                    if (albumObj != null) {
+                        albumName = albumObj.optString("name", albumName)
+                        val imagesArr = albumObj.optJSONArray("images")
+                        if (imagesArr != null && imagesArr.length() > 0) {
+                            coverUrl = imagesArr.optJSONObject(0)?.optString("url")
+                        }
+                    }
+
+                    list.add(
+                        SpotifyTrack(
+                            id = trackId,
+                            name = trackName,
+                            uri = trackUri,
+                            durationMs = durationMs,
+                            artistName = artistName,
+                            albumName = albumName,
+                            coverUrl = coverUrl
+                        )
+                    )
+                }
+                Result.success(list)
+            } else {
+                Result.failure(Exception("HTTP ${resp.code}: ${resp.body}"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Fehler bei getTopTracks", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Ruft die Top-Künstler des Nutzers ab (/me/top/artists).
+     */
+    suspend fun getTopArtists(timeRange: String = "short_term", limit: Int = 20): Result<List<ArtistStat>> {
+        return try {
+            val clampedLimit = limit.coerceIn(1, 50)
+            val resp = sendRequest("/me/top/artists?time_range=$timeRange&limit=$clampedLimit")
+            if (resp.code == 200) {
+                val json = JSONObject(resp.body)
+                val items = json.optJSONArray("items") ?: JSONArray()
+                val list = mutableListOf<ArtistStat>()
+                val totalCount = items.length().coerceAtLeast(1)
+                for (i in 0 until items.length()) {
+                    val item = items.optJSONObject(i) ?: continue
+                    val name = item.optString("name", "")
+                    if (name.isNotBlank()) {
+                        val weight = totalCount - i
+                        list.add(
+                            ArtistStat(
+                                name = name,
+                                count = weight,
+                                percentage = (weight.toFloat() / (totalCount * (totalCount + 1) / 2f)).coerceIn(0f, 1f)
+                            )
+                        )
+                    }
+                }
+                Result.success(list)
+            } else {
+                Result.failure(Exception("HTTP ${resp.code}: ${resp.body}"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Fehler bei getTopArtists", e)
             Result.failure(e)
         }
     }

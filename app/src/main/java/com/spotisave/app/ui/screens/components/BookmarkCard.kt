@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import com.spotisave.app.data.model.Bookmark
 import com.spotisave.app.ui.theme.CanvasBlack
 import com.spotisave.app.ui.theme.HairlineBorderSubtle
+import com.spotisave.app.ui.theme.LiquidGlassDefaults
 import com.spotisave.app.ui.theme.SpotifyGreen
 import com.spotisave.app.ui.theme.StatusError
 import com.spotisave.app.ui.theme.SurfaceCard
@@ -62,13 +63,15 @@ fun BookmarkCard(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    val cardShape = RoundedCornerShape(16.dp)
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(SurfaceCard)
-            .border(1.dp, HairlineBorderSubtle, RoundedCornerShape(16.dp))
+            .clip(cardShape)
+            .background(LiquidGlassDefaults.GlassSurface)
+            .background(LiquidGlassDefaults.MeniscusGleamBrush)
+            .border(0.75.dp, LiquidGlassDefaults.SpecularRimSubtle, cardShape)
             .testTag("bookmark_card_${bookmark.id}")
             .clickable {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)

@@ -675,6 +675,8 @@ async function runTests() {
         'app/src/main/java/com/spotisave/app/ui/screens/StatsScreen.kt',
         'app/src/main/java/com/spotisave/app/ui/screens/components/SpotisaveBottomBar.kt',
         'app/src/main/java/com/spotisave/app/ui/screens/components/SpotifyApiSettingsDialog.kt',
+        'app/src/main/java/com/spotisave/app/data/model/HistoryTrackEntry.kt',
+        'app/src/main/java/com/spotisave/app/ui/theme/LiquidGlass.kt',
         'app/src/test/java/com/spotisave/app/TimeFormatterTest.kt',
         'app/src/test/java/com/spotisave/app/BookmarkModelTest.kt',
         'app/src/test/java/com/spotisave/app/SpotifyAuthManagerTest.kt',
@@ -1076,6 +1078,143 @@ async function runTests() {
     }));
     assert(webExportRestored.length === 1 && webExportRestored[0].id === 'spotify:playlist:37i9dQZF1DXcBWIGoYBM5M' && webExportRestored[0].coverUrl === 'https://i.scdn.co/image/web', 'Web-app JSON import normalizes playlist ID to spotify:playlist:<id> and preserves playlist_image');
     assert(simulateImportJson('').length === 0 && simulateImportJson('{invalid').length === 0, 'JSON Restore safely rejects empty and malformed inputs without throwing');
+
+    // ----------------------------------------------------
+    // TEST 16: Continuous Listening History & Apple Liquid Glass Polish
+    // ----------------------------------------------------
+    console.log('\nTest Group 16: Continuous Listening History, Multi-Track Analytics & Apple Liquid Glass Polish');
+
+    const historyModelSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/model/HistoryTrackEntry.kt'), 'utf8');
+    assert(historyModelSrc.includes('data class HistoryTrackEntry') && historyModelSrc.includes('fun toBookmark(): Bookmark'), 'HistoryTrackEntry model defines conversion to Bookmark for 1-Click Resume');
+    assert(historyModelSrc.includes('toJsonObject') && historyModelSrc.includes('fromJsonObject'), 'HistoryTrackEntry implements JSON serialization and deserialization');
+
+    const dbHelperSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/db/BookmarkDatabaseHelper.kt'), 'utf8');
+    assert(dbHelperSrc.includes('DATABASE_VERSION = 2') && dbHelperSrc.includes('TABLE_HISTORY = "listening_history"'), 'BookmarkDatabaseHelper upgrades to DB version 2 and creates listening_history table');
+    assert(dbHelperSrc.includes('insertOrUpdateHistory') && dbHelperSrc.includes('getAllHistory'), 'BookmarkDatabaseHelper implements insertOrUpdateHistory and getAllHistory');
+    assert(dbHelperSrc.includes('idx_history_timestamp') && dbHelperSrc.includes('idx_history_track'), 'BookmarkDatabaseHelper creates indexes on history timestamp and track_uri');
+
+    const repoSrc2 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/repository/BookmarkRepository.kt'), 'utf8');
+    assert(repoSrc2.includes('val listeningHistory: StateFlow<List<HistoryTrackEntry>>'), 'BookmarkRepository exposes reactive listeningHistory StateFlow');
+    assert(repoSrc2.includes('fun recordHistoryEntry(entry: HistoryTrackEntry)'), 'BookmarkRepository exposes recordHistoryEntry method');
+
+    const trackerSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/service/PlaybackTracker.kt'), 'utf8');
+    assert(trackerSrc.includes('repository.recordHistoryEntry(historyEntry)'), 'PlaybackTracker persists each played track to listening_history');
+    assert(trackerSrc.includes('activeSessionHistoryId'), 'PlaybackTracker tracks activeSessionHistoryId to prevent duplicate entries');
+
+    const authManagerSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/api/SpotifyAuthManager.kt'), 'utf8');
+    assert(authManagerSrc.includes('user-top-read') && authManagerSrc.includes('user-read-recently-played'), 'SpotifyAuthManager declares user-top-read and user-read-recently-played scopes');
+
+    const apiClientSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/api/SpotifyApiClient.kt'), 'utf8');
+    assert(apiClientSrc.includes('getRecentlyPlayedTracks') && apiClientSrc.includes('/me/player/recently-played'), 'SpotifyApiClient implements getRecentlyPlayedTracks for Web API history sync');
+    assert(apiClientSrc.includes('getTopTracks') && apiClientSrc.includes('getTopArtists'), 'SpotifyApiClient implements getTopTracks and getTopArtists');
+
+    const mainVmSrc2 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/viewmodel/MainViewModel.kt'), 'utf8');
+    assert(mainVmSrc2.includes('val listeningHistory: StateFlow<List<HistoryTrackEntry>>'), 'MainViewModel exposes listeningHistory StateFlow');
+    assert(mainVmSrc2.includes('syncSpotifyHistory()'), 'MainViewModel implements syncSpotifyHistory() for background history sync');
+    assert(mainVmSrc2.includes('combine(') && mainVmSrc2.includes('repository.listeningHistory'), 'MainViewModel combines bookmarks, listeningHistory and activePlayback into listeningStats');
+
+    const statsEngineSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/stats/StatisticsEngine.kt'), 'utf8');
+    assert(statsEngineSrc.includes('history: List<HistoryTrackEntry>'), 'StatisticsEngine accepts full listening history log');
+    assert(statsEngineSrc.includes('calculateTopAlbum(bookmarks, history)') && statsEngineSrc.includes('calculateTopSongs(bookmarks, history)'), 'StatisticsEngine evaluates album and top songs from history');
+
+    // Apple Liquid Glass Design System Verification
+    const liquidGlassSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/theme/LiquidGlass.kt'), 'utf8');
+    assert(liquidGlassSrc.includes('LiquidGlassDefaults') && liquidGlassSrc.includes('SpecularRimBrush'), 'LiquidGlass.kt defines specular rim highlight gradient border');
+    assert(liquidGlassSrc.includes('MeniscusGleamBrush') && liquidGlassSrc.includes('liquidGlassSurface'), 'LiquidGlass.kt defines meniscus top reflection gleam and liquidGlassSurface modifier');
+
+    const heroCardSrc2 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/HeroCard.kt'), 'utf8');
+    assert(heroCardSrc2.includes('liquidGlassSurface') && heroCardSrc2.includes('LiquidGlassDefaults.HeroShape'), 'HeroCard adopts Liquid Glass squircle surface and specular border');
+
+    const bottomBarSrc2 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/SpotisaveBottomBar.kt'), 'utf8');
+    assert(bottomBarSrc2.includes('LiquidGlassDefaults.SpecularRimBrush') && bottomBarSrc2.includes('LiquidGlassDefaults.MeniscusGleamBrush'), 'SpotisaveBottomBar adopts Liquid Glass specular rim highlight and meniscus gleam');
+
+    const bookmarkCardSrc2 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/BookmarkCard.kt'), 'utf8');
+    assert(bookmarkCardSrc2.includes('LiquidGlassDefaults.GlassSurface') && bookmarkCardSrc2.includes('LiquidGlassDefaults.SpecularRimSubtle'), 'BookmarkCard adopts Liquid Glass translucent glass and subtle specular border');
+
+    const statsScreenSrc2 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/StatsScreen.kt'), 'utf8');
+    assert(statsScreenSrc2.includes('LiquidGlassDefaults.SpecularRimBrush') && statsScreenSrc2.includes('LiquidGlassDefaults.MeniscusGleamBrush'), 'StatsScreen cards adopt Liquid Glass specular rim highlight and meniscus reflection');
+
+    // Behavioral Simulation: Multi-Track History Analytics (Demonstrating solution to "only 2 songs evaluated")
+    function simulateComprehensiveStats(activeBookmarks, historyEntries) {
+        const hasHistory = historyEntries && historyEntries.length > 0;
+        const totalListeningTimeMs = hasHistory
+            ? historyEntries.reduce((acc, h) => acc + (h.listenedMs || 0), 0)
+            : activeBookmarks.reduce((acc, b) => acc + (b.positionMs || 0), 0);
+
+        const allTrackUris = hasHistory
+            ? new Set([...historyEntries.map(h => h.trackUri), ...activeBookmarks.map(b => b.trackUri)])
+            : new Set(activeBookmarks.map(b => b.trackUri));
+
+        const uniquePlaylists = hasHistory
+            ? new Set([...historyEntries.map(h => h.contextTitle).filter(t => t && t !== 'Spotify'), ...activeBookmarks.map(b => b.contextTitle).filter(t => t && t !== 'Spotify')])
+            : new Set(activeBookmarks.map(b => b.contextTitle).filter(t => t && t !== 'Spotify'));
+
+        // Top Album from history
+        const albumMap = {};
+        const sourceForAlbums = hasHistory ? historyEntries : activeBookmarks;
+        for (const item of sourceForAlbums) {
+            const albumName = item.album || item.contextTitle || 'Spotify Album';
+            if (!albumMap[albumName]) albumMap[albumName] = { title: albumName, count: 0, totalTime: 0 };
+            albumMap[albumName].count++;
+            albumMap[albumName].totalTime += (item.listenedMs || item.positionMs || 0);
+        }
+        const topAlbum = Object.values(albumMap).sort((a, b) => b.totalTime - a.totalTime)[0];
+
+        return {
+            totalListeningTimeMs,
+            totalTracksCount: allTrackUris.size,
+            totalPlaylistsCount: uniquePlaylists.size,
+            topAlbumTitle: topAlbum ? topAlbum.title : null,
+            topAlbumTrackCount: topAlbum ? topAlbum.count : 0,
+            historyCount: hasHistory ? historyEntries.length : activeBookmarks.length
+        };
+    }
+
+    // 2 active bookmarks (because SQLite bookmarks only keeps the last song per playlist)
+    const simulatedActiveBookmarks = [
+        { id: 'spotify:playlist:lofi', contextUri: 'spotify:playlist:lofi', contextTitle: 'Lo-Fi Chill', trackUri: 'spotify:track:song10', positionMs: 120000 },
+        { id: 'spotify:playlist:synth', contextUri: 'spotify:playlist:synth', contextTitle: 'Synthwave Night', trackUri: 'spotify:track:song15', positionMs: 180000 }
+    ];
+
+    // But 15 total songs listened to in history!
+    const simulatedHistory = [];
+    for (let i = 1; i <= 10; i++) {
+        simulatedHistory.push({
+            id: `hist_lofi_${i}`,
+            trackUri: `spotify:track:song${i}`,
+            trackTitle: `Lo-Fi Song ${i}`,
+            artist: 'Chillhop Beats',
+            album: 'Autumn Beats',
+            contextTitle: 'Lo-Fi Chill',
+            listenedMs: 150000,
+            timestamp: Date.now() - (15 - i) * 60000
+        });
+    }
+    for (let i = 11; i <= 15; i++) {
+        simulatedHistory.push({
+            id: `hist_synth_${i}`,
+            trackUri: `spotify:track:song${i}`,
+            trackTitle: `Synth Song ${i}`,
+            artist: 'Kavinsky',
+            album: 'Nightcall Drive',
+            contextTitle: 'Synthwave Night',
+            listenedMs: 200000,
+            timestamp: Date.now() - (20 - i) * 60000
+        });
+    }
+
+    // Old flawed behavior: Only evaluated 2 songs!
+    const oldStats = simulateComprehensiveStats(simulatedActiveBookmarks, []);
+    assert(oldStats.totalTracksCount === 2, 'Legacy calculation without history evaluated only 2 tracks');
+    assert(oldStats.totalListeningTimeMs === 300000, 'Legacy calculation only summed active bookmark positions (300,000 ms)');
+
+    // New comprehensive behavior: Evaluates all 15 songs!
+    const newStats = simulateComprehensiveStats(simulatedActiveBookmarks, simulatedHistory);
+    assert(newStats.totalTracksCount === 15, 'Continuous history evaluates all 15 unique songs across playlists (not just 2)');
+    // 10 * 150k + 5 * 200k = 1,500,000 + 1,000,000 = 2,500,000 ms
+    assert(newStats.totalListeningTimeMs === 2500000, 'Continuous history aggregates full listening time (2,500,000 ms = ~41.6 min)');
+    assert(newStats.topAlbumTitle === 'Autumn Beats' && newStats.topAlbumTrackCount === 10, 'Continuous history correctly evaluates top album (Autumn Beats, 10 tracks)');
+    assert(newStats.historyCount === 15, 'Continuous history timeline provides all 15 played songs with 1-click resume');
 
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);

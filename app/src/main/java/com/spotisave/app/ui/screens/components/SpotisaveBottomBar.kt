@@ -190,7 +190,7 @@ fun SpotisaveBottomBar(
         }
     }
 }
-
+}
 
 @Composable
 private fun FloatingBarTabItem(

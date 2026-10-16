@@ -36,6 +36,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -62,13 +63,48 @@ import com.spotisave.app.ui.theme.CanvasBlack
 import com.spotisave.app.ui.theme.HairlineBorder
 import com.spotisave.app.ui.theme.HairlineBorderSubtle
 import com.spotisave.app.ui.theme.LiquidGlassDefaults
+import com.spotisave.app.ui.theme.LocalIsDarkTheme
 import com.spotisave.app.ui.theme.SpotifyGreen
 import com.spotisave.app.ui.theme.SurfaceCard
 import com.spotisave.app.ui.theme.SurfaceCardElevated
+import com.spotisave.app.ui.theme.SurfaceCardLightElevated
 import com.spotisave.app.ui.theme.TextPrimary
+import com.spotisave.app.ui.theme.TextPrimaryLight
 import com.spotisave.app.ui.theme.TextSecondary
+import com.spotisave.app.ui.theme.TextSecondaryLight
 import com.spotisave.app.ui.theme.TextTertiary
+import com.spotisave.app.ui.theme.TextTertiaryLight
 import com.spotisave.app.ui.util.TimeFormatter
+
+private data class StatsTokens(
+    val isDark: Boolean,
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val textTertiary: Color,
+    val cardElevated: Color,
+    val glassSurface: Color,
+    val meniscusGleam: androidx.compose.ui.graphics.Brush,
+    val specularRim: androidx.compose.ui.graphics.Brush,
+    val specularRimSubtle: androidx.compose.ui.graphics.Brush
+)
+
+@Composable
+private fun rememberStatsTokens(): StatsTokens {
+    val isDark = LocalIsDarkTheme.current
+    return remember(isDark) {
+        StatsTokens(
+            isDark = isDark,
+            textPrimary = if (isDark) TextPrimary else TextPrimaryLight,
+            textSecondary = if (isDark) TextSecondary else TextSecondaryLight,
+            textTertiary = if (isDark) TextTertiary else TextTertiaryLight,
+            cardElevated = if (isDark) SurfaceCardElevated else SurfaceCardLightElevated,
+            glassSurface = if (isDark) LiquidGlassDefaults.GlassSurface else LiquidGlassDefaults.GlassSurfaceLight,
+            meniscusGleam = if (isDark) LiquidGlassDefaults.MeniscusGleamBrush else LiquidGlassDefaults.MeniscusGleamLightBrush,
+            specularRim = if (isDark) LiquidGlassDefaults.SpecularRimBrush else LiquidGlassDefaults.SpecularRimLightBrush,
+            specularRimSubtle = if (isDark) LiquidGlassDefaults.SpecularRimSubtle else LiquidGlassDefaults.SpecularRimLightSubtle
+        )
+    }
+}
 
 /**
  * Statistiken & Insights Dashboard.
@@ -83,6 +119,8 @@ fun StatsScreen(
     onResumePlaylist: (Bookmark) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val tokens = rememberStatsTokens()
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -97,13 +135,13 @@ fun StatsScreen(
                     text = "Statistiken & Einblicke",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    color = tokens.textPrimary
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Live-Analyse deiner Hörgewohnheiten & Fokus-Muster",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
+                    color = tokens.textSecondary
                 )
             }
         }
@@ -245,14 +283,15 @@ fun StatsScreen(
 
 @Composable
 private fun StatsEmptyNoticeCard() {
+    val tokens = rememberStatsTokens()
     val cardShape = RoundedCornerShape(18.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .background(LiquidGlassDefaults.GlassSurface)
-            .background(LiquidGlassDefaults.MeniscusGleamBrush)
-            .border(0.75.dp, LiquidGlassDefaults.SpecularRimSubtle, cardShape)
+            .background(tokens.glassSurface)
+            .background(tokens.meniscusGleam)
+            .border(0.75.dp, tokens.specularRimSubtle, cardShape)
             .padding(16.dp)
             .testTag("stats_empty_notice_card")
     ) {
@@ -261,7 +300,7 @@ private fun StatsEmptyNoticeCard() {
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(SurfaceCardElevated),
+                    .background(tokens.cardElevated),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -277,13 +316,13 @@ private fun StatsEmptyNoticeCard() {
                     text = "Noch keine Hördaten erfasst",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    color = tokens.textPrimary
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "Sobald du Musik in Spotify abspielst, erscheinen hier automatisch dein Lieblings-Album, deine Top-Songs und deine Wochen-Trends.",
                     fontSize = 12.sp,
-                    color = TextSecondary,
+                    color = tokens.textSecondary,
                     lineHeight = 16.sp
                 )
             }
@@ -300,13 +339,14 @@ private fun KpiCard(
     iconTint: Color,
     modifier: Modifier = Modifier
 ) {
+    val tokens = rememberStatsTokens()
     val cardShape = RoundedCornerShape(18.dp)
     Box(
         modifier = modifier
             .clip(cardShape)
-            .background(LiquidGlassDefaults.GlassSurface)
-            .background(LiquidGlassDefaults.MeniscusGleamBrush)
-            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
+            .background(tokens.glassSurface)
+            .background(tokens.meniscusGleam)
+            .border(0.75.dp, tokens.specularRim, cardShape)
             .semantics(mergeDescendants = true) {
                 contentDescription = "$title: $value, $subtitle"
             }
@@ -322,7 +362,7 @@ private fun KpiCard(
                     text = title,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = TextSecondary
+                    color = tokens.textSecondary
                 )
                 Icon(
                     imageVector = icon,
@@ -336,14 +376,14 @@ private fun KpiCard(
                 text = value,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = TextPrimary,
+                color = tokens.textPrimary,
                 style = TextStyle(fontFeatureSettings = "tnum")
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = subtitle,
                 fontSize = 11.sp,
-                color = TextTertiary
+                color = tokens.textTertiary
             )
         }
     }
@@ -351,14 +391,15 @@ private fun KpiCard(
 
 @Composable
 private fun TopAlbumCard(album: AlbumStat) {
+    val tokens = rememberStatsTokens()
     val cardShape = RoundedCornerShape(20.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .background(LiquidGlassDefaults.GlassSurface)
-            .background(LiquidGlassDefaults.MeniscusGleamBrush)
-            .border(0.75.dp, LiquidGlassDefaults.SpecularRimBrush, cardShape)
+            .background(tokens.glassSurface)
+            .background(tokens.meniscusGleam)
+            .border(0.75.dp, tokens.specularRim, cardShape)
             .padding(18.dp)
     ) {
         Column {
@@ -372,7 +413,7 @@ private fun TopAlbumCard(album: AlbumStat) {
                         modifier = Modifier
                             .size(28.dp)
                             .clip(CircleShape)
-                            .background(SurfaceCardElevated),
+                            .background(tokens.cardElevated),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -387,14 +428,14 @@ private fun TopAlbumCard(album: AlbumStat) {
                         text = "Lieblings-Album",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = tokens.textPrimary
                     )
                 }
 
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(SurfaceCardElevated)
+                        .background(tokens.cardElevated)
                         .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
                     Text(
@@ -430,14 +471,14 @@ private fun TopAlbumCard(album: AlbumStat) {
                         text = album.title,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
+                        color = tokens.textPrimary,
                         maxLines = 1
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = album.artist,
                         fontSize = 12.sp,
-                        color = TextSecondary,
+                        color = tokens.textSecondary,
                         maxLines = 1
                     )
                     Spacer(modifier = Modifier.height(4.dp))

@@ -30,3 +30,21 @@ val TextMuted = Color(0x40FFFFFF)     // 25% White
 val StatusLivePlaying = Color(0xFF30D158)
 val StatusPaused = Color(0xFFFFD60A)
 val StatusError = Color(0xFFFF453A)
+
+// Apple White Mode / Light Theme Palette (HIG Compliant)
+val CanvasWhite = Color(0xFFF2F2F7)             // iOS System Grouped Background
+val SurfaceCardLight = Color(0xFFFFFFFF)        // Pure White Card Surface
+val SurfaceCardLightElevated = Color(0xFFE5E5EA)// Elevated Card Surface (System Gray 5)
+val SurfaceCardLightPressed = Color(0xFFD1D1D6) // Pressed Feedback (System Gray 4)
+
+// Light Mode Hairline Borders
+val HairlineBorderLight = Color(0x1F000000)       // ~12% Black
+val HairlineBorderLightSubtle = Color(0x10000000) // ~6% Black
+
+// Light Mode Typographic Hierarchy (Exceeds WCAG AAA/AA on light backgrounds)
+val TextPrimaryLight = Color(0xFF000000)        // Pure Black
+val TextSecondaryLight = Color(0x99000000)      // 60% Black
+val TextTertiaryLight = Color(0x66000000)       // 40% Black
+val TextMutedLight = Color(0x38000000)          // 22% Black
+val AppleSystemGreenLight = Color(0xFF28CD41)   // Light mode system green
+

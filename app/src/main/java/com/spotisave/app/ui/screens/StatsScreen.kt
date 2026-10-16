@@ -87,7 +87,7 @@ fun StatsScreen(
         modifier = modifier
             .fillMaxSize()
             .testTag("stats_screen"),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 90.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 108.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         // Titel & Unterzeile

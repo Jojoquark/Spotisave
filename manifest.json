@@ -1,8 +1,9 @@
 {
-  "id": "/Spotisave/",
-  "name": "Spotisave — Spotify Playlist Saver",
-  "short_name": "Spotisave",
+  "id": "/SpotiSave/",
+  "name": "SpotiSave — Spotify Playlist Saver",
+  "short_name": "SpotiSave",
   "description": "Automatische Hintergrund-Erfassung und 1-Click-Wiederaufnahme von Spotify-Playlisten nach Apple HIG-Designstandards.",
+
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -43,14 +44,15 @@
       "sizes": "540x960",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Spotisave Mobile Ansicht"
+      "label": "SpotiSave Mobile Ansicht"
     },
     {
       "src": "./screenshots/desktop.png",
       "sizes": "1280x720",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "Spotisave Desktop Ansicht"
+      "label": "SpotiSave Desktop Ansicht"
     }
   ]
 }
+

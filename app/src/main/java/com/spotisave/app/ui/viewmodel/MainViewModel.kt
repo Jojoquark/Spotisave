@@ -47,6 +47,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Playlist Filter State (persistiert in SharedPreferences)
     private val prefs = application.getSharedPreferences("spotisave_prefs", Context.MODE_PRIVATE)
     private val PREF_ONLY_PLAYLISTS = "pref_only_playlists"
+    private val PREF_WHITE_MODE = "pref_white_mode"
 
     private val _onlyPlaylistsFilter = MutableStateFlow(prefs.getBoolean(PREF_ONLY_PLAYLISTS, false))
     val onlyPlaylistsFilter: StateFlow<Boolean> = _onlyPlaylistsFilter.asStateFlow()
@@ -59,6 +60,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleOnlyPlaylistsFilter() {
         setOnlyPlaylistsFilter(!_onlyPlaylistsFilter.value)
     }
+
+    // White Mode / Light Theme State (persistiert in SharedPreferences)
+    private val _isWhiteMode = MutableStateFlow(prefs.getBoolean(PREF_WHITE_MODE, false))
+    val isWhiteMode: StateFlow<Boolean> = _isWhiteMode.asStateFlow()
+
+    fun setWhiteMode(enabled: Boolean) {
+        _isWhiteMode.value = enabled
+        prefs.edit().putBoolean(PREF_WHITE_MODE, enabled).apply()
+    }
+
+    fun toggleWhiteMode() {
+        setWhiteMode(!_isWhiteMode.value)
+    }
+
 
     val filteredBookmarks: StateFlow<List<Bookmark>> = combine(
         bookmarks,

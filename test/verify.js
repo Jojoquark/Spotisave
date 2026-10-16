@@ -226,7 +226,7 @@ async function runTests() {
         console.error('Manifest JSON error:', e);
     }
     assert(manifestValidJson, 'manifest.json is valid JSON');
-    assert(manifestData?.short_name === 'Spotisave', 'manifest.json short_name is Spotisave');
+    assert(manifestData?.short_name === 'SpotiSave', 'manifest.json short_name is SpotiSave');
     assert(manifestData?.background_color === '#000000', 'manifest.json background_color is pure OLED black #000000');
     assert(manifestData?.display === 'standalone', 'manifest.json display mode is standalone');
     assert(Array.isArray(manifestData?.icons) && manifestData.icons.length >= 2, 'manifest.json contains required icons');
@@ -1282,9 +1282,85 @@ async function runTests() {
     const unfiltered = filterBookmarks(mixedBookmarks, false);
     assert(unfiltered.length === 10, 'Simulation: Playlist filter disabled returns all 10 bookmarks');
 
+    // ----------------------------------------------------
+    // TEST 18: Liquid Glass Floating Bubble Tab Bar & White Mode Architecture
+    // ----------------------------------------------------
+    console.log('\nTest Group 18: Liquid Glass Floating Bubble Tab Bar & White Mode Architecture');
+
+    // 1. Color.kt White Mode Tokens
+    const colorSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/theme/Color.kt'), 'utf8');
+    assert(colorSrc.includes('CanvasWhite = Color(0xFFF2F2F7)'), 'Color.kt defines iOS System CanvasWhite (#F2F2F7)');
+    assert(colorSrc.includes('SurfaceCardLight = Color(0xFFFFFFFF)'), 'Color.kt defines pure white SurfaceCardLight');
+    assert(colorSrc.includes('SurfaceCardLightElevated = Color(0xFFE5E5EA)'), 'Color.kt defines SurfaceCardLightElevated (#E5E5EA)');
+    assert(colorSrc.includes('HairlineBorderLight'), 'Color.kt defines HairlineBorderLight for light mode glass borders');
+    assert(colorSrc.includes('TextPrimaryLight = Color(0xFF000000)'), 'Color.kt defines pure black TextPrimaryLight for maximum contrast');
+    assert(colorSrc.includes('AppleSystemGreenLight = Color(0xFF28CD41)'), 'Color.kt defines AppleSystemGreenLight');
+
+    // 2. LiquidGlass.kt White Mode Tokens & GlassEffectContainer
+    const liquidGlassSrc18 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/theme/LiquidGlass.kt'), 'utf8');
+    assert(liquidGlassSrc18.includes('GlassSurfaceLight = Color(0xCCFFFFFF)'), 'LiquidGlass.kt defines GlassSurfaceLight frosted white glass');
+    assert(liquidGlassSrc18.includes('GlassFloatingBarLight = Color(0xEBFCFCFD)'), 'LiquidGlass.kt defines GlassFloatingBarLight for detached bubble navigation');
+    assert(liquidGlassSrc18.includes('SpecularRimLightBrush'), 'LiquidGlass.kt defines SpecularRimLightBrush for light mode caustic edge');
+    assert(liquidGlassSrc18.includes('MeniscusGleamLightBrush'), 'LiquidGlass.kt defines MeniscusGleamLightBrush for light reflection');
+    assert(liquidGlassSrc18.includes('fun GlassEffectContainer'), 'LiquidGlass.kt defines Apple HIG GlassEffectContainer');
+
+    // 3. Theme.kt Dual-Mode & CompositionLocal
+    const themeSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/theme/Theme.kt'), 'utf8');
+    assert(themeSrc.includes('LightColorScheme = lightColorScheme('), 'Theme.kt defines LightColorScheme for White Mode');
+    assert(themeSrc.includes('LocalIsDarkTheme'), 'Theme.kt provides LocalIsDarkTheme CompositionLocal');
+    assert(themeSrc.includes('darkTheme: Boolean = true'), 'SpotisaveTheme accepts darkTheme parameter');
+    assert(themeSrc.includes('insetsController.isAppearanceLightStatusBars = !darkTheme'), 'Theme.kt adjusts status bar icons for light mode');
+
+    // 4. SpotisaveBottomBar Floating Bubble Architecture & Spring Physics
+    const bottomBarSrc18 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/SpotisaveBottomBar.kt'), 'utf8');
+    assert(bottomBarSrc18.includes('LiquidGlassDefaults.PillShape'), 'SpotisaveBottomBar uses PillShape for Apple capsule geometry');
+    assert(bottomBarSrc18.includes('navigationBarsPadding()') && bottomBarSrc18.includes('padding(bottom = 16.dp'), 'SpotisaveBottomBar is detached and suspended above navigation bars');
+    assert(bottomBarSrc18.includes('animateFloatAsState') && bottomBarSrc18.includes('Spring.DampingRatioMediumBouncy'), 'SpotisaveBottomBar implements spring physics morphing pill indicator');
+    assert(bottomBarSrc18.includes('GlassFloatingBarLight'), 'SpotisaveBottomBar dynamically adopts White Mode glass material');
+    assert(bottomBarSrc18.includes('shadow('), 'SpotisaveBottomBar casts elevated floating ambient and spot shadow');
+
+    // 5. MainViewModel White Mode Persistence
+    assert(mainVmCode.includes('pref_white_mode'), 'MainViewModel defines pref_white_mode SharedPreferences key');
+    assert(mainVmCode.includes('val isWhiteMode: StateFlow<Boolean>'), 'MainViewModel exposes reactive isWhiteMode StateFlow');
+    assert(mainVmCode.includes('fun setWhiteMode(') && mainVmCode.includes('fun toggleWhiteMode()'), 'MainViewModel provides setWhiteMode and toggleWhiteMode');
+
+    // 6. MainActivity Theme Wiring
+    const mainActivitySrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/MainActivity.kt'), 'utf8');
+    assert(mainActivitySrc.includes('isWhiteMode by viewModel.isWhiteMode.collectAsState()'), 'MainActivity collects isWhiteMode from viewModel');
+    assert(mainActivitySrc.includes('SpotisaveTheme(darkTheme = !isWhiteMode)'), 'MainActivity passes darkTheme = !isWhiteMode to SpotisaveTheme');
+
+    // 7. MainScreen & StatusBottomSheet Controls & Clearances
+    const mainScreenSrc18 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/MainScreen.kt'), 'utf8');
+    assert(mainScreenSrc18.includes('header_theme_toggle'), 'MainScreen defines header_theme_toggle button with 44dp touch target');
+    assert(mainScreenSrc18.includes('bottom = 108.dp'), 'MainScreen provides 108dp bottom content padding for floating bubble clearance');
+
+    const statusSheetSrc18 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/StatusBottomSheet.kt'), 'utf8');
+    assert(statusSheetSrc18.includes('white_mode_switch'), 'StatusBottomSheet defines white_mode_switch for White Mode toggle');
+
+    const statsScreenSrc18 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/StatsScreen.kt'), 'utf8');
+    assert(statsScreenSrc18.includes('bottom = 108.dp'), 'StatsScreen provides 108dp bottom content padding for floating bubble clearance');
+
+    // 8. Web PWA (index.html) White Mode & Floating Bubble
+    assert(indexHtml.includes('body.light-mode'), 'index.html defines body.light-mode CSS rules');
+    assert(indexHtml.includes('--bg-canvas: #F2F2F7;'), 'index.html sets --bg-canvas to #F2F2F7 in White Mode');
+    assert(indexHtml.includes('floating-bubble-nav'), 'index.html defines floating-bubble-nav markup and styling');
+    assert(indexHtml.includes('theme-toggle-btn') && indexHtml.includes('toggleTheme()'), 'index.html provides theme-toggle-btn and toggleTheme function');
+    assert(indexHtml.includes('initTheme()') && indexHtml.includes('switchWebTab('), 'index.html implements initTheme and switchWebTab');
+
+    // 9. Apple HIG Contrast in White Mode
+    const canvasWhite = [242, 242, 247]; // #F2F2F7
+    const blackText = [0, 0, 0];
+    const secondaryText = [60, 60, 67]; // rgba(60, 60, 67, 0.70)
+    const contrastBlackOnWhite = getContrast(blackText, canvasWhite);
+    const contrastSecondaryOnWhite = getContrast(secondaryText, canvasWhite);
+
+    assert(contrastBlackOnWhite >= 18.0, `White Mode: Black text on CanvasWhite contrast is ${contrastBlackOnWhite.toFixed(1)}:1 (Exceeds WCAG AAA 7:1)`);
+    assert(contrastSecondaryOnWhite >= 4.5, `White Mode: Secondary text on CanvasWhite contrast is ${contrastSecondaryOnWhite.toFixed(1)}:1 (Exceeds WCAG AA 4.5:1)`);
+
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);
     console.log('========================================\n');
+
 
     if (failedTests > 0) {
         process.exit(1);

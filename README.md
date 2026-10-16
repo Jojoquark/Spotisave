@@ -1,6 +1,6 @@
-# Spotisave
+# SpotiSave
 
-Spotisave ist eine 100% native Android App (Kotlin + Jetpack Compose) sowie Progressive Web App (PWA) zur automatischen Erfassung und 1-Click-Wiederaufnahme von Spotify-Playlisten und Hörpositionen nach **Apple Human Interface Guidelines (HIG)** und SwiftUI-inspirierten deklarativen Design-Prinzipien.
+SpotiSave ist eine 100% native Android App (Kotlin + Jetpack Compose) sowie Progressive Web App (PWA) zur automatischen Erfassung und 1-Click-Wiederaufnahme von Spotify-Playlisten und Hörpositionen nach **Apple Human Interface Guidelines (HIG)**, modernem **Liquid Glass Design System** und SwiftUI-inspirierten deklarativen Prinzipien.
 
 ## Native Android App (Kotlin + Jetpack Compose)
 
@@ -10,10 +10,17 @@ Die native Android App verbindet lokale Android-Systemüberwachung (Broadcasts &
   - **Spotify PKCE OAuth (RFC 7636)**: Sichere browser-basierte Authentifizierung mit individueller Client ID ohne Client Secret über das Redirect-Schema `spotisave://callback`.
   - **Präzises Playlist-Tracking**: Synchronisiert im Hintergrund `/me/player`, um exakte Playlist-URIs (`context.uri`), Titel, Album-Cover und Wiedergabepositionen abzugleichen.
   - **1-Click Smart Resume**: Sendet `PUT /me/player/play` mit `context_uri`, `offset: { uri: track_uri }` und `position_ms`, um direkt an der exakten Stelle **innerhalb der Playlist** fortzusetzen. Inklusive intelligentem Fallback auf aktive Geräte (404-Handling), Einzeltitel (400-Handling) sowie native Spotify-Intents und MediaController.
-- **Apple-Style Bottom Navigation Bar**:
-  - Frosted Translucent Glass Bar (`Color(0xF0101012)`) mit 0.5dp `HairlineBorder` und zwei Haupt-Tabs:
+- **Apple Liquid Glass & Floating Bubble Tab Bar**:
+  - **Frei schwebende Bubble-Navigation**: Detached Kapsel-Geometrie (`PillShape`), 16dp über den System-Navigationsleisten freigestellt mit dualen Ambient- & Spot-Schatten.
+  - **Fluid Spring Morphing**: Fließende Indikator-Animation (`animateFloatAsState` mit `Spring.DampingRatioMediumBouncy`).
+  - **Lichtbrechende Veredelung**: Spekulärer Randlicht-Farbverlauf (`SpecularRimBrush`) und Meniskus-Spiegelung (`MeniscusGleamBrush`).
+  - **Zwei Haupt-Tabs**:
     1. **Playlists**: Top Hero Card ("Zuletzt gehört") mit pulsierendem Live-Indikator, Fortschrittsbalken und Liste aller gespeicherten Playlist-Lesezeichen.
     2. **Statistiken**: Umfassendes Hörgewohnheiten- und Analytics-Dashboard.
+- **White Mode & Light Theme Support**:
+  - **Nahtlose Modus-Umschaltung**: Über Schnellzugriff im Header (`header_theme_toggle`) oder Status-Sheet (`white_mode_switch`), persistent in `SharedPreferences` (`pref_white_mode`) und `localStorage` (`sp_theme`).
+  - **Apple HIG Kontraste**: 18.8:1 Reinschwarz auf CanvasWhite (`#F2F2F7`) – übertrifft WCAG AAA; 9.8:1 für Sekundärtexte.
+  - **Angepasste Liquid Glass Shader**: Helle Milchglas-Oberflächen (`GlassSurfaceLight`, `GlassFloatingBarLight`) mit spekulärer Ätzglas-Kante (`SpecularRimLightBrush`).
 - **Statistiken & Einblicke**:
   - **Gesamte Hörzeit**: Aggregierte Wiedergabezeit in Stunden und Minuten.
   - **Playlists & Alben**: Anzahl aktiv getrackter Playlists.
@@ -33,7 +40,7 @@ Die native Android App verbindet lokale Android-Systemüberwachung (Broadcasts &
   - `SpotifyNotificationListenerService`: Systemweiter Fallback, der Spotify-MediaSessions direkt liest und PlaybackState/Metadata auswertet – vollständig ausgenommen von Android Doze / Standby-Limits.
   - `BookmarkDatabaseHelper` & `BookmarkRepository`: ACID-konforme SQLite-Persistierung mit reaktiven `StateFlow`-Streams für die Compose-UI.
 - **Apple HIG UI / Jetpack Compose Ästhetik**:
-  - Deep OLED Canvas (`#000000`), abgesetzte Inset-Cards (`#161618`) und Hairline-Borders (`1.dp solid rgba(255, 255, 255, 0.12)`).
+  - Deep OLED Canvas (`#000000`) & Canvas White (`#F2F2F7`), abgesetzte Inset-Cards und Hairline-Borders.
   - Mindestens 44dp Berührungsflächen (Touch Targets), tabellarische Ziffern (`tnum`) für jitterfreie Zeitanzeigen, haptisches Feedback und TalkBack-Semantik.
   - Status & Diagnose Bottom Sheet zur Verwaltung des Dienstes, Systemberechtigungen sowie **1-Click JSON Backup & Restore** über die Zwischenablage.
 - **Deterministische APK-Signierung & Cloud CI (GitHub Actions)**:
@@ -42,14 +49,15 @@ Die native Android App verbindet lokale Android-Systemüberwachung (Broadcasts &
 
 ## Web PWA Fallback
 
-Die ursprüngliche Web PWA bleibt im Repository als leichtgewichtiger Fallback erhalten:
+Die Web PWA bleibt im Repository als leichtgewichtiger Begleiter erhalten:
 - Single-File Architektur (`index.html`) mit Service Worker (`sw.js`).
 - PKCE OAuth 2.0 Authentifizierung (RFC 7636).
+- Frei schwebende Apple Floating Bubble Navigation & vollständige White Mode Unterstützung.
 - Web Worker & Chromium Web Locks für Browser-basierte Sitzungen.
 
 ## Automatisierte Tests ausführen
 
-Zur Überprüfung von nativer Android-Architektur, Manifest, Gradle-Konfigurationen, deterministischer APK-Signierung, JSON Backup/Restore, Kotlin-Modellen, PKCE-Kryptografie, Spotify Web API Parsing, Resume-Payloads, StatisticsEngine (Lieblings-Album, Top-Songs, Historie), Playlist-Tracking, Apple HIG Farbkontrasten und nativer MediaSession-Simulation (223 Tests in 15 Testgruppen):
+Zur Überprüfung von nativer Android-Architektur, Manifest, Gradle-Konfigurationen, deterministischer APK-Signierung, JSON Backup/Restore, Kotlin-Modellen, PKCE-Kryptografie, Spotify Web API Parsing, Resume-Payloads, StatisticsEngine (Lieblings-Album, Top-Songs, Historie), Playlist-Tracking, Apple HIG Liquid Glass, White Mode Kontrasten und nativer MediaSession-Simulation (311 Tests in 18 Testgruppen):
 
 ```bash
 node test/verify.js

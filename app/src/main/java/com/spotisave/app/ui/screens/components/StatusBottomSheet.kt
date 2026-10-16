@@ -50,14 +50,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.spotisave.app.ui.theme.AppleSystemGreen
 import com.spotisave.app.ui.theme.CanvasBlack
+import com.spotisave.app.ui.theme.CanvasWhite
 import com.spotisave.app.ui.theme.HairlineBorder
+import com.spotisave.app.ui.theme.HairlineBorderLight
+import com.spotisave.app.ui.theme.LocalIsDarkTheme
 import com.spotisave.app.ui.theme.SpotifyGreen
 import com.spotisave.app.ui.theme.StatusPaused
 import com.spotisave.app.ui.theme.SurfaceCard
 import com.spotisave.app.ui.theme.SurfaceCardElevated
+import com.spotisave.app.ui.theme.SurfaceCardLight
+import com.spotisave.app.ui.theme.SurfaceCardLightElevated
+import com.spotisave.app.ui.theme.TextMuted
+import com.spotisave.app.ui.theme.TextMutedLight
 import com.spotisave.app.ui.theme.TextPrimary
+import com.spotisave.app.ui.theme.TextPrimaryLight
 import com.spotisave.app.ui.theme.TextSecondary
+import com.spotisave.app.ui.theme.TextSecondaryLight
 import com.spotisave.app.ui.theme.TextTertiary
+import com.spotisave.app.ui.theme.TextTertiaryLight
 
 /**
  * Modal Bottom Sheet zur Konfiguration, Status-Inspektion und Datensicherung.
@@ -74,11 +84,14 @@ fun StatusBottomSheet(
     onToggleService: (Boolean) -> Unit,
     onlyPlaylistsFilter: Boolean = false,
     onToggleOnlyPlaylists: (Boolean) -> Unit = {},
+    isWhiteMode: Boolean = false,
+    onToggleWhiteMode: (Boolean) -> Unit = {},
     onExportJson: () -> String = { "[]" },
     onImportJson: (String, (Int) -> Unit) -> Unit = { _, _ -> },
     onDismissRequest: () -> Unit
 ) {
     val context = LocalContext.current
+    val isDark = LocalIsDarkTheme.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var backupStatusText by remember { mutableStateOf<String?>(null) }
     var backupStatusIsError by remember { mutableStateOf(false) }
@@ -88,11 +101,18 @@ fun StatusBottomSheet(
         powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
     } else true
 
+    val sheetBg = if (isDark) SurfaceCard else SurfaceCardLight
+    val cardBg = if (isDark) SurfaceCardElevated else SurfaceCardLightElevated
+    val borderCol = if (isDark) HairlineBorder else HairlineBorderLight
+    val titleCol = if (isDark) TextPrimary else TextPrimaryLight
+    val bodyCol = if (isDark) TextSecondary else TextSecondaryLight
+    val mutedCol = if (isDark) TextTertiary else TextTertiaryLight
+
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
-        containerColor = SurfaceCard,
-        contentColor = TextPrimary,
+        containerColor = sheetBg,
+        contentColor = titleCol,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Column(
@@ -108,26 +128,72 @@ fun StatusBottomSheet(
                 text = "Hintergrund-Synchronisation",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = TextPrimary
+                color = titleCol
             )
 
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "Spotisave sichert Spotify-Hörpositionen kontinuierlich im Hintergrund, damit nichts verloren geht.",
+                text = "SpotiSave sichert Spotify-Hörpositionen kontinuierlich im Hintergrund, damit nichts verloren geht.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary
+                color = bodyCol
             )
 
+
             Spacer(modifier = Modifier.height(20.dp))
+
+            // 0. White Mode / Erscheinungsbild Switch
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(cardBg)
+                    .border(1.dp, borderCol, RoundedCornerShape(16.dp))
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "White Mode (Helles Design)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = titleCol
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (isWhiteMode) "Aktiv (Apple Liquid Glass Weißmodus)" else "Inaktiv (OLED Schwarzmodus)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isWhiteMode) SpotifyGreen else mutedCol
+                        )
+                    }
+
+                    Switch(
+                        checked = isWhiteMode,
+                        onCheckedChange = { onToggleWhiteMode(it) },
+                        modifier = Modifier.testTag("white_mode_switch"),
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = if (isDark) CanvasBlack else androidx.compose.ui.graphics.Color.White,
+                            checkedTrackColor = SpotifyGreen,
+                            uncheckedThumbColor = mutedCol,
+                            uncheckedTrackColor = if (isDark) SurfaceCard else SurfaceCardLight
+                        )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // 1. Hintergrunddienst Toggle
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(SurfaceCardElevated)
-                    .border(1.dp, HairlineBorder, RoundedCornerShape(16.dp))
+                    .background(cardBg)
+                    .border(1.dp, borderCol, RoundedCornerShape(16.dp))
                     .padding(16.dp)
             ) {
                 Row(
@@ -138,6 +204,7 @@ fun StatusBottomSheet(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Vordergrunddienst",
+
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = TextPrimary
@@ -277,11 +344,12 @@ fun StatusBottomSheet(
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Text(
-                                text = "Akkuschonung für Spotisave deaktivieren",
+                                text = "Akkuschonung für SpotiSave deaktivieren",
                                 color = TextPrimary,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
+
                     }
                 }
 

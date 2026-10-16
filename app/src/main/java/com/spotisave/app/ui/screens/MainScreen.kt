@@ -57,20 +57,30 @@ import com.spotisave.app.data.model.Bookmark
 import com.spotisave.app.ui.screens.components.BookmarkCard
 import com.spotisave.app.ui.screens.components.EmptyStateCard
 import com.spotisave.app.ui.screens.components.HeroCard
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import com.spotisave.app.ui.screens.components.SpotisaveBottomBar
 import com.spotisave.app.ui.screens.components.SpotifyApiSettingsDialog
 import com.spotisave.app.ui.screens.components.StatusBottomSheet
 import com.spotisave.app.ui.theme.AppleSystemGreen
 import com.spotisave.app.ui.theme.CanvasBlack
+import com.spotisave.app.ui.theme.CanvasWhite
 import com.spotisave.app.ui.theme.HairlineBorder
+import com.spotisave.app.ui.theme.HairlineBorderLight
 import com.spotisave.app.ui.theme.SpotifyGreen
 import com.spotisave.app.ui.theme.StatusError
 import com.spotisave.app.ui.theme.SurfaceCard
 import com.spotisave.app.ui.theme.SurfaceCardElevated
+import com.spotisave.app.ui.theme.SurfaceCardLight
+import com.spotisave.app.ui.theme.SurfaceCardLightElevated
 import com.spotisave.app.ui.theme.TextMuted
+import com.spotisave.app.ui.theme.TextMutedLight
 import com.spotisave.app.ui.theme.TextPrimary
+import com.spotisave.app.ui.theme.TextPrimaryLight
 import com.spotisave.app.ui.theme.TextSecondary
+import com.spotisave.app.ui.theme.TextSecondaryLight
 import com.spotisave.app.ui.viewmodel.MainViewModel
+
 
 @Composable
 fun MainScreen(
@@ -91,6 +101,7 @@ fun MainScreen(
     val spotifyClientId by viewModel.spotifyClientId.collectAsState()
     val authStatusMessage by viewModel.authStatusMessage.collectAsState()
     val listeningStats by viewModel.listeningStats.collectAsState()
+    val isWhiteMode by viewModel.isWhiteMode.collectAsState()
 
     var showStatusSheet by remember { mutableStateOf(false) }
     var showApiDialog by remember { mutableStateOf(false) }
@@ -100,10 +111,16 @@ fun MainScreen(
         viewModel.checkPermissions()
     }
 
+    val canvasBg = if (isWhiteMode) CanvasWhite else CanvasBlack
+    val textPrimaryColor = if (isWhiteMode) TextPrimaryLight else TextPrimary
+    val textSecondaryColor = if (isWhiteMode) TextSecondaryLight else TextSecondary
+    val headerCardBg = if (isWhiteMode) SurfaceCardLightElevated else SurfaceCardElevated
+    val headerBorderBrush = if (isWhiteMode) HairlineBorderLight else HairlineBorder
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(CanvasBlack)
+            .background(canvasBg)
     ) {
         Column(
             modifier = Modifier
@@ -122,18 +139,19 @@ fun MainScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.semantics(mergeDescendants = true) {
                         contentDescription = when {
-                            isSpotifyLoggedIn -> "Spotisave, Spotify Web API verbunden"
-                            isServiceRunning -> "Spotisave, Hintergrunddienst aktiv"
-                            else -> "Spotisave, Hintergrunddienst inaktiv"
+                            isSpotifyLoggedIn -> "SpotiSave, Spotify Web API verbunden"
+                            isServiceRunning -> "SpotiSave, Hintergrunddienst aktiv"
+                            else -> "SpotiSave, Hintergrunddienst inaktiv"
                         }
                     }
                 ) {
                     Text(
-                        text = "Spotisave",
+                        text = "SpotiSave",
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = textPrimaryColor
                     )
+
                     Spacer(modifier = Modifier.width(10.dp))
                     // Service & API Status Indikator
                     Box(
@@ -154,15 +172,37 @@ fun MainScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    // White Mode / Dark Mode Schnell-Umschalter (44dp Apple HIG Touch-Target)
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(headerCardBg)
+                            .border(1.dp, headerBorderBrush, CircleShape)
+                            .testTag("header_theme_toggle")
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                viewModel.toggleWhiteMode()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isWhiteMode) Icons.Default.DarkMode else Icons.Default.LightMode,
+                            contentDescription = "Design wechseln (Hell/Dunkel)",
+                            tint = textPrimaryColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
                     // Spotify Web API Connect Button (44dp Touch-Target)
                     Box(
                         modifier = Modifier
                             .size(44.dp)
                             .clip(CircleShape)
-                            .background(if (isSpotifyLoggedIn) SurfaceCardElevated else SurfaceCard)
+                            .background(if (isSpotifyLoggedIn) headerCardBg else (if (isWhiteMode) SurfaceCardLight else SurfaceCard))
                             .border(
                                 1.dp,
-                                if (isSpotifyLoggedIn) SpotifyGreen else HairlineBorder,
+                                if (isSpotifyLoggedIn) SpotifyGreen else headerBorderBrush,
                                 CircleShape
                             )
                             .testTag("header_api_button")
@@ -172,7 +212,7 @@ fun MainScreen(
                         Icon(
                             imageVector = Icons.Default.Key,
                             contentDescription = "Spotify API Einstellungen",
-                            tint = if (isSpotifyLoggedIn) SpotifyGreen else TextPrimary,
+                            tint = if (isSpotifyLoggedIn) SpotifyGreen else textPrimaryColor,
                             modifier = Modifier.size(19.dp)
                         )
                     }
@@ -182,8 +222,8 @@ fun MainScreen(
                         modifier = Modifier
                             .size(44.dp)
                             .clip(CircleShape)
-                            .background(SurfaceCardElevated)
-                            .border(1.dp, HairlineBorder, CircleShape)
+                            .background(headerCardBg)
+                            .border(1.dp, headerBorderBrush, CircleShape)
                             .testTag("header_status_button")
                             .clickable { showStatusSheet = true },
                         contentAlignment = Alignment.Center
@@ -191,7 +231,7 @@ fun MainScreen(
                         Icon(
                             imageVector = Icons.Default.Tune,
                             contentDescription = "Hintergrund-Status öffnen",
-                            tint = TextPrimary,
+                            tint = textPrimaryColor,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -203,9 +243,10 @@ fun MainScreen(
                 // TAB 1: Playlists & Zuletzt gehört
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 90.dp, top = 8.dp),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 108.dp, top = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+
                     // Top Hero Card "Zuletzt gehört"
                     item {
                         val matchingBookmark = if (activePlayback != null) {
@@ -494,6 +535,8 @@ fun MainScreen(
                 activeSource = activePlayback?.source ?: "Bereit",
                 onlyPlaylistsFilter = onlyPlaylistsFilter,
                 onToggleOnlyPlaylists = { viewModel.setOnlyPlaylistsFilter(it) },
+                isWhiteMode = isWhiteMode,
+                onToggleWhiteMode = { viewModel.setWhiteMode(it) },
                 onToggleService = { enable ->
                     viewModel.toggleService(context, enable)
                 },
@@ -508,6 +551,7 @@ fun MainScreen(
                     viewModel.checkPermissions()
                 }
             )
+
         }
 
         // Spotify Web API Settings Dialog

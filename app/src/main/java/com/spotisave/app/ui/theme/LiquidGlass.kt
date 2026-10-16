@@ -38,13 +38,19 @@ import androidx.compose.ui.unit.dp
  */
 object LiquidGlassDefaults {
 
-    // Transluzente Glas-Flächenfarben
+    // Transluzente Glas-Flächenfarben (Dark Mode)
     val GlassSurface = Color(0xCC141418)         // 80% Deckkraft Dunkelglas
     val GlassSurfaceElevated = Color(0xDD1E1E24) // 87% Deckkraft für gehobene Karten
     val GlassSurfacePressed = Color(0xEE26262E)  // Feedback bei Berührung
     val GlassFloatingBar = Color(0xF2101014)     // 95% Dichte für schwebende Navigation Bars
 
-    // Spekulare Lichtkanten (Lichteinfall von oben links nach unten rechts)
+    // Transluzente Glas-Flächenfarben (White Mode / Light Theme)
+    val GlassSurfaceLight = Color(0xCCFFFFFF)         // 80% Frosted White Glass
+    val GlassSurfaceLightElevated = Color(0xEEFFFFFF) // 93% Frosted White Card
+    val GlassSurfaceLightPressed = Color(0xF5E5E5EA)  // Light Mode Touch Feedback
+    val GlassFloatingBarLight = Color(0xEBFCFCFD)     // 92% Translucent White Floating Bubble
+
+    // Spekulare Lichtkanten Dark Mode (Lichteinfall von oben links nach unten rechts)
     val SpecularRimBrush: Brush = Brush.linearGradient(
         colors = listOf(
             Color(0x40FFFFFF), // 25% Weißes Glanzlicht
@@ -60,6 +66,25 @@ object LiquidGlassDefaults {
             Color(0x28FFFFFF),
             Color(0x0EFFFFFF),
             Color(0x04FFFFFF)
+        )
+    )
+
+    // Spekulare Lichtkanten White Mode (Präzise diffuse Brechung & Randreflex)
+    val SpecularRimLightBrush: Brush = Brush.linearGradient(
+        colors = listOf(
+            Color(0x80FFFFFF), // Heller Lichtreflex am oberen Rand
+            Color(0x22000000), // Kontrastreiche Randkontur
+            Color(0x0E000000)  // Subtile Schattenunterkante
+        ),
+        start = Offset(0f, 0f),
+        end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
+    )
+
+    val SpecularRimLightSubtle: Brush = Brush.linearGradient(
+        colors = listOf(
+            Color(0x50FFFFFF),
+            Color(0x18000000),
+            Color(0x08000000)
         )
     )
 
@@ -81,6 +106,23 @@ object LiquidGlassDefaults {
         endY = 60f
     )
 
+    val MeniscusGleamLightBrush: Brush = Brush.verticalGradient(
+        colors = listOf(
+            Color(0x40FFFFFF),
+            Color(0x00FFFFFF)
+        ),
+        startY = 0f,
+        endY = 60f
+    )
+
+    // Adaptive Token Resolver basierend auf Theme-Modus
+    fun glassSurface(isDark: Boolean): Color = if (isDark) GlassSurface else GlassSurfaceLight
+    fun glassSurfaceElevated(isDark: Boolean): Color = if (isDark) GlassSurfaceElevated else GlassSurfaceLightElevated
+    fun glassFloatingBar(isDark: Boolean): Color = if (isDark) GlassFloatingBar else GlassFloatingBarLight
+    fun specularRim(isDark: Boolean): Brush = if (isDark) SpecularRimBrush else SpecularRimLightBrush
+    fun specularRimSubtle(isDark: Boolean): Brush = if (isDark) SpecularRimSubtle else SpecularRimLightSubtle
+    fun meniscusGleam(isDark: Boolean): Brush = if (isDark) MeniscusGleamBrush else MeniscusGleamLightBrush
+
     // Typische Apple-Radien
     val CardRadius: Dp = 24.dp
     val HeroRadius: Dp = 28.dp
@@ -92,6 +134,21 @@ object LiquidGlassDefaults {
     val PillShape = RoundedCornerShape(PillRadius)
     val BadgeShape = RoundedCornerShape(BadgeRadius)
 }
+
+/**
+ * Shared GlassEffectContainer für koordinierte Lichtberechnung nach Apple HIG.
+ */
+@Composable
+fun GlassEffectContainer(
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit
+) {
+    Box(
+        modifier = modifier,
+        content = content
+    )
+}
+
 
 /**
  * Reusable Compose Modifier für authentische Liquid Glass Oberflächen.

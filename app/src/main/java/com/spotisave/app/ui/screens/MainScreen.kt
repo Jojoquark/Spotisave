@@ -67,6 +67,7 @@ import com.spotisave.app.ui.theme.CanvasBlack
 import com.spotisave.app.ui.theme.CanvasWhite
 import com.spotisave.app.ui.theme.HairlineBorder
 import com.spotisave.app.ui.theme.HairlineBorderLight
+import com.spotisave.app.ui.theme.HairlineBorderLightSubtle
 import com.spotisave.app.ui.theme.SpotifyGreen
 import com.spotisave.app.ui.theme.StatusError
 import com.spotisave.app.ui.theme.SurfaceCard
@@ -79,6 +80,7 @@ import com.spotisave.app.ui.theme.TextPrimary
 import com.spotisave.app.ui.theme.TextPrimaryLight
 import com.spotisave.app.ui.theme.TextSecondary
 import com.spotisave.app.ui.theme.TextSecondaryLight
+import com.spotisave.app.ui.theme.TextTertiaryLight
 import com.spotisave.app.ui.viewmodel.MainViewModel
 
 
@@ -114,8 +116,13 @@ fun MainScreen(
     val canvasBg = if (isWhiteMode) CanvasWhite else CanvasBlack
     val textPrimaryColor = if (isWhiteMode) TextPrimaryLight else TextPrimary
     val textSecondaryColor = if (isWhiteMode) TextSecondaryLight else TextSecondary
+    val textTertiaryColor = if (isWhiteMode) TextTertiaryLight else TextTertiary
     val headerCardBg = if (isWhiteMode) SurfaceCardLightElevated else SurfaceCardElevated
     val headerBorderBrush = if (isWhiteMode) HairlineBorderLight else HairlineBorder
+    val filterBarBg = if (isWhiteMode) SurfaceCardLightElevated else SurfaceCardElevated
+    val filterBorderBrush = if (isWhiteMode) HairlineBorderLightSubtle else HairlineBorderSubtle
+    val activeSegmentBg = if (isWhiteMode) LiquidGlassDefaults.GlassSurfaceLight else LiquidGlassDefaults.GlassSurface
+    val activeSegmentBorder = if (isWhiteMode) LiquidGlassDefaults.SpecularRimLightSubtle else LiquidGlassDefaults.SpecularRimSubtle
 
     Box(
         modifier = modifier
@@ -278,7 +285,7 @@ fun MainScreen(
                                     text = "Gespeicherte Hörpositionen",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
+                                    color = textPrimaryColor
                                 )
 
                                 val playlistCount = bookmarks.count { it.isPlaylist }
@@ -289,7 +296,7 @@ fun MainScreen(
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(SurfaceCardElevated)
+                                        .background(filterBarBg)
                                         .padding(horizontal = 8.dp, vertical = 2.dp)
                                 )
                             }
@@ -301,8 +308,8 @@ fun MainScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(SurfaceCardElevated)
-                                    .border(1.dp, HairlineBorderSubtle, RoundedCornerShape(12.dp))
+                                    .background(filterBarBg)
+                                    .border(1.dp, filterBorderBrush, RoundedCornerShape(12.dp))
                                     .padding(3.dp),
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
@@ -314,10 +321,10 @@ fun MainScreen(
                                         .weight(1f)
                                         .clip(RoundedCornerShape(9.dp))
                                         .background(
-                                            if (!onlyPlaylistsFilter) LiquidGlassDefaults.GlassSurface else androidx.compose.ui.graphics.Color.Transparent
+                                            if (!onlyPlaylistsFilter) activeSegmentBg else androidx.compose.ui.graphics.Color.Transparent
                                         )
                                         .then(
-                                            if (!onlyPlaylistsFilter) Modifier.border(0.75.dp, LiquidGlassDefaults.SpecularRimSubtle, RoundedCornerShape(9.dp)) else Modifier
+                                            if (!onlyPlaylistsFilter) Modifier.border(0.75.dp, activeSegmentBorder, RoundedCornerShape(9.dp)) else Modifier
                                         )
                                         .clickable {
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -335,14 +342,14 @@ fun MainScreen(
                                             text = "Alle",
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = if (!onlyPlaylistsFilter) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (!onlyPlaylistsFilter) TextPrimary else TextSecondary
+                                            color = if (!onlyPlaylistsFilter) textPrimaryColor else textSecondaryColor
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
                                             text = "${bookmarks.size}",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = if (!onlyPlaylistsFilter) SpotifyGreen else TextTertiary
+                                            color = if (!onlyPlaylistsFilter) SpotifyGreen else textTertiaryColor
                                         )
                                     }
                                 }
@@ -353,10 +360,10 @@ fun MainScreen(
                                         .weight(1f)
                                         .clip(RoundedCornerShape(9.dp))
                                         .background(
-                                            if (onlyPlaylistsFilter) LiquidGlassDefaults.GlassSurface else androidx.compose.ui.graphics.Color.Transparent
+                                            if (onlyPlaylistsFilter) activeSegmentBg else androidx.compose.ui.graphics.Color.Transparent
                                         )
                                         .then(
-                                            if (onlyPlaylistsFilter) Modifier.border(0.75.dp, LiquidGlassDefaults.SpecularRimSubtle, RoundedCornerShape(9.dp)) else Modifier
+                                            if (onlyPlaylistsFilter) Modifier.border(0.75.dp, activeSegmentBorder, RoundedCornerShape(9.dp)) else Modifier
                                         )
                                         .clickable {
                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -373,7 +380,7 @@ fun MainScreen(
                                         Icon(
                                             imageVector = Icons.Default.QueueMusic,
                                             contentDescription = null,
-                                            tint = if (onlyPlaylistsFilter) SpotifyGreen else TextSecondary,
+                                            tint = if (onlyPlaylistsFilter) SpotifyGreen else textSecondaryColor,
                                             modifier = Modifier.size(15.dp)
                                         )
                                         Spacer(modifier = Modifier.width(5.dp))
@@ -381,14 +388,14 @@ fun MainScreen(
                                             text = "Nur Playlists",
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = if (onlyPlaylistsFilter) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (onlyPlaylistsFilter) SpotifyGreen else TextSecondary
+                                            color = if (onlyPlaylistsFilter) SpotifyGreen else textSecondaryColor
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
                                             text = "$playlistCount",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = if (onlyPlaylistsFilter) SpotifyGreen else TextTertiary
+                                            color = if (onlyPlaylistsFilter) SpotifyGreen else textTertiaryColor
                                         )
                                     }
                                 }
@@ -404,8 +411,8 @@ fun MainScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(18.dp))
-                                        .background(LiquidGlassDefaults.GlassSurface)
-                                        .border(0.75.dp, LiquidGlassDefaults.SpecularRimSubtle, RoundedCornerShape(18.dp))
+                                        .background(activeSegmentBg)
+                                        .border(0.75.dp, activeSegmentBorder, RoundedCornerShape(18.dp))
                                         .padding(24.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -424,13 +431,13 @@ fun MainScreen(
                                             text = "Keine Playlist-Hörstände",
                                             style = MaterialTheme.typography.titleMedium,
                                             fontWeight = FontWeight.Bold,
-                                            color = TextPrimary
+                                            color = textPrimaryColor
                                         )
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
                                             text = "Aktuell sind keine gespeicherten Stände aus einer Spotify-Playlist vorhanden.",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = TextSecondary,
+                                            color = textSecondaryColor,
                                             textAlign = TextAlign.Center
                                         )
                                         Spacer(modifier = Modifier.height(12.dp))
@@ -488,9 +495,9 @@ fun MainScreen(
         bookmarkToDelete?.let { bm ->
             AlertDialog(
                 onDismissRequest = { bookmarkToDelete = null },
-                containerColor = SurfaceCard,
-                titleContentColor = TextPrimary,
-                textContentColor = TextSecondary,
+                containerColor = if (isWhiteMode) SurfaceCardLight else SurfaceCard,
+                titleContentColor = textPrimaryColor,
+                textContentColor = textSecondaryColor,
                 title = {
                     Text(
                         text = "Hörposition löschen?",
@@ -518,7 +525,7 @@ fun MainScreen(
                 dismissButton = {
                     TextButton(
                         onClick = { bookmarkToDelete = null },
-                        colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                        colors = ButtonDefaults.textButtonColors(contentColor = textPrimaryColor)
                     ) {
                         Text(text = "Abbrechen")
                     }

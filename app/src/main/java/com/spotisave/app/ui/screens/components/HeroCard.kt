@@ -51,17 +51,24 @@ import com.spotisave.app.data.model.Bookmark
 import com.spotisave.app.data.model.PlaybackStateModel
 import com.spotisave.app.ui.theme.CanvasBlack
 import com.spotisave.app.ui.theme.HairlineBorder
+import com.spotisave.app.ui.theme.HairlineBorderLight
 import com.spotisave.app.ui.theme.LiquidGlassDefaults
+import com.spotisave.app.ui.theme.LocalIsDarkTheme
 import com.spotisave.app.ui.theme.liquidGlassSurface
 import com.spotisave.app.ui.theme.SpotifyGreen
 import com.spotisave.app.ui.theme.StatusLivePlaying
 import com.spotisave.app.ui.theme.StatusPaused
 import com.spotisave.app.ui.theme.SurfaceCard
 import com.spotisave.app.ui.theme.SurfaceCardElevated
+import com.spotisave.app.ui.theme.SurfaceCardLightElevated
 import com.spotisave.app.ui.theme.TextMuted
+import com.spotisave.app.ui.theme.TextMutedLight
 import com.spotisave.app.ui.theme.TextPrimary
+import com.spotisave.app.ui.theme.TextPrimaryLight
 import com.spotisave.app.ui.theme.TextSecondary
+import com.spotisave.app.ui.theme.TextSecondaryLight
 import com.spotisave.app.ui.theme.TextTertiary
+import com.spotisave.app.ui.theme.TextTertiaryLight
 import com.spotisave.app.ui.util.TimeFormatter
 
 /**
@@ -120,16 +127,26 @@ fun HeroCard(
         label = "pulseScale"
     )
 
-    val borderBrush = if (isPlaying) LiquidGlassDefaults.AccentSpecularRim else LiquidGlassDefaults.SpecularRimBrush
+    val isDark = LocalIsDarkTheme.current
+    val textPrimaryCol = if (isDark) TextPrimary else TextPrimaryLight
+    val textSecondaryCol = if (isDark) TextSecondary else TextSecondaryLight
+    val textTertiaryCol = if (isDark) TextTertiary else TextTertiaryLight
+    val textMutedCol = if (isDark) TextMuted else TextMutedLight
+    val surfaceElevatedCol = if (isDark) SurfaceCardElevated else SurfaceCardLightElevated
+    val hairlineBorderCol = if (isDark) HairlineBorder else HairlineBorderLight
+    val surfaceColor = if (isDark) LiquidGlassDefaults.GlassSurfaceElevated else LiquidGlassDefaults.GlassSurfaceLightElevated
+    val borderBrush = if (isPlaying) LiquidGlassDefaults.AccentSpecularRim else (if (isDark) LiquidGlassDefaults.SpecularRimBrush else LiquidGlassDefaults.SpecularRimLightBrush)
+    val meniscusBrush = if (isDark) LiquidGlassDefaults.MeniscusGleamBrush else LiquidGlassDefaults.MeniscusGleamLightBrush
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .liquidGlassSurface(
                 shape = LiquidGlassDefaults.HeroShape,
-                surfaceColor = LiquidGlassDefaults.GlassSurfaceElevated,
+                surfaceColor = surfaceColor,
                 borderBrush = borderBrush,
-                borderWidth = 1.dp
+                borderWidth = 1.dp,
+                meniscusBrush = meniscusBrush
             )
             .padding(20.dp)
             .testTag("hero_card")
@@ -146,7 +163,7 @@ fun HeroCard(
                     val statusColor = when {
                         isPlaying -> StatusLivePlaying
                         isLive -> StatusPaused
-                        else -> TextTertiary
+                        else -> textTertiaryCol
                     }
                     Box(
                         modifier = Modifier
@@ -163,7 +180,7 @@ fun HeroCard(
                             else -> "ZULETZT GEHÖRT"
                         },
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (isPlaying) StatusLivePlaying else TextSecondary,
+                        color = if (isPlaying) StatusLivePlaying else textSecondaryCol,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -199,21 +216,21 @@ fun HeroCard(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(SurfaceCardElevated)
-                            .border(1.dp, HairlineBorder, RoundedCornerShape(8.dp))
+                            .background(surfaceElevatedCol)
+                            .border(1.dp, hairlineBorderCol, RoundedCornerShape(8.dp))
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Icon(
                             imageVector = if (isAlbum) Icons.Default.Album else Icons.Default.MusicNote,
                             contentDescription = null,
-                            tint = if (isAlbum) Color(0xFF64D2FF) else TextTertiary,
+                            tint = if (isAlbum) Color(0xFF64D2FF) else textTertiaryCol,
                             modifier = Modifier.size(12.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = if (isAlbum) "ALBUM • $displayContextTitle" else displayContextTitle,
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (isAlbum) Color(0xFF64D2FF) else TextTertiary,
+                            color = if (isAlbum) Color(0xFF64D2FF) else textTertiaryCol,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -241,7 +258,7 @@ fun HeroCard(
                         isPlaylist -> SpotifyGreen
                         isAlbum -> Color(0xFF64D2FF)
                         isPlaying -> StatusLivePlaying
-                        else -> TextSecondary
+                        else -> textSecondaryCol
                     },
                     iconSize = 26.dp,
                     contentDescription = "Cover Artwork",
@@ -256,7 +273,7 @@ fun HeroCard(
                     Text(
                         text = trackTitle.ifBlank { "Bereit für Spotify" },
                         style = MaterialTheme.typography.titleLarge,
-                        color = TextPrimary,
+                        color = textPrimaryCol,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -268,7 +285,7 @@ fun HeroCard(
                     Text(
                         text = artist.ifBlank { "Starte Musik auf deinem Gerät" },
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
+                        color = textSecondaryCol,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -307,14 +324,14 @@ fun HeroCard(
                     Icon(
                         imageVector = Icons.Default.Album,
                         contentDescription = null,
-                        tint = TextTertiary,
+                        tint = textTertiaryCol,
                         modifier = Modifier.size(13.dp)
                     )
                     Spacer(modifier = Modifier.width(5.dp))
                     Text(
                         text = "Album: $album",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextTertiary,
+                        color = textTertiaryCol,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -331,7 +348,7 @@ fun HeroCard(
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp)),
                 color = SpotifyGreen,
-                trackColor = SurfaceCardElevated,
+                trackColor = surfaceElevatedCol,
                 strokeCap = StrokeCap.Round
             )
 
@@ -345,13 +362,13 @@ fun HeroCard(
                 Text(
                     text = TimeFormatter.formatTime(positionMs),
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextSecondary,
+                    color = textSecondaryCol,
                     fontSize = 13.sp
                 )
                 Text(
                     text = if (durationMs > 0L) TimeFormatter.formatTime(durationMs) else "--:--",
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary,
+                    color = textTertiaryCol,
                     fontSize = 13.sp
                 )
             }
@@ -405,8 +422,8 @@ fun HeroCard(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = SpotifyGreen,
                     contentColor = CanvasBlack,
-                    disabledContainerColor = SurfaceCardElevated,
-                    disabledContentColor = TextMuted
+                    disabledContainerColor = surfaceElevatedCol,
+                    disabledContentColor = textMutedCol
                 )
             ) {
                 Row(

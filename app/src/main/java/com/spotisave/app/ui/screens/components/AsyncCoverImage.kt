@@ -99,7 +99,7 @@ fun AsyncCoverImage(
                     connectTimeout = 7000
                     readTimeout = 7000
                     instanceFollowRedirects = true
-                    setRequestProperty("User-Agent", "Spotisave-Android/1.1.0")
+                    setRequestProperty("User-Agent", "SpotiSave-Android/1.1.0")
                 }
                 conn.connect()
                 if (conn.responseCode in 200..299) {

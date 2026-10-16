@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.spotisave.app.ui.theme.GlassEffectContainer
 import com.spotisave.app.ui.theme.LiquidGlassDefaults
 import com.spotisave.app.ui.theme.LocalIsDarkTheme
 import com.spotisave.app.ui.theme.SpotifyGreen
@@ -84,16 +85,19 @@ fun SpotisaveBottomBar(
     val meniscusBrush = if (isDark) LiquidGlassDefaults.MeniscusGleamBrush else LiquidGlassDefaults.MeniscusGleamLightBrush
     val shadowColor = if (isDark) Color.Black.copy(alpha = 0.55f) else Color.Black.copy(alpha = 0.12f)
 
-    Box(
+    GlassEffectContainer(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(bottom = 16.dp, start = 20.dp, end = 20.dp)
-            .testTag("spotisave_bottom_bar"),
-        contentAlignment = Alignment.Center
+            .testTag("spotisave_bottom_bar")
     ) {
-        // Freistehende Liquid Glass Kapsel (Floating Bubble)
         Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            // Freistehende Liquid Glass Kapsel (Floating Bubble)
+            Box(
             modifier = Modifier
                 .widthIn(max = 380.dp)
                 .fillMaxWidth()

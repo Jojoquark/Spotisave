@@ -432,7 +432,7 @@ fun StatusBottomSheet(
                             onClick = {
                                 val json = onExportJson()
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                clipboard?.setPrimaryClip(ClipData.newPlainText("Spotisave Backup", json))
+                                clipboard?.setPrimaryClip(ClipData.newPlainText("SpotiSave Backup", json))
                                 backupStatusIsError = false
                                 backupStatusText = "Backup in Zwischenablage kopiert ($totalBookmarks Einträge)"
                                 Toast.makeText(context, "Backup kopiert ($totalBookmarks Einträge)!", Toast.LENGTH_SHORT).show()
@@ -468,7 +468,7 @@ fun StatusBottomSheet(
                                             Toast.makeText(context, "$count Hörpositionen wiederhergestellt!", Toast.LENGTH_SHORT).show()
                                         } else {
                                             backupStatusIsError = true
-                                            backupStatusText = "Kein gültiges Spotisave-Backup in der Zwischenablage gefunden"
+                                            backupStatusText = "Kein gültiges SpotiSave-Backup in der Zwischenablage gefunden"
                                             Toast.makeText(context, "Kein gültiges Backup gefunden", Toast.LENGTH_SHORT).show()
                                         }
                                     }

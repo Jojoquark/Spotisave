@@ -51,13 +51,20 @@ import com.spotisave.app.data.api.SpotifyAuthManager
 import com.spotisave.app.ui.theme.AppleSystemGreen
 import com.spotisave.app.ui.theme.CanvasBlack
 import com.spotisave.app.ui.theme.HairlineBorder
+import com.spotisave.app.ui.theme.HairlineBorderLight
+import com.spotisave.app.ui.theme.LocalIsDarkTheme
 import com.spotisave.app.ui.theme.SpotifyGreen
 import com.spotisave.app.ui.theme.StatusError
 import com.spotisave.app.ui.theme.SurfaceCard
 import com.spotisave.app.ui.theme.SurfaceCardElevated
+import com.spotisave.app.ui.theme.SurfaceCardLight
+import com.spotisave.app.ui.theme.SurfaceCardLightElevated
 import com.spotisave.app.ui.theme.TextMuted
+import com.spotisave.app.ui.theme.TextMutedLight
 import com.spotisave.app.ui.theme.TextPrimary
+import com.spotisave.app.ui.theme.TextPrimaryLight
 import com.spotisave.app.ui.theme.TextSecondary
+import com.spotisave.app.ui.theme.TextSecondaryLight
 
 /**
  * Spotify Web API & Client ID Konfigurationsdialog.
@@ -73,6 +80,14 @@ fun SpotifyApiSettingsDialog(
     onDismissRequest: () -> Unit
 ) {
     val context = LocalContext.current
+    val isDark = LocalIsDarkTheme.current
+    val containerCol = if (isDark) SurfaceCard else SurfaceCardLight
+    val elevatedCol = if (isDark) SurfaceCardElevated else SurfaceCardLightElevated
+    val hairlineCol = if (isDark) HairlineBorder else HairlineBorderLight
+    val titleCol = if (isDark) TextPrimary else TextPrimaryLight
+    val secondaryCol = if (isDark) TextSecondary else TextSecondaryLight
+    val mutedCol = if (isDark) TextMuted else TextMutedLight
+
     var clientIdText by remember { mutableStateOf(initialClientId) }
     var copiedRedirect by remember { mutableStateOf(false) }
 
@@ -80,9 +95,9 @@ fun SpotifyApiSettingsDialog(
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
-        containerColor = SurfaceCard,
-        titleContentColor = TextPrimary,
-        textContentColor = TextSecondary,
+        containerColor = containerCol,
+        titleContentColor = titleCol,
+        textContentColor = secondaryCol,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
@@ -109,7 +124,7 @@ fun SpotifyApiSettingsDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .background(SurfaceCardElevated)
+                        .background(elevatedCol)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -117,21 +132,21 @@ fun SpotifyApiSettingsDialog(
                     Text(
                         text = "Status:",
                         fontSize = 13.sp,
-                        color = TextSecondary
+                        color = secondaryCol
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(if (isLoggedIn) AppleSystemGreen else TextMuted)
+                                .background(if (isLoggedIn) AppleSystemGreen else mutedCol)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (isLoggedIn) "API Verbunden" else "Lokal (Kein Token)",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isLoggedIn) AppleSystemGreen else TextSecondary
+                            color = if (isLoggedIn) AppleSystemGreen else secondaryCol
                         )
                     }
                 }
@@ -149,17 +164,17 @@ fun SpotifyApiSettingsDialog(
                 OutlinedTextField(
                     value = clientIdText,
                     onValueChange = { clientIdText = it },
-                    label = { Text("Spotify Client ID", color = TextSecondary) },
+                    label = { Text("Spotify Client ID", color = secondaryCol) },
                     singleLine = true,
-                    placeholder = { Text("32-stelliger Hex-Code", color = TextMuted) },
+                    placeholder = { Text("32-stelliger Hex-Code", color = mutedCol) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("spotify_client_id_input"),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = SpotifyGreen,
-                        unfocusedBorderColor = HairlineBorder,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
+                        unfocusedBorderColor = hairlineCol,
+                        focusedTextColor = titleCol,
+                        unfocusedTextColor = titleCol,
                         cursorColor = SpotifyGreen
                     )
                 )
@@ -169,14 +184,14 @@ fun SpotifyApiSettingsDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCardElevated)
-                        .border(1.dp, HairlineBorder, RoundedCornerShape(12.dp))
+                        .background(elevatedCol)
+                        .border(1.dp, hairlineCol, RoundedCornerShape(12.dp))
                         .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 6.dp)
                 ) {
                     Text(
                         text = "Redirect URI für Spotify Dashboard:",
                         fontSize = 11.sp,
-                        color = TextSecondary
+                        color = secondaryCol
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -205,7 +220,7 @@ fun SpotifyApiSettingsDialog(
                             Icon(
                                 imageVector = if (copiedRedirect) Icons.Default.Check else Icons.Default.ContentCopy,
                                 contentDescription = "Redirect URI kopieren",
-                                tint = if (copiedRedirect) AppleSystemGreen else TextPrimary,
+                                tint = if (copiedRedirect) AppleSystemGreen else titleCol,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -220,7 +235,7 @@ fun SpotifyApiSettingsDialog(
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
                             .testTag("spotify_disconnect_button"),
-                        colors = ButtonDefaults.buttonColors(containerColor = SurfaceCardElevated),
+                        colors = ButtonDefaults.buttonColors(containerColor = elevatedCol),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text("Verbindung trennen", color = StatusError, fontWeight = FontWeight.Bold)
@@ -253,7 +268,7 @@ fun SpotifyApiSettingsDialog(
         confirmButton = {
             TextButton(
                 onClick = onDismissRequest,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextPrimary)
+                colors = ButtonDefaults.textButtonColors(contentColor = titleCol)
             ) {
                 Text("Schließen", fontWeight = FontWeight.Bold)
             }

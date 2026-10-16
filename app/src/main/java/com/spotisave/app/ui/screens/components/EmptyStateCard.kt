@@ -24,12 +24,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.spotisave.app.ui.theme.HairlineBorderLightSubtle
 import com.spotisave.app.ui.theme.HairlineBorderSubtle
+import com.spotisave.app.ui.theme.LocalIsDarkTheme
 import com.spotisave.app.ui.theme.SpotifyGreen
 import com.spotisave.app.ui.theme.SurfaceCard
 import com.spotisave.app.ui.theme.SurfaceCardElevated
+import com.spotisave.app.ui.theme.SurfaceCardLight
+import com.spotisave.app.ui.theme.SurfaceCardLightElevated
 import com.spotisave.app.ui.theme.TextPrimary
+import com.spotisave.app.ui.theme.TextPrimaryLight
 import com.spotisave.app.ui.theme.TextSecondary
+import com.spotisave.app.ui.theme.TextSecondaryLight
 
 /**
  * Ansprechende Empty-State Ansicht nach Apple HIG Prinzipien.
@@ -38,12 +44,19 @@ import com.spotisave.app.ui.theme.TextSecondary
 fun EmptyStateCard(
     modifier: Modifier = Modifier
 ) {
+    val isDark = LocalIsDarkTheme.current
+    val cardBg = if (isDark) SurfaceCard else SurfaceCardLight
+    val elevatedBg = if (isDark) SurfaceCardElevated else SurfaceCardLightElevated
+    val borderCol = if (isDark) HairlineBorderSubtle else HairlineBorderLightSubtle
+    val titleCol = if (isDark) TextPrimary else TextPrimaryLight
+    val bodyCol = if (isDark) TextSecondary else TextSecondaryLight
+
     Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(SurfaceCard)
-            .border(1.dp, HairlineBorderSubtle, RoundedCornerShape(20.dp))
+            .background(cardBg)
+            .border(1.dp, borderCol, RoundedCornerShape(20.dp))
             .padding(28.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -54,7 +67,7 @@ fun EmptyStateCard(
                 modifier = Modifier
                     .size(56.dp)
                     .clip(CircleShape)
-                    .background(SurfaceCardElevated),
+                    .background(elevatedBg),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -70,7 +83,7 @@ fun EmptyStateCard(
             Text(
                 text = "Keine gespeicherten Hörpositionen",
                 style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary,
+                color = titleCol,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
@@ -78,9 +91,9 @@ fun EmptyStateCard(
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "Starte eine Playlist, ein Hörbuch oder einen Podcast in Spotify. Spotisave erfasst deinen Fortschritt automatisch im Hintergrund, selbst wenn dein Handy in der Tasche gesperrt ist.",
+                text = "Starte eine Playlist, ein Hörbuch oder einen Podcast in Spotify. SpotiSave erfasst deinen Fortschritt automatisch im Hintergrund, selbst wenn dein Handy in der Tasche gesperrt ist.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
+                color = bodyCol,
                 textAlign = TextAlign.Center,
                 lineHeight = 20.sp
             )

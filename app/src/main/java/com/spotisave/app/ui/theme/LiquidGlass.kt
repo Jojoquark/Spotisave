@@ -157,11 +157,12 @@ fun Modifier.liquidGlassSurface(
     shape: Shape = LiquidGlassDefaults.CardShape,
     surfaceColor: Color = LiquidGlassDefaults.GlassSurface,
     borderBrush: Brush = LiquidGlassDefaults.SpecularRimBrush,
-    borderWidth: Dp = 0.75.dp
+    borderWidth: Dp = 0.75.dp,
+    meniscusBrush: Brush = LiquidGlassDefaults.MeniscusGleamBrush
 ): Modifier = this
     .clip(shape)
     .background(surfaceColor)
-    .background(LiquidGlassDefaults.MeniscusGleamBrush)
+    .background(meniscusBrush)
     .border(
         width = borderWidth,
         brush = borderBrush,
@@ -178,10 +179,12 @@ fun LiquidGlassCard(
     surfaceColor: Color = LiquidGlassDefaults.GlassSurface,
     borderBrush: Brush = LiquidGlassDefaults.SpecularRimBrush,
     borderWidth: Dp = 0.75.dp,
+    meniscusBrush: Brush = LiquidGlassDefaults.MeniscusGleamBrush,
     onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val isDark = LocalIsDarkTheme.current
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
@@ -192,7 +195,7 @@ fun LiquidGlassCard(
     )
 
     val currentSurfaceColor = if (isPressed && onClick != null) {
-        LiquidGlassDefaults.GlassSurfacePressed
+        if (isDark) LiquidGlassDefaults.GlassSurfacePressed else LiquidGlassDefaults.GlassSurfaceLightPressed
     } else {
         surfaceColor
     }
@@ -216,7 +219,8 @@ fun LiquidGlassCard(
                 shape = shape,
                 surfaceColor = currentSurfaceColor,
                 borderBrush = borderBrush,
-                borderWidth = borderWidth
+                borderWidth = borderWidth,
+                meniscusBrush = meniscusBrush
             ),
         content = content
     )

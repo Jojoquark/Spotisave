@@ -42,13 +42,18 @@ import com.spotisave.app.data.model.Bookmark
 import com.spotisave.app.ui.theme.CanvasBlack
 import com.spotisave.app.ui.theme.HairlineBorderSubtle
 import com.spotisave.app.ui.theme.LiquidGlassDefaults
+import com.spotisave.app.ui.theme.LocalIsDarkTheme
 import com.spotisave.app.ui.theme.SpotifyGreen
 import com.spotisave.app.ui.theme.StatusError
 import com.spotisave.app.ui.theme.SurfaceCard
 import com.spotisave.app.ui.theme.SurfaceCardElevated
+import com.spotisave.app.ui.theme.SurfaceCardLightElevated
 import com.spotisave.app.ui.theme.TextPrimary
+import com.spotisave.app.ui.theme.TextPrimaryLight
 import com.spotisave.app.ui.theme.TextSecondary
+import com.spotisave.app.ui.theme.TextSecondaryLight
 import com.spotisave.app.ui.theme.TextTertiary
+import com.spotisave.app.ui.theme.TextTertiaryLight
 import com.spotisave.app.ui.util.TimeFormatter
 
 /**
@@ -63,15 +68,24 @@ fun BookmarkCard(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    val isDark = LocalIsDarkTheme.current
     val cardShape = RoundedCornerShape(16.dp)
+
+    val textPrimaryCol = if (isDark) TextPrimary else TextPrimaryLight
+    val textSecondaryCol = if (isDark) TextSecondary else TextSecondaryLight
+    val textTertiaryCol = if (isDark) TextTertiary else TextTertiaryLight
+    val surfaceElevatedCol = if (isDark) SurfaceCardElevated else SurfaceCardLightElevated
+    val surfaceColor = if (isDark) LiquidGlassDefaults.GlassSurface else LiquidGlassDefaults.GlassSurfaceLight
+    val rimBrush = if (isDark) LiquidGlassDefaults.SpecularRimSubtle else LiquidGlassDefaults.SpecularRimLightSubtle
+    val meniscusBrush = if (isDark) LiquidGlassDefaults.MeniscusGleamBrush else LiquidGlassDefaults.MeniscusGleamLightBrush
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(cardShape)
-            .background(LiquidGlassDefaults.GlassSurface)
-            .background(LiquidGlassDefaults.MeniscusGleamBrush)
-            .border(0.75.dp, LiquidGlassDefaults.SpecularRimSubtle, cardShape)
+            .background(surfaceColor)
+            .background(meniscusBrush)
+            .border(0.75.dp, rimBrush, cardShape)
             .testTag("bookmark_card_${bookmark.id}")
             .clickable {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -93,7 +107,7 @@ fun BookmarkCard(
                         bookmark.isAlbum -> Icons.Default.Album
                         else -> Icons.Default.MusicNote
                     },
-                    iconTint = if (bookmark.isPlaylist) SpotifyGreen else if (bookmark.isAlbum) androidx.compose.ui.graphics.Color(0xFF64D2FF) else TextSecondary,
+                    iconTint = if (bookmark.isPlaylist) SpotifyGreen else if (bookmark.isAlbum) androidx.compose.ui.graphics.Color(0xFF64D2FF) else textSecondaryCol,
                     contentDescription = if (bookmark.isPlaylist) "Playlist Cover" else "Album Cover",
                     modifier = Modifier.size(48.dp),
                     shape = RoundedCornerShape(12.dp)
@@ -150,7 +164,7 @@ fun BookmarkCard(
                         Text(
                             text = bookmark.contextTitle,
                             style = MaterialTheme.typography.labelSmall,
-                            color = TextTertiary,
+                            color = textTertiaryCol,
                             fontWeight = FontWeight.Medium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -161,7 +175,7 @@ fun BookmarkCard(
                     Text(
                         text = bookmark.trackTitle,
                         style = MaterialTheme.typography.titleMedium,
-                        color = TextPrimary,
+                        color = textPrimaryCol,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -172,7 +186,7 @@ fun BookmarkCard(
                     Text(
                         text = bookmark.artist,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
+                        color = textSecondaryCol,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -195,7 +209,7 @@ fun BookmarkCard(
                         Icon(
                             imageVector = Icons.Default.Delete,
                             contentDescription = "Bookmark löschen: ${bookmark.trackTitle}",
-                            tint = TextTertiary,
+                            tint = textTertiaryCol,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -235,7 +249,7 @@ fun BookmarkCard(
                     .height(4.dp)
                     .clip(RoundedCornerShape(2.dp)),
                 color = SpotifyGreen,
-                trackColor = SurfaceCardElevated,
+                trackColor = surfaceElevatedCol,
                 strokeCap = StrokeCap.Round
             )
 
@@ -250,13 +264,13 @@ fun BookmarkCard(
                 Text(
                     text = "${TimeFormatter.formatTime(bookmark.positionMs)} von ${TimeFormatter.formatTime(bookmark.durationMs)}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextSecondary,
+                    color = textSecondaryCol,
                     fontSize = 12.sp
                 )
                 Text(
                     text = TimeFormatter.formatRelativeTime(bookmark.timestamp),
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary,
+                    color = textTertiaryCol,
                     fontSize = 12.sp
                 )
             }

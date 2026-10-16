@@ -38,8 +38,9 @@ object PlaybackTracker {
     @Volatile private var lastSaveTimeMs: Long = 0L
     @Volatile private var activeSessionHistoryId: String? = null
 
-    // In-Memory Cache für Playlist-Namen (verhindert redundante API-Aufrufe)
+    // In-Memory Cache für Playlist-Namen und Playlist-Cover (verhindert redundante API-Aufrufe)
     private val playlistNameCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val playlistCoverCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     fun onMetadataChanged(
         context: Context,
@@ -78,6 +79,10 @@ object PlaybackTracker {
             if (!cached.isNullOrBlank()) {
                 lastContextTitle = cached
             }
+            val cachedCover = playlistCoverCache[contextUri]
+            if (!cachedCover.isNullOrBlank()) {
+                lastCoverUrl = cachedCover
+            }
         }
         if (!contextTitle.isNullOrBlank() && contextTitle != "Spotify") {
             lastContextTitle = contextTitle
@@ -86,7 +91,10 @@ object PlaybackTracker {
             }
         }
         if (!coverUrl.isNullOrBlank()) {
-            lastCoverUrl = coverUrl
+            val isPlaylistWithCustomCover = lastContextUri?.startsWith("spotify:playlist:") == true && playlistCoverCache.containsKey(lastContextUri)
+            if (!isPlaylistWithCustomCover || lastCoverUrl.isNullOrBlank()) {
+                lastCoverUrl = coverUrl
+            }
         }
         if (durationMs > 0) {
             lastDurationMs = durationMs
@@ -284,14 +292,17 @@ object PlaybackTracker {
                 if (!curContextUri.isNullOrBlank() && curContextUri.startsWith("spotify:playlist:")) {
                     val plId = curContextUri.removePrefix("spotify:playlist:")
                     val cached = playlistNameCache[curContextUri]
-                    if (!cached.isNullOrBlank()) {
+                    val cachedCover = playlistCoverCache[curContextUri]
+                    if (!cached.isNullOrBlank() && !cachedCover.isNullOrBlank()) {
                         lastContextTitle = cached
+                        lastCoverUrl = cachedCover
                     } else {
                         val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
                         if (plInfo != null) {
                             playlistNameCache[curContextUri] = plInfo.name
                             lastContextTitle = plInfo.name
-                            if (plInfo.coverUrl != null && lastCoverUrl.isNullOrBlank()) {
+                            if (!plInfo.coverUrl.isNullOrBlank()) {
+                                playlistCoverCache[curContextUri] = plInfo.coverUrl
                                 lastCoverUrl = plInfo.coverUrl
                             }
                             val repository = BookmarkRepository.initialize(context)
@@ -317,14 +328,17 @@ object PlaybackTracker {
                     if (!apiContextUri.isNullOrBlank() && apiContextUri.startsWith("spotify:playlist:")) {
                         val plId = apiContextUri.removePrefix("spotify:playlist:")
                         val cached = playlistNameCache[apiContextUri]
-                        if (!cached.isNullOrBlank()) {
+                        val cachedCover = playlistCoverCache[apiContextUri]
+                        if (!cached.isNullOrBlank() && !cachedCover.isNullOrBlank()) {
                             lastContextTitle = cached
+                            lastCoverUrl = cachedCover
                         } else {
                             val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
                             if (plInfo != null) {
                                 playlistNameCache[apiContextUri] = plInfo.name
                                 lastContextTitle = plInfo.name
-                                if (plInfo.coverUrl != null && lastCoverUrl.isNullOrBlank()) {
+                                if (!plInfo.coverUrl.isNullOrBlank()) {
+                                    playlistCoverCache[apiContextUri] = plInfo.coverUrl
                                     lastCoverUrl = plInfo.coverUrl
                                 }
                                 val repository = BookmarkRepository.initialize(context)

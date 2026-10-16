@@ -85,26 +85,19 @@ fun BookmarkCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Artwork / Icon squircle (Apple HIG Inset Style)
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCardElevated)
-                        .border(1.dp, HairlineBorderSubtle, RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = when {
-                            bookmark.isPlaylist -> Icons.Default.QueueMusic
-                            bookmark.isAlbum -> Icons.Default.Album
-                            else -> Icons.Default.MusicNote
-                        },
-                        contentDescription = null,
-                        tint = if (bookmark.isPlaylist) SpotifyGreen else if (bookmark.isAlbum) androidx.compose.ui.graphics.Color(0xFF64D2FF) else TextSecondary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+                // Artwork / Cover Image squircle (Apple HIG Liquid Glass Style)
+                AsyncCoverImage(
+                    coverUrl = bookmark.coverUrl,
+                    fallbackIcon = when {
+                        bookmark.isPlaylist -> Icons.Default.QueueMusic
+                        bookmark.isAlbum -> Icons.Default.Album
+                        else -> Icons.Default.MusicNote
+                    },
+                    iconTint = if (bookmark.isPlaylist) SpotifyGreen else if (bookmark.isAlbum) androidx.compose.ui.graphics.Color(0xFF64D2FF) else TextSecondary,
+                    contentDescription = if (bookmark.isPlaylist) "Playlist Cover" else "Album Cover",
+                    modifier = Modifier.size(48.dp),
+                    shape = RoundedCornerShape(12.dp)
+                )
 
                 Spacer(modifier = Modifier.width(12.dp))
 

@@ -229,30 +229,25 @@ fun HeroCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(SurfaceCardElevated)
-                        .border(1.dp, HairlineBorder, RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = when {
-                            isPlaylist -> Icons.Default.QueueMusic
-                            isAlbum -> Icons.Default.Album
-                            else -> Icons.Default.MusicNote
-                        },
-                        contentDescription = null,
-                        tint = when {
-                            isPlaylist -> SpotifyGreen
-                            isAlbum -> Color(0xFF64D2FF)
-                            isPlaying -> StatusLivePlaying
-                            else -> TextSecondary
-                        },
-                        modifier = Modifier.size(26.dp)
-                    )
-                }
+                // Artwork / Cover Image squircle (Apple HIG Liquid Glass Style)
+                AsyncCoverImage(
+                    coverUrl = activePlayback?.coverUrl ?: latestBookmark?.coverUrl,
+                    fallbackIcon = when {
+                        isPlaylist -> Icons.Default.QueueMusic
+                        isAlbum -> Icons.Default.Album
+                        else -> Icons.Default.MusicNote
+                    },
+                    iconTint = when {
+                        isPlaylist -> SpotifyGreen
+                        isAlbum -> Color(0xFF64D2FF)
+                        isPlaying -> StatusLivePlaying
+                        else -> TextSecondary
+                    },
+                    iconSize = 26.dp,
+                    contentDescription = "Cover Artwork",
+                    modifier = Modifier.size(54.dp),
+                    shape = RoundedCornerShape(14.dp)
+                )
 
                 Spacer(modifier = Modifier.width(14.dp))
 

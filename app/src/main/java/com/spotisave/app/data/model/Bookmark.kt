@@ -51,7 +51,11 @@ data class Bookmark(
             put("trackTitle", trackTitle)
             put("artist", artist)
             put("trackUri", trackUri)
-            if (!coverUrl.isNullOrBlank()) put("coverUrl", coverUrl)
+            if (!coverUrl.isNullOrBlank()) {
+                put("coverUrl", coverUrl)
+                put("cover_url", coverUrl)
+                put("playlist_image", coverUrl)
+            }
             put("positionMs", positionMs)
             put("durationMs", durationMs)
             put("timestamp", timestamp)

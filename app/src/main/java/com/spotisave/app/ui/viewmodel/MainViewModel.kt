@@ -44,6 +44,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedTab = MutableStateFlow(0)
     val selectedTab: StateFlow<Int> = _selectedTab.asStateFlow()
 
+    // Playlist Filter State (persistiert in SharedPreferences)
+    private val prefs = application.getSharedPreferences("spotisave_prefs", Context.MODE_PRIVATE)
+    private val PREF_ONLY_PLAYLISTS = "pref_only_playlists"
+
+    private val _onlyPlaylistsFilter = MutableStateFlow(prefs.getBoolean(PREF_ONLY_PLAYLISTS, false))
+    val onlyPlaylistsFilter: StateFlow<Boolean> = _onlyPlaylistsFilter.asStateFlow()
+
+    fun setOnlyPlaylistsFilter(enabled: Boolean) {
+        _onlyPlaylistsFilter.value = enabled
+        prefs.edit().putBoolean(PREF_ONLY_PLAYLISTS, enabled).apply()
+    }
+
+    fun toggleOnlyPlaylistsFilter() {
+        setOnlyPlaylistsFilter(!_onlyPlaylistsFilter.value)
+    }
+
+    val filteredBookmarks: StateFlow<List<Bookmark>> = combine(
+        bookmarks,
+        _onlyPlaylistsFilter
+    ) { list, onlyPlaylists ->
+        if (onlyPlaylists) list.filter { it.isPlaylist } else list
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
     // Spotify PKCE OAuth State
     private val _isSpotifyLoggedIn = MutableStateFlow(authManager.isLoggedIn())
     val isSpotifyLoggedIn: StateFlow<Boolean> = _isSpotifyLoggedIn.asStateFlow()
@@ -141,7 +168,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             bookmarks.collect { list ->
-                if (list.any { it.isPlaylist && (it.contextTitle.isBlank() || it.contextTitle == "Spotify" || it.contextTitle == "Playlist") }) {
+                if (list.any { it.isPlaylist && ((it.contextTitle.isBlank() || it.contextTitle == "Spotify" || it.contextTitle == "Playlist") || it.coverUrl.isNullOrBlank()) }) {
                     resolveMissingPlaylistTitles()
                 }
             }
@@ -228,13 +255,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val currentBookmarks = bookmarks.value
                 for (bm in currentBookmarks) {
                     val uri = bm.contextUri
-                    if (!uri.isNullOrBlank() && uri.startsWith("spotify:playlist:") &&
-                        (bm.contextTitle.isBlank() || bm.contextTitle == "Spotify" || bm.contextTitle == "Playlist")
-                    ) {
-                        val plId = uri.removePrefix("spotify:playlist:")
-                        val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
-                        if (plInfo != null && plInfo.name.isNotBlank()) {
-                            repository.updateBookmarkContextTitle(bm.id, plInfo.name, plInfo.coverUrl)
+                    if (!uri.isNullOrBlank() && uri.startsWith("spotify:playlist:")) {
+                        val needsName = bm.contextTitle.isBlank() || bm.contextTitle == "Spotify" || bm.contextTitle == "Playlist"
+                        val needsCover = bm.coverUrl.isNullOrBlank()
+                        if (needsName || needsCover) {
+                            val plId = uri.removePrefix("spotify:playlist:")
+                            val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
+                            if (plInfo != null) {
+                                val title = if (plInfo.name.isNotBlank()) plInfo.name else bm.contextTitle
+                                val cover = plInfo.coverUrl ?: bm.coverUrl
+                                if (title != bm.contextTitle || cover != bm.coverUrl) {
+                                    repository.updateBookmarkContextTitle(bm.id, title, cover)
+                                }
+                            }
                         }
                     }
                 }

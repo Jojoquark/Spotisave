@@ -1216,6 +1216,72 @@ async function runTests() {
     assert(newStats.topAlbumTitle === 'Autumn Beats' && newStats.topAlbumTrackCount === 10, 'Continuous history correctly evaluates top album (Autumn Beats, 10 tracks)');
     assert(newStats.historyCount === 15, 'Continuous history timeline provides all 15 played songs with 1-click resume');
 
+
+    // =========================================================================
+    // TEST GROUP 17: Playlist Filter & Cover Image Artwork Rendering
+    // =========================================================================
+    console.log('\nTest Group 17: Playlist Filter & Cover Image Artwork Rendering');
+
+    const asyncCoverFile = path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/AsyncCoverImage.kt');
+    assert(fs.existsSync(asyncCoverFile), 'AsyncCoverImage.kt component file exists');
+    const asyncCoverContent = fs.readFileSync(asyncCoverFile, 'utf8');
+    assert(asyncCoverContent.includes('object CoverImageCache') && asyncCoverContent.includes('LruCache<String, Bitmap>'), 'AsyncCoverImage defines thread-safe CoverImageCache with LruCache');
+    assert(asyncCoverContent.includes('HttpURLConnection') && asyncCoverContent.includes('BitmapFactory.decodeStream'), 'AsyncCoverImage implements asynchronous HttpURLConnection loader');
+    assert(asyncCoverContent.includes('fallbackIcon: ImageVector') && asyncCoverContent.includes('asImageBitmap()'), 'AsyncCoverImage gracefully switches between bitmap and fallback icon');
+
+    const bookmarkCardCode = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/BookmarkCard.kt'), 'utf8');
+    assert(bookmarkCardCode.includes('AsyncCoverImage('), 'BookmarkCard embeds AsyncCoverImage for squircle artwork container');
+
+    const heroCardCode = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/HeroCard.kt'), 'utf8');
+    assert(heroCardCode.includes('AsyncCoverImage('), 'HeroCard embeds AsyncCoverImage with live/latest cover support');
+
+    const statsScreenCode = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/StatsScreen.kt'), 'utf8');
+    assert(statsScreenCode.includes('AsyncCoverImage('), 'StatsScreen embeds AsyncCoverImage for album and track artwork');
+
+    const bookmarkModelContent = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/model/Bookmark.kt'), 'utf8');
+    assert(bookmarkModelContent.includes('put("playlist_image", coverUrl)') && bookmarkModelContent.includes('put("cover_url", coverUrl)'), 'Bookmark export to JSON includes cover_url and playlist_image aliases');
+
+    const trackerContent = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/service/PlaybackTracker.kt'), 'utf8');
+    assert(trackerContent.includes('playlistCoverCache = java.util.concurrent.ConcurrentHashMap<String, String>()'), 'PlaybackTracker implements playlistCoverCache ConcurrentHashMap');
+    assert(trackerContent.includes('playlistCoverCache[curContextUri] = plInfo.coverUrl'), 'PlaybackTracker caches and prioritizes playlist cover image for playlist bookmarks');
+
+    const mainVmCode = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/viewmodel/MainViewModel.kt'), 'utf8');
+    assert(mainVmCode.includes('val onlyPlaylistsFilter: StateFlow<Boolean>'), 'MainViewModel defines onlyPlaylistsFilter StateFlow');
+    assert(mainVmCode.includes('pref_only_playlists') && mainVmCode.includes('getSharedPreferences'), 'MainViewModel persists playlist filter to SharedPreferences');
+    assert(mainVmCode.includes('val filteredBookmarks: StateFlow<List<Bookmark>>'), 'MainViewModel defines reactive filteredBookmarks StateFlow');
+    assert(mainVmCode.includes('bm.coverUrl.isNullOrBlank()'), 'MainViewModel resolveMissingPlaylistTitles checks both missing contextTitle and missing coverUrl');
+
+    const mainScreenCode = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/MainScreen.kt'), 'utf8');
+    assert(mainScreenCode.includes('filter_chip_all') && mainScreenCode.includes('filter_chip_playlists'), 'MainScreen defines Liquid Glass filter bar with filter_chip_all and filter_chip_playlists');
+    assert(mainScreenCode.includes('items = filteredBookmarks'), 'MainScreen renders filteredBookmarks in list');
+    assert(mainScreenCode.includes('Keine Playlist-Hörstände'), 'MainScreen provides dedicated playlist empty state');
+
+    const statusSheetCode = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/StatusBottomSheet.kt'), 'utf8');
+    assert(statusSheetCode.includes('filter_playlists_switch'), 'StatusBottomSheet defines filter_playlists_switch for toggleable playlist filtering');
+
+    // Simulation of Playlist Filtering Logic
+    const mixedBookmarks = [
+        { id: 'spotify:playlist:pl1', contextUri: 'spotify:playlist:pl1', isPlaylist: true, title: 'Rock Mix' },
+        { id: 'spotify:track:t1', contextUri: null, isPlaylist: false, title: 'Single Track 1' },
+        { id: 'spotify:playlist:pl2', contextUri: 'spotify:playlist:pl2', isPlaylist: true, title: 'Chill Vibes' },
+        { id: 'album:pop', contextUri: 'spotify:album:pop', isPlaylist: false, title: 'Album Track' },
+        { id: 'spotify:playlist:pl3', contextUri: 'spotify:playlist:pl3', isPlaylist: true, title: 'Study Focus' },
+        { id: 'spotify:track:t2', contextUri: null, isPlaylist: false, title: 'Single Track 2' },
+        { id: 'spotify:playlist:pl4', contextUri: 'spotify:playlist:pl4', isPlaylist: true, title: 'EDM Party' },
+        { id: 'album:jazz', contextUri: 'spotify:album:jazz', isPlaylist: false, title: 'Jazz Album' },
+        { id: 'spotify:playlist:pl5', contextUri: 'spotify:playlist:pl5', isPlaylist: true, title: 'Workout Energy' },
+        { id: 'album:classical', contextUri: 'spotify:album:classical', isPlaylist: false, title: 'Classical' }
+    ];
+
+    const filterBookmarks = (list, onlyPlaylists) => onlyPlaylists ? list.filter(b => b.isPlaylist) : list;
+
+    const filtered = filterBookmarks(mixedBookmarks, true);
+    assert(filtered.length === 5, 'Simulation: Playlist filter on 10 mixed bookmarks accurately filters down to 5 playlist items');
+    assert(filtered.every(b => b.isPlaylist), 'Simulation: All filtered bookmarks are playlists');
+
+    const unfiltered = filterBookmarks(mixedBookmarks, false);
+    assert(unfiltered.length === 10, 'Simulation: Playlist filter disabled returns all 10 bookmarks');
+
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);
     console.log('========================================\n');

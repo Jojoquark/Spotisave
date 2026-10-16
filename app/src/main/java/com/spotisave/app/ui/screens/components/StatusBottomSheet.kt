@@ -72,6 +72,8 @@ fun StatusBottomSheet(
     totalBookmarks: Int,
     activeSource: String,
     onToggleService: (Boolean) -> Unit,
+    onlyPlaylistsFilter: Boolean = false,
+    onToggleOnlyPlaylists: (Boolean) -> Unit = {},
     onExportJson: () -> String = { "[]" },
     onImportJson: (String, (Int) -> Unit) -> Unit = { _, _ -> },
     onDismissRequest: () -> Unit
@@ -286,7 +288,52 @@ fun StatusBottomSheet(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // 4. Datensicherung (Backup & Restore)
+            // 4. Ansichts-Filter (Nur Playlists)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(SurfaceCardElevated)
+                    .border(1.dp, HairlineBorder, RoundedCornerShape(16.dp))
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Nur Playlists anzeigen",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Blendet einzelne Tracks ohne verknüpfte Spotify-Playlist in der Hauptliste aus.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
+
+                    Switch(
+                        checked = onlyPlaylistsFilter,
+                        onCheckedChange = { onToggleOnlyPlaylists(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = CanvasBlack,
+                            checkedTrackColor = SpotifyGreen,
+                            uncheckedThumbColor = TextMuted,
+                            uncheckedTrackColor = SurfaceCard
+                        ),
+                        modifier = Modifier.testTag("filter_playlists_switch")
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 5. Datensicherung (Backup & Restore)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()

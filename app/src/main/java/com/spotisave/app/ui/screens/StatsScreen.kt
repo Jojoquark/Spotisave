@@ -56,6 +56,7 @@ import com.spotisave.app.data.stats.DayActivity
 import com.spotisave.app.data.stats.HistoryEntry
 import com.spotisave.app.data.stats.ListeningStats
 import com.spotisave.app.data.stats.TopTrackStat
+import com.spotisave.app.ui.screens.components.AsyncCoverImage
 import com.spotisave.app.ui.theme.AppleSystemGreen
 import com.spotisave.app.ui.theme.CanvasBlack
 import com.spotisave.app.ui.theme.HairlineBorder
@@ -411,22 +412,16 @@ private fun TopAlbumCard(album: AlbumStat) {
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Album Art Container
-                Box(
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCardElevated)
-                        .border(1.dp, HairlineBorder, RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Album,
-                        contentDescription = null,
-                        tint = Color(0xFFFF9F0A),
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
+                // Album Art Container (Apple HIG Liquid Glass Style)
+                AsyncCoverImage(
+                    coverUrl = album.coverUrl,
+                    fallbackIcon = Icons.Default.Album,
+                    iconTint = Color(0xFFFF9F0A),
+                    iconSize = 28.dp,
+                    contentDescription = album.title,
+                    modifier = Modifier.size(56.dp),
+                    shape = RoundedCornerShape(12.dp)
+                )
 
                 Spacer(modifier = Modifier.width(14.dp))
 
@@ -530,21 +525,16 @@ private fun TopSongsCard(
                             modifier = Modifier.width(26.dp)
                         )
 
-                        // Artwork icon
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(SurfaceCardElevated),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.MusicNote,
-                                contentDescription = null,
-                                tint = if (index == 0) SpotifyGreen else TextTertiary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        // Artwork image (Apple HIG Liquid Glass Style)
+                        AsyncCoverImage(
+                            coverUrl = song.coverUrl,
+                            fallbackIcon = Icons.Default.MusicNote,
+                            iconTint = if (index == 0) SpotifyGreen else TextTertiary,
+                            iconSize = 20.dp,
+                            contentDescription = song.title,
+                            modifier = Modifier.size(40.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        )
 
                         Spacer(modifier = Modifier.width(10.dp))
 

@@ -22,8 +22,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.text.style.TextAlign
+import com.spotisave.app.ui.theme.HairlineBorderSubtle
+import com.spotisave.app.ui.theme.LiquidGlassDefaults
+import com.spotisave.app.ui.theme.TextTertiary
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -71,7 +78,10 @@ fun MainScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val bookmarks by viewModel.bookmarks.collectAsState()
+    val filteredBookmarks by viewModel.filteredBookmarks.collectAsState()
+    val onlyPlaylistsFilter by viewModel.onlyPlaylistsFilter.collectAsState()
     val activePlayback by viewModel.activePlayback.collectAsState()
     val isServiceRunning by viewModel.isServiceRunning.collectAsState()
     val isNotificationGranted by viewModel.isNotificationListenerGranted.collectAsState()
@@ -211,25 +221,28 @@ fun MainScreen(
                         )
                     }
 
-                    // Abschnitts-Überschrift
+                    // Abschnitts-Überschrift & Apple HIG Liquid Glass Filter-Bar
                     item {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 12.dp, bottom = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(top = 12.dp, bottom = 4.dp)
                         ) {
-                            Text(
-                                text = "Gespeicherte Hörpositionen",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
-                            )
-
-                            if (bookmarks.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
-                                    text = "${bookmarks.size}",
+                                    text = "Gespeicherte Hörpositionen",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+
+                                val playlistCount = bookmarks.count { it.isPlaylist }
+                                Text(
+                                    text = if (onlyPlaylistsFilter) "$playlistCount Playlists" else "${bookmarks.size} Gespeichert",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = SpotifyGreen,
                                     fontWeight = FontWeight.Bold,
@@ -239,17 +252,165 @@ fun MainScreen(
                                         .padding(horizontal = 8.dp, vertical = 2.dp)
                                 )
                             }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Apple HIG Liquid Glass Segmented Filter Bar
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(SurfaceCardElevated)
+                                    .border(1.dp, HairlineBorderSubtle, RoundedCornerShape(12.dp))
+                                    .padding(3.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                val playlistCount = bookmarks.count { it.isPlaylist }
+
+                                // Segment 1: Alle
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(9.dp))
+                                        .background(
+                                            if (!onlyPlaylistsFilter) LiquidGlassDefaults.GlassSurface else androidx.compose.ui.graphics.Color.Transparent
+                                        )
+                                        .then(
+                                            if (!onlyPlaylistsFilter) Modifier.border(0.75.dp, LiquidGlassDefaults.SpecularRimSubtle, RoundedCornerShape(9.dp)) else Modifier
+                                        )
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            viewModel.setOnlyPlaylistsFilter(false)
+                                        }
+                                        .padding(vertical = 8.dp)
+                                        .testTag("filter_chip_all"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            text = "Alle",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = if (!onlyPlaylistsFilter) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (!onlyPlaylistsFilter) TextPrimary else TextSecondary
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "${bookmarks.size}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (!onlyPlaylistsFilter) SpotifyGreen else TextTertiary
+                                        )
+                                    }
+                                }
+
+                                // Segment 2: Nur Playlists
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(9.dp))
+                                        .background(
+                                            if (onlyPlaylistsFilter) LiquidGlassDefaults.GlassSurface else androidx.compose.ui.graphics.Color.Transparent
+                                        )
+                                        .then(
+                                            if (onlyPlaylistsFilter) Modifier.border(0.75.dp, LiquidGlassDefaults.SpecularRimSubtle, RoundedCornerShape(9.dp)) else Modifier
+                                        )
+                                        .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            viewModel.setOnlyPlaylistsFilter(true)
+                                        }
+                                        .padding(vertical = 8.dp)
+                                        .testTag("filter_chip_playlists"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.QueueMusic,
+                                            contentDescription = null,
+                                            tint = if (onlyPlaylistsFilter) SpotifyGreen else TextSecondary,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(
+                                            text = "Nur Playlists",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = if (onlyPlaylistsFilter) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (onlyPlaylistsFilter) SpotifyGreen else TextSecondary
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "$playlistCount",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (onlyPlaylistsFilter) SpotifyGreen else TextTertiary
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 
-                    // Liste aller gespeicherten Bookmarks
-                    if (bookmarks.isEmpty()) {
+                    // Liste aller bzw. gefilterten Bookmarks
+                    if (filteredBookmarks.isEmpty()) {
                         item {
-                            EmptyStateCard()
+                            if (onlyPlaylistsFilter && bookmarks.isNotEmpty()) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .background(LiquidGlassDefaults.GlassSurface)
+                                        .border(0.75.dp, LiquidGlassDefaults.SpecularRimSubtle, RoundedCornerShape(18.dp))
+                                        .padding(24.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.QueueMusic,
+                                            contentDescription = null,
+                                            tint = SpotifyGreen,
+                                            modifier = Modifier.size(36.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        Text(
+                                            text = "Keine Playlist-Hörstände",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextPrimary
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "Aktuell sind keine gespeicherten Stände aus einer Spotify-Playlist vorhanden.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextSecondary,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        TextButton(
+                                            onClick = { viewModel.setOnlyPlaylistsFilter(false) }
+                                        ) {
+                                            Text(
+                                                text = "Alle Hörstände anzeigen",
+                                                color = SpotifyGreen,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                EmptyStateCard()
+                            }
                         }
                     } else {
                         items(
-                            items = bookmarks,
+                            items = filteredBookmarks,
                             key = { it.id }
                         ) { bookmark ->
                             BookmarkCard(
@@ -331,6 +492,8 @@ fun MainScreen(
                 isNotificationListenerGranted = isNotificationGranted,
                 totalBookmarks = bookmarks.size,
                 activeSource = activePlayback?.source ?: "Bereit",
+                onlyPlaylistsFilter = onlyPlaylistsFilter,
+                onToggleOnlyPlaylists = { viewModel.setOnlyPlaylistsFilter(it) },
                 onToggleService = { enable ->
                     viewModel.toggleService(context, enable)
                 },

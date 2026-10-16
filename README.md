@@ -57,7 +57,7 @@ Die Web PWA bleibt im Repository als leichtgewichtiger Begleiter erhalten:
 
 ## Automatisierte Tests ausführen
 
-Zur Überprüfung von nativer Android-Architektur, Manifest, Gradle-Konfigurationen, deterministischer APK-Signierung, JSON Backup/Restore, Kotlin-Modellen, PKCE-Kryptografie, Spotify Web API Parsing, Resume-Payloads, StatisticsEngine (Lieblings-Album, Top-Songs, Historie), Playlist-Tracking, Apple HIG Liquid Glass, White Mode Kontrasten und nativer MediaSession-Simulation (311 Tests in 18 Testgruppen):
+Zur Überprüfung von nativer Android-Architektur, Manifest, Gradle-Konfigurationen, deterministischer APK-Signierung, JSON Backup/Restore, Kotlin-Modellen, PKCE-Kryptografie, Spotify Web API Parsing, Resume-Payloads, StatisticsEngine (Lieblings-Album, Top-Songs, Historie), Playlist-Tracking, Apple HIG Liquid Glass, White Mode Kontrasten und nativer MediaSession-Simulation (312 Tests in 18 Testgruppen):
 
 ```bash
 node test/verify.js

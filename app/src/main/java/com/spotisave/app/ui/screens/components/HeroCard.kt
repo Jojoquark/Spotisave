@@ -21,7 +21,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -75,11 +78,27 @@ fun HeroCard(
     val isLive = activePlayback != null && activePlayback.trackTitle.isNotBlank()
     val trackTitle = if (isLive) activePlayback!!.trackTitle else latestBookmark?.trackTitle ?: ""
     val artist = if (isLive) activePlayback!!.artist else latestBookmark?.artist ?: ""
-    val album = if (isLive) activePlayback!!.album else latestBookmark?.contextTitle ?: "Spotify"
     val positionMs = if (isLive) activePlayback!!.positionMs else latestBookmark?.positionMs ?: 0L
     val durationMs = if (isLive) activePlayback!!.durationMs else latestBookmark?.durationMs ?: 0L
     val isPlaying = activePlayback?.isPlaying == true
     val trackUri = if (isLive) activePlayback!!.trackUri else latestBookmark?.trackUri ?: ""
+
+    val contextUri = if (isLive) activePlayback?.contextUri else latestBookmark?.contextUri
+    val rawContextTitle = if (isLive) activePlayback?.contextTitle else latestBookmark?.contextTitle
+    val album = if (isLive) activePlayback!!.album else latestBookmark?.contextTitle ?: "Spotify"
+
+    val isPlaylist = contextUri?.startsWith("spotify:playlist:") == true ||
+        latestBookmark?.isPlaylist == true
+    val isAlbum = contextUri?.startsWith("spotify:album:") == true ||
+        latestBookmark?.isAlbum == true
+
+    val displayContextTitle = when {
+        !rawContextTitle.isNullOrBlank() && rawContextTitle != "Spotify" -> rawContextTitle
+        latestBookmark != null && latestBookmark.displayContextTitle.isNotBlank() -> latestBookmark.displayContextTitle
+        isPlaylist -> "Playlist"
+        album.isNotBlank() && album != "Spotify" -> album
+        else -> ""
+    }
 
     val progressFraction = if (durationMs > 0) {
         (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
@@ -139,19 +158,57 @@ fun HeroCard(
                     )
                 }
 
-                // Album / Playlist Badge
-                if (album.isNotBlank() && album != "Spotify") {
-                    Text(
-                        text = album,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                // Playlist / Album Badge
+                if (isPlaylist) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(SurfaceCardElevated)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SpotifyGreen.copy(alpha = 0.15f))
+                            .border(1.dp, SpotifyGreen.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
                             .padding(horizontal = 8.dp, vertical = 3.dp)
-                    )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QueueMusic,
+                            contentDescription = null,
+                            tint = SpotifyGreen,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (displayContextTitle.isNotBlank() && displayContextTitle != "Playlist") "PLAYLIST • $displayContextTitle" else "PLAYLIST",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SpotifyGreen,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                } else if (displayContextTitle.isNotBlank() && displayContextTitle != "Spotify") {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SurfaceCardElevated)
+                            .border(1.dp, HairlineBorder, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isAlbum) Icons.Default.Album else Icons.Default.MusicNote,
+                            contentDescription = null,
+                            tint = if (isAlbum) Color(0xFF64D2FF) else TextTertiary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isAlbum) "ALBUM • $displayContextTitle" else displayContextTitle,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isAlbum) Color(0xFF64D2FF) else TextTertiary,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
 
@@ -177,6 +234,52 @@ fun HeroCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+
+            // Explizite Herkunftszeile für Playlist / Album
+            if (isPlaylist && displayContextTitle.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.QueueMusic,
+                        contentDescription = null,
+                        tint = SpotifyGreen,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (displayContextTitle != "Playlist") "Playlist: $displayContextTitle" else "Aus gespeicherter Spotify Playlist",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SpotifyGreen,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            } else if (album.isNotBlank() && album != "Spotify" && !isPlaylist) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Album,
+                        contentDescription = null,
+                        tint = TextTertiary,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = "Album: $album",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -225,12 +328,14 @@ fun HeroCard(
                             trackTitle = trackTitle,
                             artist = artist,
                             trackUri = trackUri,
+                            contextUri = contextUri ?: latestBookmark.contextUri,
+                            contextTitle = if (displayContextTitle.isNotBlank()) displayContextTitle else latestBookmark.contextTitle,
                             positionMs = positionMs,
-                            durationMs = if (durationMs > 0) durationMs else latestBookmark.durationMs,
-                            contextTitle = if (album.isNotBlank() && album != "Spotify") album else latestBookmark.contextTitle
+                            durationMs = if (durationMs > 0) durationMs else latestBookmark.durationMs
                         ) ?: Bookmark(
-                            id = if (album.isNotBlank() && album != "Spotify") "album:${album.lowercase().replace(" ", "_")}" else trackUri,
-                            contextTitle = if (album.isNotBlank() && album != "Spotify") album else "Spotify",
+                            id = contextUri ?: if (album.isNotBlank() && album != "Spotify") "album:${album.lowercase().replace(" ", "_")}" else trackUri,
+                            contextUri = contextUri,
+                            contextTitle = if (displayContextTitle.isNotBlank()) displayContextTitle else "Spotify",
                             trackTitle = trackTitle,
                             artist = artist,
                             trackUri = trackUri,
@@ -239,8 +344,9 @@ fun HeroCard(
                         )
                     } else {
                         latestBookmark ?: Bookmark(
-                            id = trackUri,
-                            contextTitle = album,
+                            id = contextUri ?: trackUri,
+                            contextUri = contextUri,
+                            contextTitle = if (displayContextTitle.isNotBlank()) displayContextTitle else "Spotify",
                             trackTitle = trackTitle,
                             artist = artist,
                             trackUri = trackUri,

@@ -8,6 +8,7 @@ data class PlaybackStateModel(
     val trackTitle: String,
     val artist: String,
     val album: String = "",
+    val contextTitle: String? = null,
     val contextUri: String? = null,
     val coverUrl: String? = null,
     val positionMs: Long = 0L,
@@ -16,6 +17,20 @@ data class PlaybackStateModel(
     val timestamp: Long = System.currentTimeMillis(),
     val source: String = "Broadcast" // "Broadcast" oder "MediaSession"
 ) {
+    val isPlaylist: Boolean
+        get() = contextUri?.startsWith("spotify:playlist:") == true
+
+    val isAlbum: Boolean
+        get() = contextUri?.startsWith("spotify:album:") == true
+
+    val displayContextTitle: String
+        get() = when {
+            !contextTitle.isNullOrBlank() && contextTitle != "Spotify" -> contextTitle
+            isPlaylist -> "Playlist"
+            album.isNotBlank() && album != "Spotify" -> album
+            else -> ""
+        }
+
     val progressFraction: Float
         get() = if (durationMs > 0) {
             (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)

@@ -58,6 +58,21 @@ class BookmarkRepository private constructor(context: Context) {
         }
     }
 
+    fun updateBookmarkContextTitle(idOrContextUri: String, contextTitle: String, coverUrl: String? = null) {
+        scope.launch {
+            val all = dbHelper.getAllBookmarks()
+            val existing = all.find { it.id == idOrContextUri || it.contextUri == idOrContextUri }
+            if (existing != null) {
+                val updated = existing.copy(
+                    contextTitle = contextTitle,
+                    coverUrl = coverUrl ?: existing.coverUrl
+                )
+                dbHelper.insertOrUpdate(updated)
+                _bookmarks.value = dbHelper.getAllBookmarks()
+            }
+        }
+    }
+
     fun clearAll() {
         scope.launch {
             dbHelper.clearAll()

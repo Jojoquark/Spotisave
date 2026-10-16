@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -89,9 +90,13 @@ fun BookmarkCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (bookmark.id.startsWith("album:")) Icons.Default.Album else Icons.Default.MusicNote,
+                        imageVector = when {
+                            bookmark.isPlaylist -> Icons.Default.QueueMusic
+                            bookmark.isAlbum -> Icons.Default.Album
+                            else -> Icons.Default.MusicNote
+                        },
                         contentDescription = null,
-                        tint = SpotifyGreen,
+                        tint = if (bookmark.isPlaylist) SpotifyGreen else if (bookmark.isAlbum) androidx.compose.ui.graphics.Color(0xFF64D2FF) else TextSecondary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -100,13 +105,55 @@ fun BookmarkCard(
 
                 // Linker Bereich: Titel, Interpret, Playlist
                 Column(modifier = Modifier.weight(1f)) {
-                    // Kontext/Playlist falls abweichend
-                    if (bookmark.contextTitle.isNotBlank() && bookmark.contextTitle != "Spotify") {
+                    // Expliziter Playlist- / Album-Header
+                    if (bookmark.isPlaylist) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(bottom = 3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.QueueMusic,
+                                contentDescription = null,
+                                tint = SpotifyGreen,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Playlist: ${if (bookmark.contextTitle.isNotBlank() && bookmark.contextTitle != "Spotify") bookmark.contextTitle else "Gespeicherte Playlist"}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SpotifyGreen,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    } else if (bookmark.isAlbum && bookmark.contextTitle.isNotBlank() && bookmark.contextTitle != "Spotify") {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(bottom = 3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Album,
+                                contentDescription = null,
+                                tint = androidx.compose.ui.graphics.Color(0xFF64D2FF),
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Album: ${bookmark.contextTitle}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = androidx.compose.ui.graphics.Color(0xFF64D2FF),
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    } else if (bookmark.contextTitle.isNotBlank() && bookmark.contextTitle != "Spotify") {
                         Text(
                             text = bookmark.contextTitle,
                             style = MaterialTheme.typography.labelSmall,
-                            color = SpotifyGreen,
-                            fontWeight = FontWeight.SemiBold,
+                            color = TextTertiary,
+                            fontWeight = FontWeight.Medium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )

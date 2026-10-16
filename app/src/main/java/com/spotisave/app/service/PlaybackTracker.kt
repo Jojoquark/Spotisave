@@ -28,11 +28,15 @@ object PlaybackTracker {
     @Volatile private var lastArtist: String = ""
     @Volatile private var lastAlbum: String = ""
     @Volatile private var lastContextUri: String? = null
+    @Volatile private var lastContextTitle: String? = null
     @Volatile private var lastCoverUrl: String? = null
     @Volatile private var lastDurationMs: Long = 0L
     @Volatile private var lastPositionMs: Long = 0L
     @Volatile private var lastIsPlaying: Boolean = false
     @Volatile private var lastSaveTimeMs: Long = 0L
+
+    // In-Memory Cache für Playlist-Namen (verhindert redundante API-Aufrufe)
+    private val playlistNameCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     fun onMetadataChanged(
         context: Context,
@@ -42,6 +46,7 @@ object PlaybackTracker {
         album: String?,
         durationMs: Long,
         contextUri: String? = null,
+        contextTitle: String? = null,
         coverUrl: String? = null,
         source: String = "Broadcast"
     ) {
@@ -65,6 +70,16 @@ object PlaybackTracker {
         lastAlbum = album ?: "Spotify"
         if (!contextUri.isNullOrBlank()) {
             lastContextUri = contextUri
+            val cached = playlistNameCache[contextUri]
+            if (!cached.isNullOrBlank()) {
+                lastContextTitle = cached
+            }
+        }
+        if (!contextTitle.isNullOrBlank() && contextTitle != "Spotify") {
+            lastContextTitle = contextTitle
+            if (!lastContextUri.isNullOrBlank()) {
+                playlistNameCache[lastContextUri!!] = contextTitle
+            }
         }
         if (!coverUrl.isNullOrBlank()) {
             lastCoverUrl = coverUrl
@@ -75,7 +90,12 @@ object PlaybackTracker {
 
         updateRepositoryState(context, source)
 
-        if (lastContextUri.isNullOrBlank()) {
+        // Web-API Enrichment: wenn contextUri fehlt ODER wenn contextUri eine Playlist ist, deren Name noch fehlt
+        val needsPlaylistName = !lastContextUri.isNullOrBlank() &&
+            lastContextUri!!.startsWith("spotify:playlist:") &&
+            (lastContextTitle.isNullOrBlank() || lastContextTitle == "Spotify" || lastContextTitle == "Playlist")
+
+        if (lastContextUri.isNullOrBlank() || needsPlaylistName) {
             enrichFromSpotifyApi(context)
         }
     }
@@ -117,6 +137,7 @@ object PlaybackTracker {
         durationMs: Long,
         isPlaying: Boolean,
         contextUri: String? = null,
+        contextTitle: String? = null,
         coverUrl: String? = null
     ) {
         onMetadataChanged(
@@ -127,6 +148,7 @@ object PlaybackTracker {
             album = album,
             durationMs = durationMs,
             contextUri = contextUri,
+            contextTitle = contextTitle,
             coverUrl = coverUrl,
             source = "MediaSession"
         )
@@ -159,6 +181,7 @@ object PlaybackTracker {
                 trackTitle = lastTrackTitle,
                 artist = lastArtist,
                 album = lastAlbum,
+                contextTitle = lastContextTitle,
                 contextUri = lastContextUri,
                 coverUrl = lastCoverUrl,
                 positionMs = lastPositionMs,
@@ -186,10 +209,22 @@ object PlaybackTracker {
             else -> lastTrackUri
         }
 
+        val isPlaylist = !lastContextUri.isNullOrBlank() && lastContextUri!!.startsWith("spotify:playlist:")
+        val isAlbum = !lastContextUri.isNullOrBlank() && lastContextUri!!.startsWith("spotify:album:")
+
+        val resolvedContextTitle = when {
+            !lastContextTitle.isNullOrBlank() && lastContextTitle != "Spotify" -> lastContextTitle!!
+            !lastContextUri.isNullOrBlank() && playlistNameCache.containsKey(lastContextUri) -> playlistNameCache[lastContextUri]!!
+            isPlaylist -> "Playlist"
+            lastAlbum.isNotBlank() && lastAlbum != "Spotify" -> lastAlbum
+            isAlbum -> "Album"
+            else -> "Spotify"
+        }
+
         val bookmark = Bookmark(
             id = bookmarkId,
             contextUri = lastContextUri,
-            contextTitle = if (lastAlbum.isNotBlank() && lastAlbum != "Spotify") lastAlbum else "Spotify",
+            contextTitle = resolvedContextTitle,
             trackTitle = lastTrackTitle,
             artist = lastArtist,
             trackUri = lastTrackUri,
@@ -219,6 +254,31 @@ object PlaybackTracker {
         trackerScope.launch {
             try {
                 val apiClient = SpotifyApiClient.getInstance(context)
+
+                // 1. Wenn lastContextUri bereits bekannt ist und eine Playlist ist:
+                val curContextUri = lastContextUri
+                if (!curContextUri.isNullOrBlank() && curContextUri.startsWith("spotify:playlist:")) {
+                    val plId = curContextUri.removePrefix("spotify:playlist:")
+                    val cached = playlistNameCache[curContextUri]
+                    if (!cached.isNullOrBlank()) {
+                        lastContextTitle = cached
+                    } else {
+                        val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
+                        if (plInfo != null) {
+                            playlistNameCache[curContextUri] = plInfo.name
+                            lastContextTitle = plInfo.name
+                            if (plInfo.coverUrl != null && lastCoverUrl.isNullOrBlank()) {
+                                lastCoverUrl = plInfo.coverUrl
+                            }
+                            val repository = BookmarkRepository.initialize(context)
+                            repository.updateBookmarkContextTitle(curContextUri, plInfo.name, plInfo.coverUrl)
+                            updateRepositoryState(context, "WebApiEnrich")
+                            flushBookmark(context, "WebApiEnrich")
+                        }
+                    }
+                }
+
+                // 2. Nun Live-Status von /me/player abfragen (erfasst contextUri falls im Broadcast gefehlt)
                 val stateResult = apiClient.getNowPlaying()
                 val state = stateResult.getOrNull()
                 if (state != null && state.track != null) {
@@ -232,11 +292,19 @@ object PlaybackTracker {
                     }
                     if (!apiContextUri.isNullOrBlank() && apiContextUri.startsWith("spotify:playlist:")) {
                         val plId = apiContextUri.removePrefix("spotify:playlist:")
-                        val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
-                        if (plInfo != null) {
-                            lastAlbum = plInfo.name
-                            if (plInfo.coverUrl != null && lastCoverUrl.isNullOrBlank()) {
-                                lastCoverUrl = plInfo.coverUrl
+                        val cached = playlistNameCache[apiContextUri]
+                        if (!cached.isNullOrBlank()) {
+                            lastContextTitle = cached
+                        } else {
+                            val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
+                            if (plInfo != null) {
+                                playlistNameCache[apiContextUri] = plInfo.name
+                                lastContextTitle = plInfo.name
+                                if (plInfo.coverUrl != null && lastCoverUrl.isNullOrBlank()) {
+                                    lastCoverUrl = plInfo.coverUrl
+                                }
+                                val repository = BookmarkRepository.initialize(context)
+                                repository.updateBookmarkContextTitle(apiContextUri, plInfo.name, plInfo.coverUrl)
                             }
                         }
                     }

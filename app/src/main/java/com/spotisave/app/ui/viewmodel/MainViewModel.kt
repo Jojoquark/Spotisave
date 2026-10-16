@@ -52,20 +52,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _authStatusMessage = MutableStateFlow<String?>(null)
     val authStatusMessage: StateFlow<String?> = _authStatusMessage.asStateFlow()
 
-    // Statistiken & Roast-Index
-    private val _roastIndex = MutableStateFlow(0)
-    val roastIndex: StateFlow<Int> = _roastIndex.asStateFlow()
-
     val listeningStats: StateFlow<ListeningStats> = combine(
         bookmarks,
-        activePlayback,
-        _roastIndex
-    ) { bmList, playback, rIdx ->
-        StatisticsEngine.calculateStats(bmList, playback, rIdx)
+        activePlayback
+    ) { bmList, playback ->
+        StatisticsEngine.calculateStats(bmList, playback)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = StatisticsEngine.calculateStats(emptyList(), null, 0)
+        initialValue = StatisticsEngine.calculateStats(emptyList(), null)
     )
 
     private val _isNotificationListenerGranted = MutableStateFlow(
@@ -101,9 +96,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repository.deleteBookmark(bookmark.id)
     }
 
-    fun cycleRoast() {
-        _roastIndex.value += 1
-    }
 
     fun setClientId(clientId: String) {
         _spotifyClientId.value = clientId.trim()
@@ -127,6 +119,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    init {
+        viewModelScope.launch {
+            bookmarks.collect { list ->
+                if (list.any { it.isPlaylist && (it.contextTitle.isBlank() || it.contextTitle == "Spotify" || it.contextTitle == "Playlist") }) {
+                    resolveMissingPlaylistTitles()
+                }
+            }
+        }
+    }
+
     fun handleAuthCode(code: String) {
         viewModelScope.launch {
             _authStatusMessage.value = "Token-Austausch läuft..."
@@ -135,6 +137,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _isSpotifyLoggedIn.value = true
                 _authStatusMessage.value = "Erfolgreich mit Spotify verbunden!"
                 refreshNowPlayingFromApi()
+                resolveMissingPlaylistTitles()
             } else {
                 _authStatusMessage.value = "Fehler: ${result.exceptionOrNull()?.message}"
             }
@@ -160,6 +163,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (state != null && state.track != null) {
                     val track = state.track
                     val app = getApplication<Application>()
+                    var resolvedContextTitle: String? = null
+
+                    if (!state.contextUri.isNullOrBlank() && state.contextUri.startsWith("spotify:playlist:")) {
+                        val plId = state.contextUri.removePrefix("spotify:playlist:")
+                        val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
+                        if (plInfo != null) {
+                            resolvedContextTitle = plInfo.name
+                        }
+                    }
+
                     PlaybackTracker.onMetadataChanged(
                         context = app,
                         trackUri = track.uri,
@@ -168,6 +181,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         album = track.albumName,
                         durationMs = track.durationMs,
                         contextUri = state.contextUri,
+                        contextTitle = resolvedContextTitle,
                         coverUrl = track.coverUrl,
                         source = "SpotifyWebApi"
                     )
@@ -180,6 +194,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: Exception) {
                 Log.d("MainViewModel", "API Fetch Now Playing Fehler: ${e.message}")
+            }
+        }
+    }
+
+    fun resolveMissingPlaylistTitles() {
+        if (!authManager.isLoggedIn()) return
+        viewModelScope.launch {
+            try {
+                val currentBookmarks = bookmarks.value
+                for (bm in currentBookmarks) {
+                    val uri = bm.contextUri
+                    if (!uri.isNullOrBlank() && uri.startsWith("spotify:playlist:") &&
+                        (bm.contextTitle.isBlank() || bm.contextTitle == "Spotify" || bm.contextTitle == "Playlist")
+                    ) {
+                        val plId = uri.removePrefix("spotify:playlist:")
+                        val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
+                        if (plInfo != null && plInfo.name.isNotBlank()) {
+                            repository.updateBookmarkContextTitle(bm.id, plInfo.name, plInfo.coverUrl)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.d("MainViewModel", "Fehler bei resolveMissingPlaylistTitles: ${e.message}")
             }
         }
     }

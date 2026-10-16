@@ -89,4 +89,52 @@ class BookmarkModelTest {
         assertEquals("spotify:track:track2", track2.trackUri)
         assertEquals(12_000L, track2.positionMs)
     }
+
+    @Test
+    fun testPlaylistAndAlbumHelpers() {
+        val playlistBm = Bookmark(
+            id = "spotify:playlist:top50",
+            contextUri = "spotify:playlist:top50",
+            contextTitle = "Top 50 - Deutschland",
+            trackTitle = "Komet",
+            artist = "Udo Lindenberg & Apache 207",
+            trackUri = "spotify:track:komet",
+            positionMs = 40_000L,
+            durationMs = 167_000L
+        )
+        assertEquals(true, playlistBm.isPlaylist)
+        assertEquals(false, playlistBm.isAlbum)
+        assertEquals("Top 50 - Deutschland", playlistBm.displayContextTitle)
+
+        val albumBm = Bookmark(
+            id = "album:future_nostalgia",
+            contextUri = "spotify:album:future_nostalgia",
+            contextTitle = "Future Nostalgia",
+            trackTitle = "Levitating",
+            artist = "Dua Lipa",
+            trackUri = "spotify:track:levitating",
+            positionMs = 30_000L,
+            durationMs = 203_000L
+        )
+        assertEquals(false, albumBm.isPlaylist)
+        assertEquals(true, albumBm.isAlbum)
+        assertEquals("Future Nostalgia", albumBm.displayContextTitle)
+
+        // Test fallback when contextTitle is generic Spotify
+        val genericPlaylistBm = playlistBm.copy(contextTitle = "Spotify")
+        assertEquals("Playlist", genericPlaylistBm.displayContextTitle)
+
+        // PlaybackStateModel helpers
+        val liveState = PlaybackStateModel(
+            trackUri = "spotify:track:123",
+            trackTitle = "Song",
+            artist = "Artist",
+            contextUri = "spotify:playlist:summer_vibes",
+            contextTitle = "Summer Vibes",
+            album = "Summer Vibes 2024"
+        )
+        assertEquals(true, liveState.isPlaylist)
+        assertEquals(false, liveState.isAlbum)
+        assertEquals("Summer Vibes", liveState.displayContextTitle)
+    }
 }

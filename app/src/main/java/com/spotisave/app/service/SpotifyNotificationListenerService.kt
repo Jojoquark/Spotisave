@@ -37,6 +37,28 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
         var currentMediaController: MediaController? = null
             private set
 
+        @Volatile
+        private var lastNotificationContextTitle: String? = null
+
+        /**
+         * Bereinigt Text aus Notification-Extras um Playlist- oder Albumnamen zu extrahieren.
+         */
+        fun extractContextTitleFromText(raw: String?): String? {
+            if (raw.isNullOrBlank()) return null
+            val cleaned = raw.trim()
+            val lower = cleaned.lowercase()
+            if (lower == "spotify" || lower == "musik" || lower == "music") return null
+
+            val playlistPrefixes = listOf("playlist • ", "playlist: ", "playlist - ", "aus playlist ", "album • ", "album: ")
+            for (prefix in playlistPrefixes) {
+                if (lower.startsWith(prefix)) {
+                    val title = cleaned.substring(prefix.length).trim()
+                    if (title.isNotBlank()) return title
+                }
+            }
+            return cleaned
+        }
+
         /**
          * Prüft, ob der Nutzer die Notification-Listener-Berechtigung in den Android-Einstellungen erteilt hat.
          */
@@ -96,6 +118,17 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
         val notification = sbn.notification ?: return
         val extras = notification.extras ?: return
 
+        // Extrahiere potentiellen Playlist-Namen aus Notification-Extras
+        val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
+        val summaryText = extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT)?.toString()
+        val infoText = extras.getCharSequence(Notification.EXTRA_INFO_TEXT)?.toString()
+        val candidateTitle = extractContextTitleFromText(subText)
+            ?: extractContextTitleFromText(summaryText)
+            ?: extractContextTitleFromText(infoText)
+        if (!candidateTitle.isNullOrBlank()) {
+            lastNotificationContextTitle = candidateTitle
+        }
+
         // 1. Suche MediaSession Token
         val token: MediaSession.Token? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             extras.getParcelable(Notification.EXTRA_MEDIA_SESSION, MediaSession.Token::class.java)
@@ -110,7 +143,6 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             // Fallback auf Titel & Text aus Notification Extras
             val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
             val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
-            val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
 
             if (!title.isNullOrBlank()) {
                 PlaybackTracker.onMetadataChanged(
@@ -120,6 +152,7 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
                     artist = text ?: "Spotify",
                     album = subText ?: "Spotify",
                     durationMs = 0L,
+                    contextTitle = candidateTitle,
                     source = "NotificationFallback"
                 )
             }
@@ -200,6 +233,13 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
         val contextUri = controller.extras?.getString("context_uri")
             ?: controller.playbackState?.extras?.getString("context_uri")
 
+        val contextTitle = controller.extras?.getString("context_title")
+            ?: controller.extras?.getString("context_name")
+            ?: controller.extras?.getString("playlist_name")
+            ?: controller.extras?.getString("queue_title")
+            ?: controller.playbackState?.extras?.getString("context_title")
+            ?: lastNotificationContextTitle
+
         val playbackState = controller.playbackState
         val position = computeCurrentPosition(playbackState, duration)
         val isPlaying = playbackState?.state == PlaybackState.STATE_PLAYING
@@ -214,6 +254,7 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             durationMs = duration,
             isPlaying = isPlaying,
             contextUri = contextUri,
+            contextTitle = contextTitle,
             coverUrl = coverUrl
         )
     }
@@ -237,6 +278,13 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
         val contextUri = controller.extras?.getString("context_uri")
             ?: state.extras?.getString("context_uri")
 
+        val contextTitle = controller.extras?.getString("context_title")
+            ?: controller.extras?.getString("context_name")
+            ?: controller.extras?.getString("playlist_name")
+            ?: controller.extras?.getString("queue_title")
+            ?: state.extras?.getString("context_title")
+            ?: lastNotificationContextTitle
+
         val position = computeCurrentPosition(state, duration)
 
         PlaybackTracker.onMediaSessionUpdate(
@@ -249,6 +297,7 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             durationMs = duration,
             isPlaying = isPlaying,
             contextUri = contextUri,
+            contextTitle = contextTitle,
             coverUrl = coverUrl
         )
     }

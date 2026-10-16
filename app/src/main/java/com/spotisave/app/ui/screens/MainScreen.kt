@@ -256,9 +256,6 @@ fun MainScreen(
                     stats = listeningStats,
                     onResumePlaylist = { bm ->
                         viewModel.resumeBookmark(context, bm)
-                    },
-                    onCycleRoast = {
-                        viewModel.cycleRoast()
                     }
                 )
             }

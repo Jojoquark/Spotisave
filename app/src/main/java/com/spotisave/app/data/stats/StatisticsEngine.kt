@@ -6,6 +6,42 @@ import com.spotisave.app.ui.util.TimeFormatter
 import java.util.Calendar
 import java.util.Locale
 
+data class AlbumStat(
+    val title: String,
+    val artist: String,
+    val coverUrl: String?,
+    val playCount: Int,
+    val totalTimeMs: Long,
+    val formattedTotalTime: String
+)
+
+data class TopTrackStat(
+    val trackUri: String,
+    val title: String,
+    val artist: String,
+    val contextTitle: String,
+    val coverUrl: String?,
+    val playCount: Int,
+    val durationMs: Long,
+    val totalTimeMs: Long,
+    val formattedDuration: String,
+    val formattedTotalTime: String,
+    val bookmark: Bookmark
+)
+
+data class HistoryEntry(
+    val id: String,
+    val trackTitle: String,
+    val artist: String,
+    val contextTitle: String,
+    val durationMs: Long,
+    val formattedDuration: String,
+    val timestamp: Long,
+    val relativeTime: String,
+    val coverUrl: String?,
+    val bookmark: Bookmark
+)
+
 data class ArtistStat(
     val name: String,
     val count: Int,
@@ -23,6 +59,9 @@ data class ListeningStats(
     val formattedTotalTime: String,
     val totalTrackedPlaylists: Int,
     val totalBookmarksCount: Int,
+    val totalTracksCount: Int,
+    val averageTrackDurationMs: Long,
+    val formattedAvgTrackDuration: String,
     val topBookmark: Bookmark?,
     val topPlaylistTitle: String?,
     val topPlaylistCover: String?,
@@ -31,6 +70,9 @@ data class ListeningStats(
     val topPlaylistContextUri: String?,
     val topPlaylistProgressMs: Long,
     val topPlaylistDurationMs: Long,
+    val topAlbum: AlbumStat?,
+    val topSongs: List<TopTrackStat>,
+    val history: List<HistoryEntry>,
     val topArtists: List<ArtistStat>,
     val weeklyActivity: List<DayActivity>,
     val peakDayName: String,
@@ -38,24 +80,20 @@ data class ListeningStats(
     val listeningPersona: String,
     val peakHourRange: String,
     val completionRatePercent: Int,
-    val completionRateLabel: String,
-    val boostScore: Int,
-    val boostLevel: String,
-    val boostMessage: String,
-    val currentRoast: String,
-    val allRoasts: List<String>
+    val completionRateLabel: String
 )
 
 object StatisticsEngine {
 
     /**
-     * Berechnet alle Statistiken, Top-Interpreten, Wochentagsverteilung,
-     * den energetischen /boost Score, Hör-Persönlichkeit, Durchhör-Quote und /grill-me Roasts.
+     * Berechnet alle Statistiken: Gesamthörzeit, Track-Anzahl, Durchschnittsdauer,
+     * Lieblings-Album, Meistgehörte Songs (Top-Songs mit 1-Click Resume),
+     * Genaue Historie (mit 'vor X Min.'), Lieblings-Künstler Ranking,
+     * Wochentagsverteilung, Hör-Persönlichkeit und Durchhör-Quote.
      */
     fun calculateStats(
         bookmarks: List<Bookmark>,
-        activePlayback: PlaybackStateModel? = null,
-        roastIndex: Int = 0
+        activePlayback: PlaybackStateModel? = null
     ): ListeningStats {
         // 1. Gesamte Hörzeit akkumulieren ohne Doppelzählung des aktiven Playbacks
         var totalMs = 0L
@@ -86,6 +124,13 @@ object StatisticsEngine {
         }.toSet()
         val totalPlaylistsCount = uniquePlaylists.size
 
+        // Track-Anzahl & Durchschnittliche Track-Dauer
+        val uniqueTracks = bookmarks.map { if (it.trackUri.isNotBlank()) it.trackUri else it.trackTitle }.toSet()
+        val totalTracksCount = uniqueTracks.size
+        val validDurations = bookmarks.filter { it.durationMs > 0L }.map { it.durationMs }
+        val avgTrackDurationMs = if (validDurations.isNotEmpty()) validDurations.average().toLong() else 0L
+        val formattedAvgDuration = if (avgTrackDurationMs > 0L) TimeFormatter.formatTime(avgTrackDurationMs) else "0:00"
+
         // 3. Top-Playlist & Bookmark (nach höchstem Fortschritt)
         val topBm = bookmarks.maxByOrNull { it.positionMs } ?: bookmarks.firstOrNull()
         val topTitle = topBm?.contextTitle?.takeIf { it != "Spotify" } ?: topBm?.trackTitle
@@ -96,7 +141,16 @@ object StatisticsEngine {
         val topProgressMs = topBm?.positionMs ?: 0L
         val topDurationMs = topBm?.durationMs ?: 0L
 
-        // 4. Top-Interpreten Ranking (mit Splitting bei Kollaborationen/Duos)
+        // 4. Lieblings-Album (Top / most listened album)
+        val topAlbum = calculateTopAlbum(bookmarks)
+
+        // 5. Meistgehörte Songs / Top-Songs Ranking (mit 1-Click Resume)
+        val topSongs = calculateTopSongs(bookmarks)
+
+        // 6. Genaue Historie (Chronologische Listening History mit 'vor X Min.')
+        val history = calculateHistory(bookmarks)
+
+        // 7. Top-Interpreten Ranking (mit Splitting bei Kollaborationen/Duos)
         val artistCounts = mutableMapOf<String, Int>()
         for (b in bookmarks) {
             val raw = b.artist.trim()
@@ -119,41 +173,27 @@ object StatisticsEngine {
                 )
             }
 
-        // 5. Wöchentliche Aktivität (Mo bis So) & Aktivster Tag
+        // 8. Wöchentliche Aktivität (Mo bis So) & Aktivster Tag
         val weeklyActivity = calculateWeeklyActivity(bookmarks)
         val peakDayIdx = weeklyActivity.indices.maxByOrNull { weeklyActivity[it].minutes } ?: 0
         val peakDay = weeklyActivity[peakDayIdx]
         val peakDayName = if (peakDay.minutes > 0) peakDay.dayName else "Noch offen"
         val peakDayMins = peakDay.minutes
 
-        // 6. Hör-Persönlichkeit (Persona) & Primäre Tageszeit
+        // 9. Hör-Persönlichkeit (Persona) & Primäre Tageszeit
         val (listeningPersona, peakHourRange) = calculatePersonaAndHours(bookmarks)
 
-        // 7. Durchhör-Quote (Completion Rate)
+        // 10. Durchhör-Quote (Completion Rate)
         val (completionRatePercent, completionRateLabel) = calculateCompletionRate(bookmarks)
-
-        // 8. /boost Berechnung (Energie, Fokus & Flow)
-        val (boostScore, boostLevel, boostMsg) = calculateBoost(bookmarks, totalMs)
-
-        // 9. /grill-me Roasts
-        val allRoasts = generateRoasts(
-            bookmarks = bookmarks,
-            totalMs = totalMs,
-            topArtist = sortedArtists.firstOrNull()?.name,
-            topPlaylist = topTitle,
-            completionRate = completionRatePercent,
-            persona = listeningPersona
-        )
-        val safeIndex = if (allRoasts.isNotEmpty()) (roastIndex % allRoasts.size + allRoasts.size) % allRoasts.size else 0
-        val currentRoast = allRoasts.getOrElse(safeIndex) {
-            "Deine Hörgewohnheiten sind so unauffällig, dass selbst unser Algorithmus gähnt. 😴"
-        }
 
         return ListeningStats(
             totalListeningTimeMs = totalMs,
             formattedTotalTime = formattedTime,
             totalTrackedPlaylists = totalPlaylistsCount,
             totalBookmarksCount = bookmarks.size,
+            totalTracksCount = totalTracksCount,
+            averageTrackDurationMs = avgTrackDurationMs,
+            formattedAvgTrackDuration = formattedAvgDuration,
             topBookmark = topBm,
             topPlaylistTitle = topTitle,
             topPlaylistCover = topCover,
@@ -162,6 +202,9 @@ object StatisticsEngine {
             topPlaylistContextUri = topContextUri,
             topPlaylistProgressMs = topProgressMs,
             topPlaylistDurationMs = topDurationMs,
+            topAlbum = topAlbum,
+            topSongs = topSongs,
+            history = history,
             topArtists = sortedArtists,
             weeklyActivity = weeklyActivity,
             peakDayName = peakDayName,
@@ -169,13 +212,117 @@ object StatisticsEngine {
             listeningPersona = listeningPersona,
             peakHourRange = peakHourRange,
             completionRatePercent = completionRatePercent,
-            completionRateLabel = completionRateLabel,
-            boostScore = boostScore,
-            boostLevel = boostLevel,
-            boostMessage = boostMsg,
-            currentRoast = currentRoast,
-            allRoasts = allRoasts
+            completionRateLabel = completionRateLabel
         )
+    }
+
+    /**
+     * Berechnet das Lieblings-Album (nach akkumulierter Hörzeit und Titelanzahl).
+     */
+    fun calculateTopAlbum(bookmarks: List<Bookmark>): AlbumStat? {
+        if (bookmarks.isEmpty()) return null
+
+        val albumBookmarks = bookmarks.filter {
+            it.contextUri?.startsWith("spotify:album:") == true ||
+            it.id.startsWith("album:") ||
+            (it.contextTitle.isNotBlank() && it.contextTitle != "Spotify" && it.contextUri?.startsWith("spotify:playlist:") != true)
+        }
+        val candidates = if (albumBookmarks.isNotEmpty()) albumBookmarks else bookmarks.filter { it.contextTitle.isNotBlank() && it.contextTitle != "Spotify" }.ifEmpty { bookmarks }
+
+        val grouped = candidates.groupBy {
+            if (it.contextTitle.isNotBlank() && it.contextTitle != "Spotify") it.contextTitle
+            else "Spotify Album"
+        }
+
+        val topEntry = grouped.maxByOrNull { entry ->
+            entry.value.sumOf { it.positionMs }
+        } ?: return null
+
+        val totalTime = topEntry.value.sumOf { it.positionMs }
+        val topArtist = topEntry.value.groupBy { it.artist }.maxByOrNull { it.value.size }?.key ?: "Spotify"
+        val cover = topEntry.value.firstOrNull { !it.coverUrl.isNullOrBlank() }?.coverUrl
+
+        return AlbumStat(
+            title = topEntry.key,
+            artist = topArtist,
+            coverUrl = cover,
+            playCount = topEntry.value.size,
+            totalTimeMs = totalTime,
+            formattedTotalTime = TimeFormatter.formatHoursAndMinutes(totalTime)
+        )
+    }
+
+    /**
+     * Berechnet die meistgehörten Songs mit Ranking, Spieldauer und 1-Click Resume Bookmark.
+     */
+    fun calculateTopSongs(bookmarks: List<Bookmark>, limit: Int = 5): List<TopTrackStat> {
+        if (bookmarks.isEmpty()) return emptyList()
+
+        val grouped = bookmarks.groupBy {
+            if (it.trackUri.isNotBlank()) it.trackUri else "${it.trackTitle} - ${it.artist}"
+        }
+
+        return grouped.map { (_, bms) ->
+            val bestBm = bms.maxByOrNull { it.positionMs } ?: bms.first()
+            val playCount = bms.size
+            val totalTimeMs = bms.sumOf { it.positionMs }
+            val durationMs = bestBm.durationMs
+            TopTrackStat(
+                trackUri = bestBm.trackUri,
+                title = bestBm.trackTitle,
+                artist = bestBm.artist,
+                contextTitle = if (bestBm.contextTitle.isNotBlank() && bestBm.contextTitle != "Spotify") bestBm.contextTitle else "Single",
+                coverUrl = bestBm.coverUrl,
+                playCount = playCount,
+                durationMs = durationMs,
+                totalTimeMs = totalTimeMs,
+                formattedDuration = TimeFormatter.formatTime(durationMs),
+                formattedTotalTime = TimeFormatter.formatHoursAndMinutes(totalTimeMs),
+                bookmark = bestBm
+            )
+        }
+        .sortedWith(compareByDescending<TopTrackStat> { it.totalTimeMs }.thenByDescending { it.playCount })
+        .take(limit)
+    }
+
+    /**
+     * Erstellt eine chronologische Listening History mit relativen Zeitangaben ('vor X Min.', 'Gestern').
+     */
+    fun calculateHistory(bookmarks: List<Bookmark>, limit: Int = 10, now: Long = System.currentTimeMillis()): List<HistoryEntry> {
+        return bookmarks
+            .sortedByDescending { it.timestamp }
+            .take(limit)
+            .map { bm ->
+                HistoryEntry(
+                    id = bm.id,
+                    trackTitle = bm.trackTitle,
+                    artist = bm.artist,
+                    contextTitle = if (bm.contextTitle.isNotBlank() && bm.contextTitle != "Spotify") bm.contextTitle else "Spotify",
+                    durationMs = bm.durationMs,
+                    formattedDuration = TimeFormatter.formatTime(bm.durationMs),
+                    timestamp = bm.timestamp,
+                    relativeTime = formatRelativeTime(bm.timestamp, now),
+                    coverUrl = bm.coverUrl,
+                    bookmark = bm
+                )
+            }
+    }
+
+    /**
+     * Formatiert Zeitstempel in relative deutsche Zeitangaben nach Apple HIG Richtlinien.
+     */
+    fun formatRelativeTime(timestamp: Long, now: Long = System.currentTimeMillis()): String {
+        val diff = (now - timestamp).coerceAtLeast(0L)
+        val minutes = diff / 60_000L
+        val hours = diff / 3_600_000L
+        val days = diff / 86_400_000L
+        return when {
+            minutes < 1L -> "Gerade eben"
+            minutes < 60L -> "vor $minutes Min."
+            hours < 24L -> "vor $hours Std."
+            days == 1L -> "Gestern"
+            else -> "vor $days Tagen"
+        }
     }
 
     /**
@@ -276,100 +423,5 @@ object StatisticsEngine {
             else -> "Track-Skipper ⚡️"
         }
         return Pair(avg, label)
-    }
-
-    /**
-     * Berechnet den /boost Flow-Score (65% bis 99%) und motivierende Highlights.
-     */
-    fun calculateBoost(bookmarks: List<Bookmark>, totalMs: Long): Triple<Int, String, String> {
-        if (bookmarks.isEmpty()) {
-            return Triple(
-                72,
-                "⚡️ Warm-up Phase",
-                "Starte Spotify und baue dein Momentum auf! Jeder Track steigert deinen Fokus."
-            )
-        }
-
-        // Berechne Score anhand von Vielfalt und Hörzeit
-        val baseScore = 75
-        val timeBonus = ((totalMs / 1800000L) * 3).toInt().coerceAtMost(15) // +3 pro 30 Min
-        val countBonus = (bookmarks.size * 2).coerceAtMost(10)
-        val score = (baseScore + timeBonus + countBonus).coerceIn(68, 99)
-
-        val (level, message) = when {
-            score >= 90 -> Pair(
-                "⚡️ Peak Flow - Höchste Energie",
-                "Deine Playlists halten dich im ultimativen Flow! Der Rhythmus synchronisiert perfekt mit deiner Spitzenleistung."
-            )
-            score >= 80 -> Pair(
-                "🚀 Turbo Focus - Volle Produktivität",
-                "Hervorragender Fokus! Deine Musik minimiert Ablenkungen und hält deinen Antrieb auf Maximalstufe."
-            )
-            score >= 70 -> Pair(
-                "🔥 Deep Zone - Stetiger Drive",
-                "Gleichmäßiger Beat und stabiles Tempo. Du bist eingegroovt und machst kontinuierlich Fortschritte."
-            )
-            else -> Pair(
-                "🎧 Good Vibes - Soundcheck",
-                "Gute Basis! Lass die Tracks weiterlaufen, um in die High-Energy Zone zu beschleunigen."
-            )
-        }
-
-        return Triple(score, level, message)
-    }
-
-    /**
-     * Generiert witzige, treffsichere /grill-me Roasts basierend auf den Hörerdaten.
-     */
-    fun generateRoasts(
-        bookmarks: List<Bookmark>,
-        totalMs: Long,
-        topArtist: String?,
-        topPlaylist: String?,
-        completionRate: Int = 50,
-        persona: String? = null
-    ): List<String> {
-        val roasts = mutableListOf<String>()
-
-        if (bookmarks.isEmpty()) {
-            roasts.add("Noch keine Hörpositionen gespeichert? Dein Spotify ist so leer wie der Kühlschrank eines Studenten am Monatsende. 🌭")
-            roasts.add("Hast du Angst vor Musik oder weißt du einfach nicht, wie man 'Play' drückt? Wir warten... 👀")
-            return roasts
-        }
-
-        if (!topArtist.isNullOrBlank()) {
-            roasts.add("Du hast auffällig viele Titel von '$topArtist' gespeichert. Weiß '$topArtist' eigentlich schon von seiner neuen unbezahlten Vollzeit-Begleitung? 💀")
-            roasts.add("Dein Top-Interpret ist '$topArtist'. Suchst du Musik oder eine emotionale Ersatztherapie auf Krankenkassenkosten? 🛋️")
-        }
-
-        if (!topPlaylist.isNullOrBlank()) {
-            roasts.add("Du klammerst dich an '$topPlaylist' wie an eine Decke beim Horrorfilm. Hast du Angst vor neuen Songs oder ist das dein Überlebens-Soundtrack? 🔥")
-        }
-
-        val totalHours = totalMs / 3600000L
-        if (totalHours >= 2L) {
-            roasts.add("Über $totalHours Stunden reine Lesezeichen-Hörzeit! Deine In-Ears sind wahrscheinlich schon anatomisch mit deinem Trommelfell verschmolzen. 🎧")
-        }
-
-        if (bookmarks.size in 1..2) {
-            roasts.add("Ganze ${bookmarks.size} gespeicherte Hörpositionen... Dein Musikhorizont hat in etwa den Bewegungsradius eines Goldfischs im Einmachglas. 🐟")
-        } else if (bookmarks.size >= 8) {
-            roasts.add("Du hast ${bookmarks.size} verschiedene Playlists angefangen und keine beendet. Musikalische Bindungsängste im Endstadium! 🏃‍♂️")
-        }
-
-        if (completionRate < 35) {
-            roasts.add("Deine Durchhör-Quote liegt bei mickrigen $completionRate%. Du hast die musikalische Aufmerksamkeitsspanne einer Eintagsfliege auf Red Bull! ⚡️")
-        }
-
-        if (persona != null && persona.contains("Nachteule")) {
-            roasts.add("Du pumpst mitten in der Nacht Musik in deine Ohren. Arbeitest du an einem geheimen Startup oder versuchst du nur, deine Schlaflosigkeit zu vertonen? 🦉")
-        }
-
-        // Kreative allgemeine Roasts
-        roasts.add("Du pausierst Songs mitten im Drop und wunderst dich, warum dein Tag chaotisch verläuft. ⚡️")
-        roasts.add("Deine Playlist heißt wahrscheinlich 'Fokus', aber nach 45 Sekunden wechselst du dreimal den Track. Wir sehen alles. 👀")
-        roasts.add("Dieser Mix aus Genres schreit förmlich nach innerem Konflikt. Ein DJ würde bei diesem Übergang weinend den Raum verlassen. 💀")
-
-        return roasts
     }
 }

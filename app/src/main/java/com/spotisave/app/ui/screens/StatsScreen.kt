@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,19 +16,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Equalizer
-import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.QueueMusic
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -38,24 +39,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.spotisave.app.data.model.Bookmark
+import com.spotisave.app.data.stats.AlbumStat
 import com.spotisave.app.data.stats.ArtistStat
 import com.spotisave.app.data.stats.DayActivity
+import com.spotisave.app.data.stats.HistoryEntry
 import com.spotisave.app.data.stats.ListeningStats
+import com.spotisave.app.data.stats.TopTrackStat
 import com.spotisave.app.ui.theme.AppleSystemGreen
 import com.spotisave.app.ui.theme.CanvasBlack
 import com.spotisave.app.ui.theme.HairlineBorder
 import com.spotisave.app.ui.theme.HairlineBorderSubtle
 import com.spotisave.app.ui.theme.SpotifyGreen
-import com.spotisave.app.ui.theme.StatusError
 import com.spotisave.app.ui.theme.SurfaceCard
 import com.spotisave.app.ui.theme.SurfaceCardElevated
-import com.spotisave.app.ui.theme.TextMuted
 import com.spotisave.app.ui.theme.TextPrimary
 import com.spotisave.app.ui.theme.TextSecondary
 import com.spotisave.app.ui.theme.TextTertiary
@@ -63,15 +64,15 @@ import com.spotisave.app.ui.util.TimeFormatter
 
 /**
  * Statistiken & Insights Dashboard.
- * Zeigt Gesamthörzeit, Track-Anzahl, Top-Playlist, Top-Interpreten,
- * Wöchentliche Aktivitäts-Balken, Hör-Persönlichkeit, Durchhör-Quote,
- * sowie die /boost und /grill-me Features.
+ * Zeigt Gesamthörzeit, Track-Anzahl, Durchschnittsdauer,
+ * Lieblings-Album, Meistgehörte Songs mit 1-Click Resume,
+ * chronologische Historie mit relativen Zeitstempeln,
+ * Lieblings-Künstler, Wochentagsverteilung, Hör-Persönlichkeit und Durchhör-Quote.
  */
 @Composable
 fun StatsScreen(
     stats: ListeningStats,
     onResumePlaylist: (Bookmark) -> Unit,
-    onCycleRoast: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -97,7 +98,7 @@ fun StatsScreen(
             }
         }
 
-        // 1. KPI-Karten (2 Spalten: Hörzeit & Playlists)
+        // 1. KPI-Grid (Zeile 1: Hörzeit & Tracks)
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -106,41 +107,74 @@ fun StatsScreen(
                 KpiCard(
                     title = "Gesamte Hörzeit",
                     value = stats.formattedTotalTime,
-                    subtitle = "über alle Lesezeichen",
+                    subtitle = "akkumulierte Zeit",
                     icon = Icons.Default.Schedule,
                     iconTint = SpotifyGreen,
                     modifier = Modifier.weight(1f)
                 )
 
                 KpiCard(
-                    title = "Playlists",
-                    value = "${stats.totalTrackedPlaylists}",
-                    subtitle = if (stats.totalBookmarksCount > 0) "${stats.totalBookmarksCount} Lesezeichen" else "aktive Stationen",
-                    icon = Icons.Default.QueueMusic,
+                    title = "Track-Anzahl",
+                    value = "${stats.totalTracksCount} Titel",
+                    subtitle = if (stats.totalBookmarksCount > 0) "${stats.totalBookmarksCount} Lesezeichen" else "gespeicherte Songs",
+                    icon = Icons.Default.MusicNote,
                     iconTint = AppleSystemGreen,
                     modifier = Modifier.weight(1f)
                 )
             }
         }
 
-        // 2. /boost Energy & Flow Card
+        // 2. KPI-Grid (Zeile 2: Ø Dauer & Playlists)
         item {
-            BoostCard(
-                score = stats.boostScore,
-                level = stats.boostLevel,
-                message = stats.boostMessage
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                KpiCard(
+                    title = "Ø Track-Dauer",
+                    value = stats.formattedAvgTrackDuration,
+                    subtitle = "Durchschnitt pro Song",
+                    icon = Icons.Default.Timer,
+                    iconTint = Color(0xFF64D2FF),
+                    modifier = Modifier.weight(1f)
+                )
+
+                KpiCard(
+                    title = "Playlists & Alben",
+                    value = "${stats.totalTrackedPlaylists}",
+                    subtitle = "aktive Stationen",
+                    icon = Icons.Default.QueueMusic,
+                    iconTint = Color(0xFFFF9F0A),
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
 
-        // 3. /grill-me Roast My Taste Card
-        item {
-            GrillMeCard(
-                roast = stats.currentRoast,
-                onNextRoast = onCycleRoast
-            )
+        // 3. Lieblings-Album (Top / most listened album)
+        if (stats.topAlbum != null) {
+            item {
+                TopAlbumCard(album = stats.topAlbum)
+            }
         }
 
-        // 4. Hör-Persönlichkeit & Fokus Insights
+        // 4. Meistgehörte Songs / Top-Songs Ranking (mit 1-Click Resume)
+        if (stats.topSongs.isNotEmpty()) {
+            item {
+                TopSongsCard(
+                    topSongs = stats.topSongs,
+                    onResume = onResumePlaylist
+                )
+            }
+        }
+
+        // 5. Lieblings-Künstler Ranking
+        if (stats.topArtists.isNotEmpty()) {
+            item {
+                TopArtistsCard(artists = stats.topArtists)
+            }
+        }
+
+        // 6. Hör-Persönlichkeit & Fokus Insights
         item {
             InsightsPersonaCard(
                 persona = stats.listeningPersona,
@@ -152,12 +186,12 @@ fun StatsScreen(
             )
         }
 
-        // 5. Wöchentliche Aktivität (Balkendiagramm Mo-So)
+        // 7. Wöchentliche Aktivität (Balkendiagramm Mo-So)
         item {
             WeeklyActivityCard(activities = stats.weeklyActivity)
         }
 
-        // 6. Top Playlist mit Fortschritt & 1-Click Resume
+        // 8. Top Playlist mit Fortschritt & 1-Click Resume
         if (!stats.topPlaylistTitle.isNullOrBlank()) {
             item {
                 TopPlaylistCard(
@@ -180,10 +214,13 @@ fun StatsScreen(
             }
         }
 
-        // 7. Top-Interpreten Ranking
-        if (stats.topArtists.isNotEmpty()) {
+        // 9. Genaue Historie (Chronologische Listening History)
+        if (stats.history.isNotEmpty()) {
             item {
-                TopArtistsCard(artists = stats.topArtists)
+                HistoryCard(
+                    history = stats.history,
+                    onResume = onResumePlaylist
+                )
             }
         }
     }
@@ -227,7 +264,7 @@ private fun KpiCard(
             Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = value,
-                fontSize = 20.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
@@ -242,139 +279,39 @@ private fun KpiCard(
 }
 
 @Composable
-private fun BoostCard(
-    score: Int,
-    level: String,
-    message: String
-) {
+private fun TopAlbumCard(album: AlbumStat) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        Color(0xFF1E2818),
-                        SurfaceCard
-                    )
-                )
-            )
-            .border(1.dp, Color(0x331DB954), RoundedCornerShape(20.dp))
+            .background(SurfaceCard)
+            .border(1.dp, HairlineBorder, RoundedCornerShape(20.dp))
             .padding(18.dp)
     ) {
         Column {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(28.dp)
                             .clip(CircleShape)
-                            .background(SpotifyGreen.copy(alpha = 0.2f)),
+                            .background(SurfaceCardElevated),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Bolt,
+                            imageVector = Icons.Default.Album,
                             contentDescription = null,
-                            tint = SpotifyGreen,
-                            modifier = Modifier.size(20.dp)
+                            tint = Color(0xFFFF9F0A),
+                            modifier = Modifier.size(16.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "/boost Flow-Index",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary
-                        )
-                        Text(
-                            text = level,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = SpotifyGreen
-                        )
-                    }
-                }
-
-                // Großer Score Gauge
-                Text(
-                    text = "$score%",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Black,
-                    color = SpotifyGreen
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            LinearProgressIndicator(
-                progress = (score.toFloat() / 100f).coerceIn(0f, 1f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = SpotifyGreen,
-                trackColor = SurfaceCardElevated
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = message,
-                fontSize = 12.sp,
-                lineHeight = 17.sp,
-                color = TextSecondary
-            )
-        }
-    }
-}
-
-@Composable
-private fun GrillMeCard(
-    roast: String,
-    onNextRoast: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        Color(0xFF2A1414),
-                        SurfaceCard
-                    )
-                )
-            )
-            .border(1.dp, Color(0x44FF453A), RoundedCornerShape(20.dp))
-            .padding(18.dp)
-    ) {
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(StatusError.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocalFireDepartment,
-                            contentDescription = null,
-                            tint = StatusError,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "/grill-me Roast",
+                        text = "Lieblings-Album",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
@@ -383,45 +320,334 @@ private fun GrillMeCard(
 
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(8.dp))
                         .background(SurfaceCardElevated)
-                        .clickable { onNextRoast() }
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Neuer Roast",
-                            tint = StatusError,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Grill mich! 🔥",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = StatusError
-                        )
-                    }
+                    Text(
+                        text = "${album.playCount} Tracks",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFF9F0A)
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0x33000000))
-                    .border(0.5.dp, HairlineBorderSubtle, RoundedCornerShape(12.dp))
-                    .padding(12.dp)
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                // Album Art Container
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceCardElevated)
+                        .border(1.dp, HairlineBorder, RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Album,
+                        contentDescription = null,
+                        tint = Color(0xFFFF9F0A),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(14.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = album.title,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        maxLines = 1
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = album.artist,
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        maxLines = 1
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "${album.formattedTotalTime} Gesamthörzeit",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = SpotifyGreen
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopSongsCard(
+    topSongs: List<TopTrackStat>,
+    onResume: (Bookmark) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(SurfaceCard)
+            .border(1.dp, HairlineBorder, RoundedCornerShape(20.dp))
+            .padding(18.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(SurfaceCardElevated),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.TrendingUp,
+                            contentDescription = null,
+                            tint = SpotifyGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Meistgehörte Songs",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                }
+
                 Text(
-                    text = "\"$roast\"",
-                    fontSize = 13.sp,
-                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    lineHeight = 18.sp,
-                    color = TextPrimary
+                    text = "Top ${topSongs.size}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextTertiary
                 )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                topSongs.forEachIndexed { index, song ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Rank Badge
+                        Text(
+                            text = "#${index + 1}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (index == 0) SpotifyGreen else TextSecondary,
+                            modifier = Modifier.width(26.dp)
+                        )
+
+                        // Artwork icon
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(SurfaceCardElevated),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MusicNote,
+                                contentDescription = null,
+                                tint = if (index == 0) SpotifyGreen else TextTertiary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        // Song Details
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = song.title,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary,
+                                maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.height(1.dp))
+                            Text(
+                                text = "${song.artist} • ${song.contextTitle}",
+                                fontSize = 11.sp,
+                                color = TextSecondary,
+                                maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "${song.formattedTotalTime} gehört • Dauer ${song.formattedDuration}",
+                                fontSize = 10.sp,
+                                color = SpotifyGreen
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // 1-Click Resume Button (Apple HIG 44pt Touch Target)
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(SurfaceCardElevated)
+                                .clickable { onResume(song.bookmark) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Wiedergeben",
+                                tint = SpotifyGreen,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryCard(
+    history: List<HistoryEntry>,
+    onResume: (Bookmark) -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(SurfaceCard)
+            .border(1.dp, HairlineBorder, RoundedCornerShape(20.dp))
+            .padding(18.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(SurfaceCardElevated),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = null,
+                            tint = Color(0xFF64D2FF),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Genaue Historie",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                }
+
+                Text(
+                    text = "Zuletzt gehört",
+                    fontSize = 11.sp,
+                    color = TextTertiary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                history.take(8).forEach { item ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(SurfaceCardElevated)
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = item.relativeTime,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = SpotifyGreen
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (item.bookmark.isPlaylist) {
+                                        Icon(
+                                            imageVector = Icons.Default.QueueMusic,
+                                            contentDescription = null,
+                                            tint = SpotifyGreen,
+                                            modifier = Modifier.size(11.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                    }
+                                    Text(
+                                        text = if (item.bookmark.isPlaylist && item.contextTitle.isNotBlank() && item.contextTitle != "Spotify") "Playlist: ${item.contextTitle}" else item.contextTitle,
+                                        fontSize = 10.sp,
+                                        color = if (item.bookmark.isPlaylist) SpotifyGreen else TextTertiary,
+                                        fontWeight = if (item.bookmark.isPlaylist) FontWeight.SemiBold else FontWeight.Normal,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = item.trackTitle,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = "${item.artist} (${item.formattedDuration})",
+                                fontSize = 11.sp,
+                                color = TextSecondary,
+                                maxLines = 1
+                            )
+                        }
+
+                        // 44dp 1-Click Fortfahren Button
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(SurfaceCardElevated)
+                                .clickable { onResume(item.bookmark) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Wiedergeben",
+                                tint = TextPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -768,12 +994,51 @@ private fun TopArtistsCard(artists: List<ArtistStat>) {
             .padding(18.dp)
     ) {
         Column {
-            Text(
-                text = "Top-Interpreten",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(SurfaceCardElevated),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = Color(0xFFFFD60A),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Lieblings-Künstler",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                }
+
+                if (artists.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SurfaceCardElevated)
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = "👑 ${artists.first().name}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SpotifyGreen
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -787,7 +1052,7 @@ private fun TopArtistsCard(artists: List<ArtistStat>) {
                             text = "#${index + 1}",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = SpotifyGreen,
+                            color = if (index == 0) SpotifyGreen else TextSecondary,
                             modifier = Modifier.width(26.dp)
                         )
 
@@ -799,7 +1064,7 @@ private fun TopArtistsCard(artists: List<ArtistStat>) {
                                 Text(
                                     text = artist.name,
                                     fontSize = 13.sp,
-                                    fontWeight = FontWeight.Medium,
+                                    fontWeight = if (index == 0) FontWeight.Bold else FontWeight.Medium,
                                     color = TextPrimary,
                                     maxLines = 1
                                 )
@@ -816,7 +1081,7 @@ private fun TopArtistsCard(artists: List<ArtistStat>) {
                                     .fillMaxWidth()
                                     .height(4.dp)
                                     .clip(RoundedCornerShape(2.dp)),
-                                color = SpotifyGreen,
+                                color = if (index == 0) SpotifyGreen else AppleSystemGreen,
                                 trackColor = SurfaceCardElevated
                             )
                         }

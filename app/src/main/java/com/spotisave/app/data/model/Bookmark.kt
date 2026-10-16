@@ -18,6 +18,20 @@ data class Bookmark(
     val timestamp: Long = System.currentTimeMillis(), // Zeitstempel der letzten Erfassung
     val source: String = "Spotify"          // "Broadcast" | "MediaSession" | "Manuell"
 ) {
+    val isPlaylist: Boolean
+        get() = id.startsWith("spotify:playlist:") || contextUri?.startsWith("spotify:playlist:") == true
+
+    val isAlbum: Boolean
+        get() = id.startsWith("album:") || contextUri?.startsWith("spotify:album:") == true
+
+    val displayContextTitle: String
+        get() = when {
+            contextTitle.isNotBlank() && contextTitle != "Spotify" -> contextTitle
+            isPlaylist -> "Playlist"
+            isAlbum -> "Album"
+            else -> ""
+        }
+
     /**
      * Berechnet den relativen Fortschritt (0.0f bis 1.0f) für Progress-Bars.
      */

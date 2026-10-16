@@ -793,9 +793,9 @@ async function runTests() {
     assert(ciWorkflowYml.includes('*.apk'), 'CI workflow uses glob pattern *.apk for artifact upload robustness');
 
     // ----------------------------------------------------
-    // TEST 14: Spotify Web API, PKCE OAuth, Statistics Dashboard, /boost & /grill-me
+    // TEST 14: Spotify Web API, PKCE OAuth, Statistics Dashboard (Lieblings-Album, Top-Songs, Historie)
     // ----------------------------------------------------
-    console.log('\nTest Group 14: Spotify Web API, PKCE OAuth, Statistics Dashboard, /boost & /grill-me');
+    console.log('\nTest Group 14: Spotify Web API, PKCE OAuth, Statistics Dashboard (Lieblings-Album, Top-Songs, Historie)');
 
     // 1. AndroidManifest Network & PKCE Callback
     assert(manifest.includes('android.permission.INTERNET'), 'AndroidManifest declares android.permission.INTERNET for Web API');
@@ -853,8 +853,10 @@ async function runTests() {
     assert(statsEngineKt.includes('calculateWeeklyActivity'), 'StatisticsEngine implements calculateWeeklyActivity for 7-day distribution');
     assert(statsEngineKt.includes('calculatePersonaAndHours'), 'StatisticsEngine implements calculatePersonaAndHours for listening personas');
     assert(statsEngineKt.includes('calculateCompletionRate'), 'StatisticsEngine implements calculateCompletionRate for completion metrics');
-    assert(statsEngineKt.includes('calculateBoost'), 'StatisticsEngine implements calculateBoost');
-    assert(statsEngineKt.includes('generateRoasts'), 'StatisticsEngine implements generateRoasts for /grill-me');
+    assert(statsEngineKt.includes('calculateTopAlbum'), 'StatisticsEngine implements calculateTopAlbum for Lieblings-Album');
+    assert(statsEngineKt.includes('calculateTopSongs'), 'StatisticsEngine implements calculateTopSongs with 1-Click Resume');
+    assert(statsEngineKt.includes('calculateHistory') && statsEngineKt.includes('formatRelativeTime'), 'StatisticsEngine implements calculateHistory and formatRelativeTime');
+    assert(!statsEngineKt.includes('calculateBoost') && !statsEngineKt.includes('generateRoasts'), 'StatisticsEngine removes /boost and /grill-me logic');
 
     // Node statistics simulation
     const mockBmList = [
@@ -894,28 +896,41 @@ async function runTests() {
     assert(simulatePersona(23) === 'Nachteule 🦉', 'Listening persona accurately identifies late night listeners');
     assert(simulatePersona(8) === 'Morgenmensch 🌅', 'Listening persona accurately identifies morning listeners');
 
-    // 5. /boost Score Engine Simulation
-    function simulateBoost(bookmarks, totalMs) {
-        const baseScore = 75;
-        const timeBonus = Math.min(Math.floor((totalMs / 1800000) * 3), 15);
-        const countBonus = Math.min(bookmarks.length * 2, 10);
-        return Math.min(Math.max(baseScore + timeBonus + countBonus, 68), 99);
-    }
-    const computedBoostScore = simulateBoost(mockBmList, totalDurationMs);
-    assert(computedBoostScore >= 68 && computedBoostScore <= 99, `Boost score (${computedBoostScore}%) computes cleanly within [68, 99]% range`);
-
-    // 6. /grill-me Roast Generator Simulation
-    function simulateRoasts(bookmarks, topArtist) {
-        const roasts = [];
-        if (topArtist) {
-            roasts.push(`Du hast auffällig viele Titel von '${topArtist}' gespeichert. Weiß '${topArtist}' eigentlich schon von seiner neuen Begleitung? 💀`);
+    // 5. Lieblings-Album Simulation
+    function simulateTopAlbum(bookmarks) {
+        if (!bookmarks.length) return null;
+        const grouped = {};
+        for (const b of bookmarks) {
+            const key = b.contextTitle || 'Spotify Album';
+            if (!grouped[key]) grouped[key] = { title: key, artist: b.artist, totalMs: 0, count: 0 };
+            grouped[key].totalMs += b.positionMs;
+            grouped[key].count++;
         }
-        roasts.push('Du pausierst Songs mitten im Drop und wunderst dich, warum dein Tag chaotisch verläuft. ⚡️');
-        return roasts;
+        return Object.values(grouped).sort((a, b) => b.totalMs - a.totalMs)[0];
     }
-    const generatedRoasts = simulateRoasts(mockBmList, 'Hans Zimmer');
-    assert(generatedRoasts.length >= 2, 'Grill-Me generates multiple witty German roasts');
-    assert(generatedRoasts[0].includes('Hans Zimmer'), 'Grill-Me dynamically incorporates top artist into roast commentary');
+    const topAlbumSim = simulateTopAlbum(mockBmList);
+    assert(topAlbumSim && topAlbumSim.title === 'Deep Work' && topAlbumSim.totalMs === 450000, 'Lieblings-Album correctly identifies most listened album (Deep Work, 450,000 ms)');
+
+    // 6. Top-Songs Ranking & Relative Time Simulation
+    function simulateTopSongs(bookmarks) {
+        return [...bookmarks].sort((a, b) => b.positionMs - a.positionMs);
+    }
+    const topSongsSim = simulateTopSongs(mockBmList);
+    assert(topSongsSim[0].id === '1' && topSongsSim[0].positionMs === 300000, 'Top-Songs ranking correctly orders tracks by listening duration');
+
+    function simulateRelativeTime(diffMs) {
+        const minutes = Math.floor(diffMs / 60000);
+        const hours = Math.floor(diffMs / 3600000);
+        const days = Math.floor(diffMs / 86400000);
+        if (minutes < 1) return 'Gerade eben';
+        if (minutes < 60) return `vor ${minutes} Min.`;
+        if (hours < 24) return `vor ${hours} Std.`;
+        if (days === 1) return 'Gestern';
+        return `vor ${days} Tagen`;
+    }
+    assert(simulateRelativeTime(5 * 60000) === 'vor 5 Min.', 'formatRelativeTime computes recent minutes accurately');
+    assert(simulateRelativeTime(3 * 3600000) === 'vor 3 Std.', 'formatRelativeTime computes elapsed hours accurately');
+    assert(simulateRelativeTime(86400000) === 'Gestern', 'formatRelativeTime identifies yesterday accurately');
 
     // 7. Apple-style Bottom Navigation Bar & Screens
     const bottomBarKt = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/SpotisaveBottomBar.kt'), 'utf8');
@@ -923,7 +938,9 @@ async function runTests() {
     assert(bottomBarKt.includes('Color(0xF0101012)'), 'SpotisaveBottomBar uses Apple translucent glass background (0xF0101012)');
 
     const statsScreenKt = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/StatsScreen.kt'), 'utf8');
-    assert(statsScreenKt.includes('BoostCard') && statsScreenKt.includes('GrillMeCard'), 'StatsScreen includes /boost and /grill-me cards');
+    assert(!statsScreenKt.includes('BoostCard') && !statsScreenKt.includes('GrillMeCard'), 'StatsScreen completely removes BoostCard and GrillMeCard');
+    assert(statsScreenKt.includes('TopAlbumCard') && statsScreenKt.includes('TopSongsCard'), 'StatsScreen includes TopAlbumCard and TopSongsCard');
+    assert(statsScreenKt.includes('HistoryCard'), 'StatsScreen includes HistoryCard for chronological listening timeline');
     assert(statsScreenKt.includes('InsightsPersonaCard'), 'StatsScreen includes InsightsPersonaCard for listening persona & completion rate');
     assert(statsScreenKt.includes('WeeklyActivityCard') && statsScreenKt.includes('TopArtistsCard'), 'StatsScreen includes visual activity chart and top artists breakdown');
     assert(statsScreenKt.includes('stats.topBookmark'), 'StatsScreen preserves and resumes original top bookmark instance');
@@ -934,6 +951,32 @@ async function runTests() {
     const mainScreenKt = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/MainScreen.kt'), 'utf8');
     assert(mainScreenKt.includes('SpotisaveBottomBar') && mainScreenKt.includes('selectedTab'), 'MainScreen embeds SpotisaveBottomBar and reactive selectedTab');
     assert(mainScreenKt.includes('StatsScreen'), 'MainScreen renders StatsScreen when selectedTab == 1');
+
+    // 8. Playlist Context Tracking & Prominent UI Attribution
+    const playbackStateSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/model/PlaybackStateModel.kt'), 'utf8');
+    assert(playbackStateSrc.includes('val contextTitle: String? = null'), 'PlaybackStateModel defines contextTitle');
+    assert(playbackStateSrc.includes('isPlaylist') && playbackStateSrc.includes('displayContextTitle'), 'PlaybackStateModel implements isPlaylist and displayContextTitle helpers');
+
+    const bookmarkSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/model/Bookmark.kt'), 'utf8');
+    assert(bookmarkSrc.includes('val isPlaylist: Boolean') && bookmarkSrc.includes('displayContextTitle'), 'Bookmark implements isPlaylist and displayContextTitle helpers');
+
+    const playbackTrackerSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/service/PlaybackTracker.kt'), 'utf8');
+    assert(playbackTrackerSrc.includes('playlistNameCache') && playbackTrackerSrc.includes('lastContextTitle'), 'PlaybackTracker implements playlistNameCache and lastContextTitle tracking');
+    assert(playbackTrackerSrc.includes('spotify:playlist:'), 'PlaybackTracker handles spotify:playlist: URIs with API enrichment');
+
+    const notifServiceSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/service/SpotifyNotificationListenerService.kt'), 'utf8');
+    assert(notifServiceSrc.includes('extractContextTitleFromText'), 'SpotifyNotificationListenerService extracts context title from notification text');
+
+    const heroCardSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/HeroCard.kt'), 'utf8');
+    assert(heroCardSrc.includes('isPlaylist') && heroCardSrc.includes('Icons.Default.QueueMusic'), 'HeroCard detects playlist state and renders QueueMusic icon');
+    assert(heroCardSrc.includes('PLAYLIST') && heroCardSrc.includes('Playlist:'), 'HeroCard renders prominent PLAYLIST badge and subtitle row');
+
+    const bookmarkCardSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/BookmarkCard.kt'), 'utf8');
+    assert(bookmarkCardSrc.includes('bookmark.isPlaylist') && bookmarkCardSrc.includes('Playlist:'), 'BookmarkCard prominently displays Playlist: indicator');
+    assert(bookmarkCardSrc.includes('Icons.Default.QueueMusic'), 'BookmarkCard uses QueueMusic icon for playlist bookmarks');
+
+    const mainVmSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/viewmodel/MainViewModel.kt'), 'utf8');
+    assert(mainVmSrc.includes('resolveMissingPlaylistTitles'), 'MainViewModel implements resolveMissingPlaylistTitles for retroactive playlist enrichment');
 
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);

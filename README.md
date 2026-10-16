@@ -18,13 +18,15 @@ Die native Android App verbindet lokale Android-Systemüberwachung (Broadcasts &
   - **Gesamte Hörzeit**: Aggregierte Wiedergabezeit in Stunden und Minuten.
   - **Playlists & Alben**: Anzahl aktiv getrackter Playlists.
   - **Top-Playlist**: Meistgehörte Playlist mit Fortschritt und direktem 1-Click "Fortsetzen"-Button.
+  - **Lieblings-Album**: Meistgehörtes Album mit Cover-Artwork, Titelanzahl und aggregierter Gesamthörzeit.
+  - **Meistgehörte Songs (Top-Songs)**: Dynamisches Ranking der beliebtesten Tracks inklusive Hördauer und 1-Click Fortsetzen.
+  - **Genaue Historie**: Chronologischer Verlauf der zuletzt gehörten Titel mit relativen Zeitstempeln ("vor X Min.", "Gestern"), Kontext und Sofort-Play.
+  - **Track-Anzahl & Ø Song-Dauer**: Präzise KPI-Kennzahlen über das Hörverhalten.
   - **Wöchentliche Aktivität**: Interaktives 7-Tage-Balkendiagramm (Montag bis Sonntag) mit normalisierter Aktivitätshöhe.
   - **Top-Interpreten**: Ranking der Top 5 Interpreten mit prozentualer Verteilung.
   - **Hör-Persönlichkeit & Primäre Tageszeit**: Automatische Klassifizierung des Hör-Typs ("Nachteule 🦉", "Morgenmensch 🌅", "Fokus-Nachmittag ⚡️", "Abend-Chiller 🌙") mit aktivstem Zeitfenster.
   - **Durchhör-Quote (Completion Rate)**: Aggregierte Durchhör-Rate in Prozent mit Profilierung ("Fokus-Durchhörer 🎧", "Playlist-Explorer 🚀", "Track-Skipper ⚡️").
   - **Aktivster Wochentag**: Erkennung des musikalischen Spitzentags der Woche mit absoluter Hörzeit.
-  - **`/boost` Energy & Flow Score**: Berechnet den musikalischen Flow-Score (68% bis 99%) mit Level ("⚡️ Peak Flow", "🚀 Turbo Focus", "🔥 Deep Zone") und motivierenden Hype-Zitaten.
-  - **`/grill-me` Roast My Taste**: Humorvolle, spitze KI-Stil-Roasts des persönlichen Musikgeschmacks auf Deutsch (zyklisch mit "Grill mich nochmal! 🔥").
 - **Robuste Hintergrund-Architektur (Android 8–14+)**:
   - `SpotifyBroadcastReceiver`: Reagiert auf Spotify-System-Broadcasts (`com.spotify.music.metadatachanged`, `com.spotify.music.playbackstatechanged`, `com.spotify.music.queuechanged`).
   - `SpotifyForegroundService`: Hält den Tracking-Prozess bei gesperrtem Bildschirm aktiv, registriert den Receiver dynamisch und schützt vor aggressiven OEM-Taskkillern.
@@ -46,7 +48,7 @@ Die ursprüngliche Web PWA bleibt im Repository als leichtgewichtiger Fallback e
 
 ## Automatisierte Tests ausführen
 
-Zur Überprüfung von nativer Android-Architektur, Manifest, Gradle-Konfigurationen, Kotlin-Modellen, PKCE-Kryptografie, Spotify Web API Parsing, Resume-Payloads, StatisticsEngine, `/boost`, `/grill-me`, Apple HIG Farbkontrasten und nativer MediaSession-Simulation (187 Tests in 14 Testgruppen):
+Zur Überprüfung von nativer Android-Architektur, Manifest, Gradle-Konfigurationen, Kotlin-Modellen, PKCE-Kryptografie, Spotify Web API Parsing, Resume-Payloads, StatisticsEngine (Lieblings-Album, Top-Songs, Historie), Playlist-Tracking, Apple HIG Farbkontrasten und nativer MediaSession-Simulation (204 Tests in 14 Testgruppen):
 
 ```bash
 node test/verify.js

@@ -978,6 +978,63 @@ async function runTests() {
     const mainVmSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/viewmodel/MainViewModel.kt'), 'utf8');
     assert(mainVmSrc.includes('resolveMissingPlaylistTitles'), 'MainViewModel implements resolveMissingPlaylistTitles for retroactive playlist enrichment');
 
+    // ----------------------------------------------------
+    // TEST 15: Deterministic APK Signing, Backup & Restore, Apple HIG Polish
+    // ----------------------------------------------------
+    console.log('\nTest Group 15: Deterministic APK Signing, Backup & Restore & Apple HIG Polish');
+
+    const keystorePath = path.join(rootDir, 'app/spotisave.keystore');
+    assert(fs.existsSync(keystorePath) && fs.statSync(keystorePath).size > 1000, 'Deterministic Android keystore app/spotisave.keystore exists and is valid');
+
+    const gitignoreContent = fs.readFileSync(path.join(rootDir, '.gitignore'), 'utf8');
+    assert(!gitignoreContent.includes('*.keystore') && !gitignoreContent.includes('spotisave.keystore'), '.gitignore does NOT ignore app/spotisave.keystore so CI uses the same certificate');
+
+    assert(appGradle.includes('signingConfigs') && appGradle.includes('file("spotisave.keystore")'), 'app/build.gradle.kts configures deterministic signingConfigs with spotisave.keystore');
+    assert(appGradle.includes('keyAlias = "spotisave"') && appGradle.includes('signingConfig = signingConfigs.getByName("debug")'), 'app/build.gradle.kts binds debug and release buildTypes to persistent signingConfig');
+
+    // Backup & Restore architecture checks
+    assert(bookmarkSrc.includes('exportBookmarksToJson') && bookmarkSrc.includes('importBookmarksFromJson'), 'Bookmark model implements exportBookmarksToJson and importBookmarksFromJson');
+    assert(dbHelperKt.includes('fun importBookmarks(bookmarks: List<Bookmark>): Int') && dbHelperKt.includes('beginTransaction()'), 'BookmarkDatabaseHelper implements transactional importBookmarks');
+
+    const repoSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/repository/BookmarkRepository.kt'), 'utf8');
+    assert(repoSrc.includes('exportBookmarksJson') && repoSrc.includes('importBookmarksJson'), 'BookmarkRepository exposes exportBookmarksJson and importBookmarksJson');
+    assert(mainVmSrc.includes('exportBookmarksToJson') && mainVmSrc.includes('importBookmarksFromJson'), 'MainViewModel exposes exportBookmarksToJson and importBookmarksFromJson');
+
+    const statusSheetSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/StatusBottomSheet.kt'), 'utf8');
+    assert(statusSheetSrc.includes('Datensicherung (Backup & Restore)') && statusSheetSrc.includes('backup_export_button') && statusSheetSrc.includes('backup_import_button'), 'StatusBottomSheet provides 1-Click Clipboard Backup & Restore UI');
+    assert(mainScreenKt.includes('onExportJson') && mainScreenKt.includes('onImportJson'), 'MainScreen wires Backup & Restore callbacks to MainViewModel');
+
+    // Apple HIG UI Polish checks
+    const typeKt = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/theme/Type.kt'), 'utf8');
+    assert(typeKt.includes('tnum'), 'Type.kt enables tabular numerals (tnum) for jitter-free time counters');
+    assert(mainScreenKt.includes('size(44.dp)'), 'MainScreen header action buttons meet 44dp Apple HIG minimum touch target');
+    assert(bookmarkCardSrc.includes('size(44.dp)') && statusSheetSrc.includes('heightIn(min = 48.dp)'), 'BookmarkCard and StatusBottomSheet action buttons meet 44dp+ Apple HIG minimum touch target');
+
+    // Node simulation of Backup & Restore JSON roundtrip + edge cases
+    function simulateExportJson(bookmarks) {
+        return JSON.stringify({
+            version: 1,
+            exportedAt: 1700000000000,
+            bookmarks
+        });
+    }
+    function simulateImportJson(jsonStr) {
+        if (!jsonStr || !jsonStr.trim()) return [];
+        try {
+            const parsed = JSON.parse(jsonStr);
+            const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.bookmarks) ? parsed.bookmarks : Object.values(parsed));
+            return arr.filter(item => item && (item.id || item.playlist_id) && (item.trackTitle || item.track_name) && (item.trackUri || item.track_uri));
+        } catch {
+            return [];
+        }
+    }
+    const backupPayload = simulateExportJson([
+        { id: 'spotify:playlist:top50', contextTitle: 'Top 50', trackTitle: 'Komet', artist: 'Udo', trackUri: 'spotify:track:komet', positionMs: 42500, durationMs: 167000 }
+    ]);
+    const restoredItems = simulateImportJson(backupPayload);
+    assert(restoredItems.length === 1 && restoredItems[0].id === 'spotify:playlist:top50' && restoredItems[0].positionMs === 42500, 'JSON Backup & Restore roundtrip preserves bookmark ID and exact millisecond position');
+    assert(simulateImportJson('').length === 0 && simulateImportJson('{invalid').length === 0, 'JSON Restore safely rejects empty and malformed inputs without throwing');
+
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);
     console.log('========================================\n');

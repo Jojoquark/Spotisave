@@ -171,6 +171,42 @@ class BookmarkDatabaseHelper(context: Context) : SQLiteOpenHelper(
     }
 
     @Synchronized
+    fun importBookmarks(bookmarks: List<Bookmark>): Int {
+        if (bookmarks.isEmpty()) return 0
+        val db = writableDatabase
+        var count = 0
+        db.beginTransaction()
+        try {
+            for (bookmark in bookmarks) {
+                val values = ContentValues().apply {
+                    put(COL_ID, bookmark.id)
+                    put(COL_CONTEXT_URI, bookmark.contextUri)
+                    put(COL_CONTEXT_TITLE, bookmark.contextTitle)
+                    put(COL_TRACK_TITLE, bookmark.trackTitle)
+                    put(COL_ARTIST, bookmark.artist)
+                    put(COL_TRACK_URI, bookmark.trackUri)
+                    put(COL_COVER_URL, bookmark.coverUrl)
+                    put(COL_POSITION_MS, bookmark.positionMs)
+                    put(COL_DURATION_MS, bookmark.durationMs)
+                    put(COL_TIMESTAMP, bookmark.timestamp)
+                    put(COL_SOURCE, bookmark.source)
+                }
+                val rowId = db.insertWithOnConflict(
+                    TABLE_NAME,
+                    null,
+                    values,
+                    SQLiteDatabase.CONFLICT_REPLACE
+                )
+                if (rowId != -1L) count++
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return count
+    }
+
+    @Synchronized
     fun clearAll(): Int {
         val db = writableDatabase
         return db.delete(TABLE_NAME, null, null)

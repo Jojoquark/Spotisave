@@ -81,6 +81,26 @@ class BookmarkRepository private constructor(context: Context) {
         }
     }
 
+    fun exportBookmarksJson(): String {
+        val current = _bookmarks.value.ifEmpty { dbHelper.getAllBookmarks() }
+        return Bookmark.exportBookmarksToJson(current)
+    }
+
+    fun importBookmarksJson(jsonString: String, onResult: (Int) -> Unit = {}) {
+        val parsed = Bookmark.importBookmarksFromJson(jsonString)
+        if (parsed.isEmpty()) {
+            onResult(0)
+            return
+        }
+        scope.launch {
+            val importedCount = dbHelper.importBookmarks(parsed)
+            _bookmarks.value = dbHelper.getAllBookmarks()
+            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                onResult(importedCount)
+            }
+        }
+    }
+
     companion object {
         @Volatile
         private var INSTANCE: BookmarkRepository? = null

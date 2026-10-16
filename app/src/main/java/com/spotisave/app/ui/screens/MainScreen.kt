@@ -40,6 +40,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -105,7 +108,16 @@ fun MainScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.semantics(mergeDescendants = true) {
+                        contentDescription = when {
+                            isSpotifyLoggedIn -> "Spotisave, Spotify Web API verbunden"
+                            isServiceRunning -> "Spotisave, Hintergrunddienst aktiv"
+                            else -> "Spotisave, Hintergrunddienst inaktiv"
+                        }
+                    }
+                ) {
                     Text(
                         text = "Spotisave",
                         style = MaterialTheme.typography.headlineMedium,
@@ -143,6 +155,7 @@ fun MainScreen(
                                 if (isSpotifyLoggedIn) SpotifyGreen else HairlineBorder,
                                 CircleShape
                             )
+                            .testTag("header_api_button")
                             .clickable { showApiDialog = true },
                         contentAlignment = Alignment.Center
                     ) {
@@ -161,6 +174,7 @@ fun MainScreen(
                             .clip(CircleShape)
                             .background(SurfaceCardElevated)
                             .border(1.dp, HairlineBorder, CircleShape)
+                            .testTag("header_status_button")
                             .clickable { showStatusSheet = true },
                         contentAlignment = Alignment.Center
                     ) {
@@ -319,6 +333,12 @@ fun MainScreen(
                 activeSource = activePlayback?.source ?: "Bereit",
                 onToggleService = { enable ->
                     viewModel.toggleService(context, enable)
+                },
+                onExportJson = {
+                    viewModel.exportBookmarksToJson()
+                },
+                onImportJson = { json, onDone ->
+                    viewModel.importBookmarksFromJson(json, onDone)
                 },
                 onDismissRequest = {
                     showStatusSheet = false

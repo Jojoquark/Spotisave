@@ -96,6 +96,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repository.deleteBookmark(bookmark.id)
     }
 
+    fun exportBookmarksToJson(): String {
+        return repository.exportBookmarksJson()
+    }
+
+    fun importBookmarksFromJson(jsonString: String, onComplete: (Int) -> Unit = {}) {
+        repository.importBookmarksJson(jsonString) { count ->
+            onComplete(count)
+            if (count > 0) {
+                resolveMissingPlaylistTitles()
+            }
+        }
+    }
 
     fun setClientId(clientId: String) {
         _spotifyClientId.value = clientId.trim()

@@ -41,12 +41,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.spotisave.app.data.api.SpotifyAuthManager
 import com.spotisave.app.ui.theme.AppleSystemGreen
+import com.spotisave.app.ui.theme.CanvasBlack
 import com.spotisave.app.ui.theme.HairlineBorder
 import com.spotisave.app.ui.theme.SpotifyGreen
 import com.spotisave.app.ui.theme.StatusError
@@ -149,7 +152,9 @@ fun SpotifyApiSettingsDialog(
                     label = { Text("Spotify Client ID", color = TextSecondary) },
                     singleLine = true,
                     placeholder = { Text("32-stelliger Hex-Code", color = TextMuted) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("spotify_client_id_input"),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = SpotifyGreen,
                         unfocusedBorderColor = HairlineBorder,
@@ -159,21 +164,20 @@ fun SpotifyApiSettingsDialog(
                     )
                 )
 
-                // Redirect URI Infobox mit 1-Click Kopieren
+                // Redirect URI Infobox mit 1-Click Kopieren (44dp Touch-Target nach Apple HIG)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .background(SurfaceCardElevated)
-                        .border(1.dp, HairlineBorder, RoundedCornerShape(10.dp))
-                        .padding(10.dp)
+                        .border(1.dp, HairlineBorder, RoundedCornerShape(12.dp))
+                        .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 6.dp)
                 ) {
                     Text(
                         text = "Redirect URI für Spotify Dashboard:",
                         fontSize = 11.sp,
                         color = TextSecondary
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -187,30 +191,35 @@ fun SpotifyApiSettingsDialog(
                         )
                         Box(
                             modifier = Modifier
+                                .size(44.dp)
                                 .clip(CircleShape)
+                                .testTag("copy_redirect_uri_button")
                                 .clickable {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     clipboard.setPrimaryClip(ClipData.newPlainText("Redirect URI", redirectUri))
                                     copiedRedirect = true
                                     Toast.makeText(context, "Redirect URI kopiert!", Toast.LENGTH_SHORT).show()
-                                }
-                                .padding(4.dp)
+                                },
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = if (copiedRedirect) Icons.Default.Check else Icons.Default.ContentCopy,
-                                contentDescription = "Kopieren",
+                                contentDescription = "Redirect URI kopieren",
                                 tint = if (copiedRedirect) AppleSystemGreen else TextPrimary,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
                 }
 
-                // Verbinden / Abmelden Button
+                // Verbinden / Abmelden Button (Apple HIG >= 48dp Höhe & WCAG AAA Kontrast)
                 if (isLoggedIn) {
                     Button(
                         onClick = onLogoutClick,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("spotify_disconnect_button"),
                         colors = ButtonDefaults.buttonColors(containerColor = SurfaceCardElevated),
                         shape = RoundedCornerShape(12.dp)
                     ) {
@@ -219,18 +228,24 @@ fun SpotifyApiSettingsDialog(
                 } else {
                     Button(
                         onClick = { onConnectClick(clientIdText) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = SpotifyGreen),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("spotify_connect_button"),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SpotifyGreen,
+                            contentColor = CanvasBlack
+                        ),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.OpenInBrowser,
                             contentDescription = null,
-                            tint = TextPrimary,
+                            tint = CanvasBlack,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Mit Spotify verbinden", color = TextPrimary, fontWeight = FontWeight.Bold)
+                        Text("Mit Spotify verbinden", color = CanvasBlack, fontWeight = FontWeight.Bold)
                     }
                 }
             }

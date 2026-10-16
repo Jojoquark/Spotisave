@@ -137,4 +137,73 @@ class BookmarkModelTest {
         assertEquals(false, liveState.isAlbum)
         assertEquals("Summer Vibes", liveState.displayContextTitle)
     }
+
+    @Test
+    fun testBookmarkJsonExportAndImport() {
+        val original = listOf(
+            Bookmark(
+                id = "spotify:playlist:top50",
+                contextUri = "spotify:playlist:top50",
+                contextTitle = "Top 50 - Deutschland",
+                trackTitle = "Komet",
+                artist = "Udo Lindenberg & Apache 207",
+                trackUri = "spotify:track:komet",
+                coverUrl = "https://i.scdn.co/image/cover1",
+                positionMs = 42_500L,
+                durationMs = 167_000L,
+                timestamp = 1700000000000L,
+                source = "SpotifyWebApi"
+            ),
+            Bookmark(
+                id = "album:future_nostalgia",
+                contextUri = null,
+                contextTitle = "Future Nostalgia",
+                trackTitle = "Levitating",
+                artist = "Dua Lipa",
+                trackUri = "spotify:track:levitating",
+                coverUrl = null,
+                positionMs = 88_000L,
+                durationMs = 203_000L,
+                timestamp = 1700000050000L,
+                source = "MediaSession"
+            )
+        )
+
+        val exportedJson = Bookmark.exportBookmarksToJson(original)
+        val restored = Bookmark.importBookmarksFromJson(exportedJson)
+
+        assertEquals(2, restored.size)
+        assertEquals("spotify:playlist:top50", restored[0].id)
+        assertEquals("Top 50 - Deutschland", restored[0].contextTitle)
+        assertEquals(42_500L, restored[0].positionMs)
+        assertEquals("https://i.scdn.co/image/cover1", restored[0].coverUrl)
+        assertEquals(null, restored[1].contextUri)
+        assertEquals(null, restored[1].coverUrl)
+
+        // Edge cases: empty input, invalid JSON, web-app format
+        assertEquals(0, Bookmark.importBookmarksFromJson("").size)
+        assertEquals(0, Bookmark.importBookmarksFromJson("   ").size)
+        assertEquals(0, Bookmark.importBookmarksFromJson("not-json-at-all").size)
+
+        val webAppJson = """
+            {
+              "37i9dQZF1DXcBWIGoYBM5M": {
+                "playlist_id": "37i9dQZF1DXcBWIGoYBM5M",
+                "playlist_name": "Today's Top Hits",
+                "track_name": "Espresso",
+                "artist_name": "Sabrina Carpenter",
+                "track_uri": "spotify:track:4cOdK2wGLETKBW3PvgPWqT",
+                "context_uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
+                "progress_ms": 45000,
+                "updated_at": 1700000100000
+              }
+            }
+        """.trimIndent()
+        val fromWeb = Bookmark.importBookmarksFromJson(webAppJson)
+        assertEquals(1, fromWeb.size)
+        assertEquals("37i9dQZF1DXcBWIGoYBM5M", fromWeb[0].id)
+        assertEquals("Today's Top Hits", fromWeb[0].contextTitle)
+        assertEquals("Espresso", fromWeb[0].trackTitle)
+        assertEquals(45_000L, fromWeb[0].positionMs)
+    }
 }

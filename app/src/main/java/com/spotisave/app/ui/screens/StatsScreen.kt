@@ -40,6 +40,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -76,7 +82,9 @@ fun StatsScreen(
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .testTag("stats_screen"),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 90.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
@@ -95,6 +103,13 @@ fun StatsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
+            }
+        }
+
+        // Hinweis-Banner für leeren Zustand (Apple HIG Empty State)
+        if (stats.totalBookmarksCount == 0 && stats.totalTracksCount == 0) {
+            item {
+                StatsEmptyNoticeCard()
             }
         }
 
@@ -220,6 +235,52 @@ fun StatsScreen(
                 HistoryCard(
                     history = stats.history,
                     onResume = onResumePlaylist
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatsEmptyNoticeCard() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(SurfaceCard)
+            .border(1.dp, HairlineBorderSubtle, RoundedCornerShape(18.dp))
+            .padding(16.dp)
+            .testTag("stats_empty_notice_card")
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(SurfaceCardElevated),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Equalizer,
+                    contentDescription = null,
+                    tint = SpotifyGreen,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Noch keine Hördaten erfasst",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Sobald du Musik in Spotify abspielst, erscheinen hier automatisch dein Lieblings-Album, deine Top-Songs und deine Wochen-Trends.",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    lineHeight = 16.sp
                 )
             }
         }

@@ -37,9 +37,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -116,13 +118,23 @@ fun HeroCard(
         label = "pulseScale"
     )
 
+    val cardBrush = Brush.verticalGradient(
+        colors = listOf(
+            if (isPlaying) SpotifyGreen.copy(alpha = 0.11f) else SurfaceCardElevated.copy(alpha = 0.45f),
+            SurfaceCard
+        )
+    )
+    val cardBorderColor = if (isPlaying) SpotifyGreen.copy(alpha = 0.40f) else HairlineBorder
+
     Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
             .background(SurfaceCard)
-            .border(1.dp, HairlineBorder, RoundedCornerShape(20.dp))
+            .background(cardBrush)
+            .border(1.dp, cardBorderColor, RoundedCornerShape(20.dp))
             .padding(20.dp)
+            .testTag("hero_card")
     ) {
         Column {
             // Oberer Badge-Bereich (Status & Kontext)
@@ -214,30 +226,65 @@ fun HeroCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Track Titel
-            Text(
-                text = trackTitle.ifBlank { "Bereit für Spotify" },
-                style = MaterialTheme.typography.titleLarge,
-                color = TextPrimary,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            // Haupt-Infozeile mit Apple HIG Squircle Artwork-Anker + Titel & Interpret
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(SurfaceCardElevated)
+                        .border(1.dp, HairlineBorder, RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = when {
+                            isPlaylist -> Icons.Default.QueueMusic
+                            isAlbum -> Icons.Default.Album
+                            else -> Icons.Default.MusicNote
+                        },
+                        contentDescription = null,
+                        tint = when {
+                            isPlaylist -> SpotifyGreen
+                            isAlbum -> Color(0xFF64D2FF)
+                            isPlaying -> StatusLivePlaying
+                            else -> TextSecondary
+                        },
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
 
-            Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.width(14.dp))
 
-            // Interpret
-            Text(
-                text = artist.ifBlank { "Starte Musik auf deinem Gerät" },
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+                Column(modifier = Modifier.weight(1f)) {
+                    // Track Titel
+                    Text(
+                        text = trackTitle.ifBlank { "Bereit für Spotify" },
+                        style = MaterialTheme.typography.titleLarge,
+                        color = TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Spacer(modifier = Modifier.height(3.dp))
+
+                    // Interpret
+                    Text(
+                        text = artist.ifBlank { "Starte Musik auf deinem Gerät" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
 
             // Explizite Herkunftszeile für Playlist / Album
             if (isPlaylist && displayContextTitle.isNotBlank()) {
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
@@ -259,7 +306,7 @@ fun HeroCard(
                     )
                 }
             } else if (album.isNotBlank() && album != "Spotify" && !isPlaylist) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
@@ -297,7 +344,7 @@ fun HeroCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Zeit-Beschriftung (Tabellarisch nach HIG)
+            // Zeit-Beschriftung (Tabellarisch nach HIG mit fontFeatureSettings = "tnum")
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -359,7 +406,8 @@ fun HeroCard(
                 enabled = hasValidTrack,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp),
+                    .height(52.dp)
+                    .testTag("hero_resume_button"),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = SpotifyGreen,

@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +69,7 @@ fun BookmarkCard(
             .clip(RoundedCornerShape(16.dp))
             .background(SurfaceCard)
             .border(1.dp, HairlineBorderSubtle, RoundedCornerShape(16.dp))
+            .testTag("bookmark_card_${bookmark.id}")
             .clickable {
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onResumeClick(bookmark)
@@ -190,11 +192,13 @@ fun BookmarkCard(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             onDeleteClick(bookmark)
                         },
-                        modifier = Modifier.size(44.dp)
+                        modifier = Modifier
+                            .size(44.dp)
+                            .testTag("bookmark_delete_${bookmark.id}")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
-                            contentDescription = "Bookmark löschen",
+                            contentDescription = "Bookmark löschen: ${bookmark.trackTitle}",
                             tint = TextTertiary,
                             modifier = Modifier.size(20.dp)
                         )
@@ -208,6 +212,7 @@ fun BookmarkCard(
                             .size(44.dp)
                             .clip(CircleShape)
                             .background(SpotifyGreen)
+                            .testTag("bookmark_resume_${bookmark.id}")
                             .clickable {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 onResumeClick(bookmark)
@@ -216,7 +221,7 @@ fun BookmarkCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Hörposition fortfahren",
+                            contentDescription = "Hörposition fortfahren: ${bookmark.trackTitle}",
                             tint = CanvasBlack,
                             modifier = Modifier.size(22.dp)
                         )

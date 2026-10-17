@@ -33,6 +33,7 @@ object ResumeHelper {
         val hasValidTrackUri = bookmark.trackUri.isNotBlank() &&
             bookmark.trackUri != "spotify:track:active" &&
             bookmark.trackUri != "spotify:track:notification" &&
+            !bookmark.trackUri.startsWith("spotify:track:local_") &&
             (bookmark.trackUri.startsWith("spotify:track:") || bookmark.trackUri.startsWith("spotify:episode:"))
 
         if (hasValidTrackUri) {
@@ -189,7 +190,8 @@ object ResumeHelper {
 
         val hasCanonicalTrackUri = bookmark.trackUri.isNotBlank() &&
             bookmark.trackUri != "spotify:track:active" &&
-            bookmark.trackUri != "spotify:track:notification"
+            bookmark.trackUri != "spotify:track:notification" &&
+            !bookmark.trackUri.startsWith("spotify:track:local_")
 
         val isAlreadyCurrentTrack = mediaController != null && (
             (hasCanonicalTrackUri && currentTrackUri == bookmark.trackUri) ||

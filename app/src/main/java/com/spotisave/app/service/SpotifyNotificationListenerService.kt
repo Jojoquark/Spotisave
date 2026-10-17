@@ -51,12 +51,14 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             val lower = raw.trim().lowercase()
             val playlistPrefixes = listOf(
                 "playlist • ", "playlist: ", "playlist - ", "aus playlist ",
-                "from playlist ", "wiedergabeliste • ", "wiedergabeliste: "
+                "from playlist ", "playing from playlist ", "wiedergabe aus playlist ",
+                "wiedergabeliste • ", "wiedergabeliste: "
             )
             if (playlistPrefixes.any { lower.startsWith(it) }) return "playlist"
 
             val albumPrefixes = listOf(
-                "album • ", "album: ", "album - ", "aus album ", "from album "
+                "album • ", "album: ", "album - ", "aus album ",
+                "from album ", "playing from album ", "wiedergabe aus album "
             )
             if (albumPrefixes.any { lower.startsWith(it) }) return "album"
             return null
@@ -73,8 +75,10 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
 
             val playlistPrefixes = listOf(
                 "playlist • ", "playlist: ", "playlist - ", "aus playlist ",
-                "from playlist ", "wiedergabeliste • ", "wiedergabeliste: ",
-                "album • ", "album: ", "album - ", "aus album ", "from album "
+                "from playlist ", "playing from playlist ", "wiedergabe aus playlist ",
+                "wiedergabeliste • ", "wiedergabeliste: ",
+                "album • ", "album: ", "album - ", "aus album ",
+                "from album ", "playing from album ", "wiedergabe aus album "
             )
             for (prefix in playlistPrefixes) {
                 if (lower.startsWith(prefix)) {

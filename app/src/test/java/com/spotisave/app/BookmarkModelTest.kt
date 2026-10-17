@@ -476,6 +476,18 @@ class BookmarkModelTest {
         )
         assertTrue(albumId.startsWith("album:thriller"))
         assertNull(albumCtx)
+
+        // Null track URI fallback
+        val (fallbackId, fallbackCtx) = PlaybackTracker.computeBookmarkIdentity(
+            contextUri = null,
+            contextTitle = null,
+            album = null,
+            trackTitle = null,
+            trackUri = null,
+            contextTypeHint = null
+        )
+        assertEquals("spotify:track:active", fallbackId)
+        assertNull(fallbackCtx)
     }
 
     @Test

@@ -180,7 +180,7 @@ object PlaybackTracker {
         contextTitle: String?,
         album: String?,
         trackTitle: String?,
-        trackUri: String,
+        trackUri: String? = null,
         contextTypeHint: String? = null
     ): Pair<String, String?> {
         if (!contextUri.isNullOrBlank()) {
@@ -208,7 +208,8 @@ object PlaybackTracker {
             return Pair("album:$normalized", null)
         }
 
-        return Pair(trackUri, null)
+        val fallbackTrackUri = trackUri?.takeIf { it.isNotBlank() } ?: "spotify:track:active"
+        return Pair(fallbackTrackUri, null)
     }
 
     private fun resolveKnownPlaylistContextUri(
@@ -363,7 +364,7 @@ object PlaybackTracker {
                                 contextTitle = sanitizedContextTitle,
                                 album = album,
                                 trackTitle = trackTitle,
-                                trackUri = effectiveIncomingTrackUri,
+                                trackUri = effectiveIncomingTrackUri ?: lastTrackUri.ifEmpty { "spotify:track:active" },
                                 contextTypeHint = "playlist"
                             )
                             lastContextUri = localPlUri

@@ -416,7 +416,8 @@ class BookmarkModelTest {
             trackTitle = "Espresso",
             artist = "Sabrina Carpenter",
             trackUri = "spotify:track:4cOdK2wGLETKBW3PvgPWqT",
-            positionMs = 45_000L
+            positionMs = 45_000L,
+            durationMs = 175_000L
         )
         assertEquals(
             "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
@@ -430,7 +431,8 @@ class BookmarkModelTest {
             trackTitle = "Levitating",
             artist = "Dua Lipa",
             trackUri = "spotify:track:levitating",
-            positionMs = 30_000L
+            positionMs = 30_000L,
+            durationMs = 203_000L
         )
         assertNull(ResumeHelper.resolveEffectiveContextUri(syntheticAlbumBookmark))
 

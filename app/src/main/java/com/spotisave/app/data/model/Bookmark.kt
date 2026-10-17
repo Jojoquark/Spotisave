@@ -17,7 +17,7 @@ data class Bookmark(
     val trackUri: String,                   // Spotify Track URI (z.B. spotify:track:...)
     val coverUrl: String? = null,           // Cover-Bild URL falls verfügbar
     val positionMs: Long,                   // Gespeicherte Hörposition in Millisekunden
-    val durationMs: Long,                   // Gesamtdauer des Titels in Millisekunden
+    val durationMs: Long = 0L,              // Gesamtdauer des Titels in Millisekunden
     val timestamp: Long = System.currentTimeMillis(), // Zeitstempel der letzten Erfassung
     val source: String = "Spotify"          // "Broadcast" | "MediaSession" | "Manuell"
 ) {

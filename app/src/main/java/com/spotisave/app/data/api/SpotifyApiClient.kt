@@ -191,10 +191,16 @@ class SpotifyApiClient(private val context: Context) {
          */
         fun buildPlayPayload(contextUri: String?, trackUri: String, positionMs: Long): String {
             val json = JSONObject()
-            val hasCanonicalContext = !contextUri.isNullOrBlank() && !contextUri.startsWith("spotify:playlist:local_")
+            val hasCanonicalContext = !contextUri.isNullOrBlank() &&
+                !contextUri.startsWith("spotify:playlist:local_") &&
+                (contextUri.startsWith("spotify:playlist:") ||
+                    contextUri.startsWith("spotify:album:") ||
+                    contextUri.startsWith("spotify:show:") ||
+                    contextUri.startsWith("spotify:artist:"))
             val hasCanonicalTrack = trackUri.isNotBlank() &&
                 trackUri != "spotify:track:active" &&
-                trackUri != "spotify:track:notification"
+                trackUri != "spotify:track:notification" &&
+                !trackUri.startsWith("spotify:track:local_")
 
             if (hasCanonicalContext) {
                 json.put("context_uri", contextUri)
@@ -635,6 +641,34 @@ class SpotifyApiClient(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Fehler bei getTopArtists", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Ruft die Playlists des angemeldeten Nutzers ab (/me/playlists).
+     */
+    suspend fun getUserPlaylists(limit: Int = 50): Result<List<SpotifyPlaylistInfo>> {
+        return try {
+            val clampedLimit = limit.coerceIn(1, 50)
+            val resp = sendRequest("/me/playlists?limit=$clampedLimit")
+            if (resp.code == 200) {
+                val json = JSONObject(resp.body)
+                val items = json.optJSONArray("items") ?: JSONArray()
+                val list = mutableListOf<SpotifyPlaylistInfo>()
+                for (i in 0 until items.length()) {
+                    val item = items.optJSONObject(i) ?: continue
+                    val id = item.optString("id", "")
+                    if (id.isNotBlank()) {
+                        list.add(parsePlaylistInfo(item, id))
+                    }
+                }
+                Result.success(list)
+            } else {
+                Result.failure(Exception("HTTP ${resp.code}: ${resp.body}"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Fehler bei getUserPlaylists", e)
             Result.failure(e)
         }
     }

@@ -283,12 +283,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!authManager.isLoggedIn()) return
         viewModelScope.launch {
             try {
+                // 0. Eigene Playlists des Nutzers abfragen & Caches füllen
+                val userPlaylistsResult = apiClient.getUserPlaylists(50)
+                val userPlaylists = userPlaylistsResult.getOrNull().orEmpty()
+                for (pl in userPlaylists) {
+                    val uri = "spotify:playlist:${pl.id}"
+                    if (pl.name.isNotBlank()) {
+                        PlaybackTracker.playlistNameCache[uri] = pl.name
+                    }
+                    if (!pl.coverUrl.isNullOrBlank()) {
+                        PlaybackTracker.playlistCoverCache[uri] = pl.coverUrl
+                    }
+                }
+
                 val currentBookmarks = bookmarks.value
                 val history = listeningHistory.value
                 for (bm in currentBookmarks) {
                     // 1. Falls ein Lesezeichen fälschlicherweise als "album:..." oder "spotify:playlist:local_..."
-                    // gespeichert wurde, aber im Hörverlauf (recently-played) eine echte spotify:playlist:... URI hat:
+                    // gespeichert wurde, aber in den Playlists des Nutzers oder im Verlauf vorkommt:
                     if (bm.id.startsWith("album:") || bm.id.startsWith("spotify:playlist:local_")) {
+                        val matchingUserPl = userPlaylists.firstOrNull {
+                            bm.contextTitle.isNotBlank() &&
+                                bm.contextTitle != "Spotify" &&
+                                bm.contextTitle != "Playlist" &&
+                                it.name.equals(bm.contextTitle, ignoreCase = true)
+                        }
+                        if (matchingUserPl != null) {
+                            val realPlUri = "spotify:playlist:${matchingUserPl.id}"
+                            val upgraded = bm.copy(
+                                id = realPlUri,
+                                contextUri = realPlUri,
+                                contextTitle = matchingUserPl.name,
+                                coverUrl = matchingUserPl.coverUrl ?: bm.coverUrl
+                            )
+                            repository.deleteBookmark(bm.id)
+                            repository.saveBookmark(upgraded)
+                            repository.cleanupSupersededBookmarks(
+                                canonicalId = realPlUri,
+                                trackUri = upgraded.trackUri,
+                                album = null,
+                                contextTitle = matchingUserPl.name
+                            )
+                            continue
+                        }
+
                         val matchingPlHistory = history.firstOrNull {
                             it.contextUri?.startsWith("spotify:playlist:") == true &&
                                 !it.contextUri.startsWith("spotify:playlist:local_") &&

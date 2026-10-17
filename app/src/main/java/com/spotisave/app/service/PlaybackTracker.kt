@@ -38,13 +38,16 @@ object PlaybackTracker {
     @Volatile private var lastIsPlaying: Boolean = false
     @Volatile private var lastSaveTimeMs: Long = 0L
     @Volatile private var activeSessionHistoryId: String? = null
+    @Volatile private var lastEventTimeMs: Long = 0L
 
     // Resume-Schutzfenster: verhindert, dass beim 1-Click-Resume einer anderen Playlist
     // ein initialer 0:00-Status oder ein verspätetes Pause-Event der vorherigen Playlist
     // den gespeicherten Stand überschreibt.
     private const val RESUME_GRACE_MS = 12_000L
+    private const val ACTIVE_PLAYLIST_SESSION_TTL_MS = 30 * 60 * 1000L
     @Volatile private var pendingResumeBookmark: Bookmark? = null
     @Volatile private var pendingResumeTimestampMs: Long = 0L
+    @Volatile private var resumeStableHitCount: Int = 0
     @Volatile private var activeResumedTrackUri: String? = null
     @Volatile private var activeResumedContextUri: String? = null
     @Volatile private var activeResumedContextTitle: String? = null
@@ -61,6 +64,44 @@ object PlaybackTracker {
     }
 
     /**
+     * Filtert generische oder mit dem Albumtitel identische Notification-Subtexte heraus,
+     * damit ein bloßer Albumname in Notification.EXTRA_SUB_TEXT niemals einen aktiven
+     * Playlist-Kontext überschreibt oder den Playlist-Namenscache korrumpiert.
+     */
+    fun sanitizeIncomingContextTitle(
+        rawContextTitle: String?,
+        album: String?,
+        trackTitle: String?,
+        contextUri: String?,
+        contextTypeHint: String?
+    ): String? {
+        val cleaned = rawContextTitle?.trim()?.takeIf {
+            it.isNotBlank() &&
+                !it.equals("Spotify", ignoreCase = true) &&
+                !it.equals("Playlist", ignoreCase = true) &&
+                !it.equals("Album", ignoreCase = true) &&
+                !it.equals("Musik", ignoreCase = true) &&
+                !it.equals("Music", ignoreCase = true)
+        } ?: return null
+
+        val cleanAlbum = album?.trim()?.takeIf { it.isNotBlank() && !it.equals("Spotify", ignoreCase = true) }
+        val cleanTrack = trackTitle?.trim()?.takeIf { it.isNotBlank() }
+
+        // Wenn die Notification/MediaSession keinen expliziten "playlist"-Präfix hat und der
+        // übergebene contextTitle exakt dem Album- oder Tracknamen entspricht, handelt es sich
+        // um reguläre Song-Metadaten (EXTRA_SUB_TEXT = Album) und NICHT um einen Playlist-Namen.
+        if (contextTypeHint != "playlist") {
+            if (cleanAlbum != null && cleaned.equals(cleanAlbum, ignoreCase = true)) {
+                return if (contextTypeHint == "album" || contextUri?.startsWith("spotify:album:") == true) cleaned else null
+            }
+            if (cleanTrack != null && cleaned.equals(cleanTrack, ignoreCase = true)) {
+                return null
+            }
+        }
+        return cleaned
+    }
+
+    /**
      * Wird von ResumeHelper unmittelbar vor dem Starten eines Lesezeichens aufgerufen.
      * Sichert zuerst den aktuellen Hörstand einer evtl. laufenden anderen Playlist und
      * schützt das wiederaufgenommene Lesezeichen während des Ladevorgangs vor 0:00-Resets.
@@ -71,11 +112,17 @@ object PlaybackTracker {
         }
 
         val now = System.currentTimeMillis()
+        lastEventTimeMs = now
         pendingResumeBookmark = bookmark
         pendingResumeTimestampMs = now
+        resumeStableHitCount = 0
 
         val effectiveCtxUri = bookmark.contextUri
-            ?: bookmark.id.takeIf { it.startsWith("spotify:playlist:") || it.startsWith("spotify:album:") }
+            ?: bookmark.id.takeIf {
+                it.startsWith("spotify:playlist:") ||
+                    it.startsWith("spotify:album:") ||
+                    it.startsWith("spotify:show:")
+            }
 
         activeResumedTrackUri = bookmark.trackUri
         activeResumedContextUri = effectiveCtxUri
@@ -223,6 +270,9 @@ object PlaybackTracker {
         if (trackUri.isNullOrBlank() && trackTitle.isNullOrBlank()) return
 
         val now = System.currentTimeMillis()
+        val prevEventTimeMs = lastEventTimeMs
+        lastEventTimeMs = now
+
         if (isWithinResumeGrace(now)) {
             val resumed = pendingResumeBookmark
             if (resumed != null && !trackUri.isNullOrBlank() && trackUri != resumed.trackUri &&
@@ -232,6 +282,14 @@ object PlaybackTracker {
                 return
             }
         }
+
+        val sanitizedContextTitle = sanitizeIncomingContextTitle(
+            rawContextTitle = contextTitle,
+            album = album,
+            trackTitle = trackTitle,
+            contextUri = contextUri,
+            contextTypeHint = contextTypeHint
+        )
 
         val isPlaceholderUri = trackUri == "spotify:track:active" || trackUri == "spotify:track:notification"
         val effectiveIncomingTrackUri = if (isPlaceholderUri && lastTrackUri.isNotBlank() && !lastTrackUri.endsWith(":active") && !lastTrackUri.endsWith(":notification")) {
@@ -260,33 +318,81 @@ object PlaybackTracker {
             }
             activeSessionHistoryId = "${effectiveIncomingTrackUri}_${System.currentTimeMillis()}"
 
-            // Multi-Playlist-Isolierung bei Trackwechsel:
-            // Verhindert, dass ein neuer Song aus Playlist B fälschlicherweise unter lastContextUri von Playlist A gespeichert wird!
+            // Multi-Playlist-Isolierung & Sticky-Playlist-Kontext bei Trackwechsel:
+            // 1. Wechselt der Nutzer explizit in eine andere Playlist oder ein Album, wird der Kontext sauber getrennt.
+            // 2. Läuft hingegen eine aktive Playlist einfach zum nächsten Song weiter (wobei Androids
+            //    MediaSession/Broadcast meist keine contextUri mitschickt), darf lastContextUri NICHT
+            //    auf null gesetzt und zum Album herabgestuft werden!
             if (contextUri.isNullOrBlank()) {
                 if (activeResumedTrackUri == effectiveIncomingTrackUri && !activeResumedContextUri.isNullOrBlank()) {
                     lastContextUri = activeResumedContextUri
                     lastContextTitle = activeResumedContextTitle ?: lastContextTitle
                     lastCoverUrl = activeResumedCoverUrl ?: coverUrl
-                } else {
-                    val sameExplicitContextTitle = !contextTitle.isNullOrBlank() &&
-                        contextTitle != "Spotify" &&
-                        contextTitle.equals(lastContextTitle, ignoreCase = true)
-
+                } else if (contextTypeHint == "album") {
+                    activeResumedContextUri = null
+                    activeResumedTrackUri = null
+                    lastContextUri = null
+                    lastContextTitle = album?.takeIf { it.isNotBlank() && it != "Spotify" } ?: sanitizedContextTitle
+                    lastCoverUrl = coverUrl
+                    lastContextTypeHint = "album"
+                } else if (!sanitizedContextTitle.isNullOrBlank()) {
+                    val sameExplicitContextTitle = sanitizedContextTitle.equals(lastContextTitle, ignoreCase = true)
                     if (sameExplicitContextTitle && !lastContextUri.isNullOrBlank()) {
                         // Gleiche Playlist laut Notification/MediaSession bestätigt -> lastContextUri beibehalten
                     } else {
-                        val resolvedUri = resolveKnownPlaylistContextUri(context, effectiveIncomingTrackUri, contextTitle)
-                        lastContextUri = resolvedUri
-                        if (resolvedUri == null) {
-                            lastContextTitle = contextTitle?.takeIf { it.isNotBlank() && it != "Spotify" }
-                            lastCoverUrl = coverUrl
-                        } else {
-                            lastContextTitle = playlistNameCache[resolvedUri]
-                                ?: contextTitle?.takeIf { it.isNotBlank() && it != "Spotify" }
+                        // Explizit abweichender Playlist-Name erkannt -> auf neue Playlist umschalten
+                        activeResumedContextUri = null
+                        activeResumedTrackUri = null
+                        val resolvedUri = resolveKnownPlaylistContextUri(context, effectiveIncomingTrackUri, sanitizedContextTitle)
+                        if (!resolvedUri.isNullOrBlank()) {
+                            lastContextUri = resolvedUri
+                            lastContextTitle = playlistNameCache[resolvedUri] ?: sanitizedContextTitle
                             lastCoverUrl = playlistCoverCache[resolvedUri] ?: coverUrl
+                        } else {
+                            val (_, localPlUri) = computeBookmarkIdentity(
+                                contextUri = null,
+                                contextTitle = sanitizedContextTitle,
+                                album = album,
+                                trackTitle = trackTitle,
+                                trackUri = effectiveIncomingTrackUri,
+                                contextTypeHint = "playlist"
+                            )
+                            lastContextUri = localPlUri
+                            lastContextTitle = sanitizedContextTitle
+                            lastCoverUrl = coverUrl
                         }
+                        lastContextTypeHint = "playlist"
                     }
-                    lastContextTypeHint = contextTypeHint
+                } else {
+                    // Kein expliziter neuer Kontext-Titel im Event (Standardfall bei lokalem Trackwechsel in einer Playlist)
+                    val resolvedByTrack = resolveKnownPlaylistContextUri(context, effectiveIncomingTrackUri, null)
+                    val isWithinActivePlaylistSession = (!lastContextUri.isNullOrBlank() &&
+                        lastContextUri!!.startsWith("spotify:playlist:") &&
+                        (lastIsPlaying || (prevEventTimeMs > 0L && (now - prevEventTimeMs) in 0..ACTIVE_PLAYLIST_SESSION_TTL_MS))) ||
+                        (!activeResumedContextUri.isNullOrBlank() && activeResumedContextUri!!.startsWith("spotify:playlist:"))
+
+                    if (!resolvedByTrack.isNullOrBlank()) {
+                        lastContextUri = resolvedByTrack
+                        lastContextTitle = playlistNameCache[resolvedByTrack] ?: lastContextTitle
+                        lastCoverUrl = playlistCoverCache[resolvedByTrack] ?: lastCoverUrl ?: coverUrl
+                        lastContextTypeHint = "playlist"
+                    } else if (isWithinActivePlaylistSession) {
+                        // Aktive Playlist-Session beibehalten, damit Song 2..N derselben Playlist nicht als Album gespeichert werden!
+                        if (lastContextUri.isNullOrBlank() && !activeResumedContextUri.isNullOrBlank()) {
+                            lastContextUri = activeResumedContextUri
+                            lastContextTitle = activeResumedContextTitle ?: lastContextTitle
+                            lastCoverUrl = activeResumedCoverUrl ?: lastCoverUrl ?: coverUrl
+                        }
+                        lastContextTypeHint = "playlist"
+                        if (!activeResumedContextUri.isNullOrBlank() && activeResumedContextUri == lastContextUri) {
+                            activeResumedTrackUri = effectiveIncomingTrackUri
+                        }
+                    } else {
+                        lastContextUri = null
+                        lastContextTitle = null
+                        lastCoverUrl = coverUrl
+                        lastContextTypeHint = contextTypeHint
+                    }
                 }
             }
         }
@@ -303,6 +409,10 @@ object PlaybackTracker {
         if (!contextUri.isNullOrBlank()) {
             val contextChanged = lastContextUri != null && lastContextUri != contextUri
             lastContextUri = contextUri
+            if (contextChanged && activeResumedContextUri != null && activeResumedContextUri != contextUri) {
+                activeResumedContextUri = null
+                activeResumedTrackUri = null
+            }
             if (contextUri.startsWith("spotify:playlist:")) {
                 lastContextTypeHint = "playlist"
             } else if (contextUri.startsWith("spotify:album:")) {
@@ -311,7 +421,7 @@ object PlaybackTracker {
             val cached = playlistNameCache[contextUri]
             if (!cached.isNullOrBlank()) {
                 lastContextTitle = cached
-            } else if (contextChanged && contextTitle.isNullOrBlank()) {
+            } else if (contextChanged && sanitizedContextTitle.isNullOrBlank()) {
                 lastContextTitle = null
             }
             val cachedCover = playlistCoverCache[contextUri]
@@ -321,7 +431,7 @@ object PlaybackTracker {
                 lastCoverUrl = coverUrl
             }
         } else if (lastContextUri.isNullOrBlank()) {
-            val resolvedUri = resolveKnownPlaylistContextUri(context, lastTrackUri, contextTitle ?: lastContextTitle)
+            val resolvedUri = resolveKnownPlaylistContextUri(context, lastTrackUri, sanitizedContextTitle ?: lastContextTitle)
             if (!resolvedUri.isNullOrBlank()) {
                 lastContextUri = resolvedUri
                 lastContextTypeHint = "playlist"
@@ -330,16 +440,32 @@ object PlaybackTracker {
             }
         }
 
-        if (!contextTitle.isNullOrBlank() && contextTitle != "Spotify") {
-            val titleChanged = !lastContextTitle.isNullOrBlank() && !lastContextTitle.equals(contextTitle, ignoreCase = true)
-            lastContextTitle = contextTitle
+        if (!sanitizedContextTitle.isNullOrBlank()) {
+            val titleChanged = !lastContextTitle.isNullOrBlank() && !lastContextTitle.equals(sanitizedContextTitle, ignoreCase = true)
+            lastContextTitle = sanitizedContextTitle
             if (titleChanged && contextUri.isNullOrBlank()) {
-                val resolvedForNewTitle = resolveKnownPlaylistContextUri(context, lastTrackUri, contextTitle)
-                lastContextUri = resolvedForNewTitle
-                lastCoverUrl = resolvedForNewTitle?.let { playlistCoverCache[it] } ?: coverUrl
+                val resolvedForNewTitle = resolveKnownPlaylistContextUri(context, lastTrackUri, sanitizedContextTitle)
+                if (!resolvedForNewTitle.isNullOrBlank()) {
+                    lastContextUri = resolvedForNewTitle
+                    lastCoverUrl = playlistCoverCache[resolvedForNewTitle] ?: coverUrl
+                } else if (contextTypeHint != "album") {
+                    val (_, localPlUri) = computeBookmarkIdentity(
+                        contextUri = null,
+                        contextTitle = sanitizedContextTitle,
+                        album = lastAlbum,
+                        trackTitle = lastTrackTitle,
+                        trackUri = lastTrackUri,
+                        contextTypeHint = "playlist"
+                    )
+                    lastContextUri = localPlUri
+                    lastCoverUrl = coverUrl
+                } else {
+                    lastContextUri = null
+                    lastCoverUrl = coverUrl
+                }
             }
             if (!lastContextUri.isNullOrBlank() && lastContextUri!!.startsWith("spotify:playlist:")) {
-                playlistNameCache[lastContextUri!!] = contextTitle
+                playlistNameCache[lastContextUri!!] = sanitizedContextTitle
             }
         }
 
@@ -374,6 +500,7 @@ object PlaybackTracker {
         trackUri: String? = null
     ) {
         val now = System.currentTimeMillis()
+        lastEventTimeMs = now
 
         // Schutz gegen veraltete Broadcasts eines anderen Tracks
         if (!trackUri.isNullOrBlank() && lastTrackUri.isNotBlank() && trackUri != lastTrackUri) {
@@ -383,17 +510,35 @@ object PlaybackTracker {
             }
         }
 
-        // Resume-Schutzfenster: verhindert Überschreiben des Lesezeichens mit 0:00 bevor seekTo greift
+        // Resume-Schutzfenster: verhindert Überschreiben des Lesezeichens mit 0:00 bevor seekTo stabil greift
         if (isWithinResumeGrace(now)) {
             val resumed = pendingResumeBookmark
             if (resumed != null) {
-                if (resumed.positionMs > 3000L && positionMs < resumed.positionMs - 3000L) {
-                    lastIsPlaying = isPlaying
-                    lastPositionMs = resumed.positionMs
-                    updateRepositoryState(context, source)
+                val matchesResumedTrack = trackUri.isNullOrBlank() ||
+                    trackUri == resumed.trackUri ||
+                    trackUri == "spotify:track:active" ||
+                    trackUri == "spotify:track:notification" ||
+                    trackUri.startsWith("spotify:track:local_")
+
+                if (matchesResumedTrack) {
+                    if (resumed.positionMs > 3000L && positionMs < resumed.positionMs - 3000L) {
+                        resumeStableHitCount = 0
+                        lastIsPlaying = isPlaying
+                        lastPositionMs = resumed.positionMs
+                        updateRepositoryState(context, source)
+                        return
+                    } else if (isPlaying && positionMs >= resumed.positionMs - 3000L) {
+                        resumeStableHitCount++
+                        if (resumeStableHitCount >= 3 || (now - pendingResumeTimestampMs) >= RESUME_GRACE_MS) {
+                            pendingResumeBookmark = null
+                            resumeStableHitCount = 0
+                        }
+                    }
+                } else {
+                    // Event gehört noch zum vorherigen Track (z.B. aus der anderen Playlist vor dem Umschalten)
+                    // -> Ignorieren, damit die Position des neuen Tracks nicht verfälscht wird!
+                    Log.d(TAG, "Ignoriere Übergangs-Event für abweichenden Track $trackUri während Resume-Schutzfenster")
                     return
-                } else if (isPlaying && positionMs >= resumed.positionMs - 3000L) {
-                    pendingResumeBookmark = null
                 }
             }
         }
@@ -471,7 +616,7 @@ object PlaybackTracker {
             isPlaying = isPlaying,
             positionMs = effectivePos,
             source = "MediaSession",
-            trackUri = lastTrackUri
+            trackUri = trackUri ?: lastTrackUri
         )
     }
 
@@ -523,6 +668,15 @@ object PlaybackTracker {
             val resolved = resolveKnownPlaylistContextUri(context, lastTrackUri, lastContextTitle)
             if (!resolved.isNullOrBlank()) {
                 lastContextUri = resolved
+                lastContextTypeHint = "playlist"
+            } else if (!activeResumedContextUri.isNullOrBlank() && lastContextTypeHint != "album") {
+                lastContextUri = activeResumedContextUri
+                if (lastContextTitle.isNullOrBlank() || lastContextTitle == "Spotify") {
+                    lastContextTitle = activeResumedContextTitle ?: lastContextTitle
+                }
+                if (lastCoverUrl.isNullOrBlank()) {
+                    lastCoverUrl = activeResumedCoverUrl
+                }
                 lastContextTypeHint = "playlist"
             }
         }
@@ -650,6 +804,18 @@ object PlaybackTracker {
                 val state = stateResult.getOrNull()
                 if (state != null && state.track != null) {
                     val apiTrack = state.track
+                    val nowMs = System.currentTimeMillis()
+                    if (isWithinResumeGrace(nowMs)) {
+                        val resumed = pendingResumeBookmark
+                        if (resumed != null && resumed.trackUri.isNotBlank() &&
+                            resumed.trackUri != "spotify:track:active" &&
+                            resumed.trackUri != "spotify:track:notification" &&
+                            apiTrack.uri != resumed.trackUri
+                        ) {
+                            return@launch
+                        }
+                    }
+
                     // Nur anwenden, wenn /me/player auch zum aktuell verfolgten Track passt
                     if (lastTrackUri.isNotBlank() &&
                         lastTrackUri != "spotify:track:active" &&
@@ -666,6 +832,10 @@ object PlaybackTracker {
                     if (!apiContextUri.isNullOrBlank()) {
                         val previousContextUri = lastContextUri
                         lastContextUri = apiContextUri
+                        if (activeResumedContextUri != null && activeResumedContextUri != apiContextUri) {
+                            activeResumedContextUri = null
+                            activeResumedTrackUri = null
+                        }
                         if (apiContextUri.startsWith("spotify:playlist:")) {
                             lastContextTypeHint = "playlist"
                         } else if (apiContextUri.startsWith("spotify:album:")) {

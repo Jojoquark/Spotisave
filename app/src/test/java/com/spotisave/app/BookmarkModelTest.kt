@@ -1,12 +1,15 @@
 package com.spotisave.app
 
+import com.spotisave.app.data.api.SpotifyApiClient
 import com.spotisave.app.data.model.Bookmark
 import com.spotisave.app.data.model.HistoryTrackEntry
 import com.spotisave.app.data.model.PlaybackStateModel
+import com.spotisave.app.service.PlaybackTracker
 import com.spotisave.app.service.SpotifyNotificationListenerService
 import com.spotisave.app.ui.util.ResumeHelper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -363,6 +366,116 @@ class BookmarkModelTest {
             contextUri = "spotify:playlist:local_my_mix"
         )
         assertEquals("spotify:track:track_7_real_uri", ResumeHelper.resolveNativeTargetUri(localPlaylistBookmark))
+    }
+
+    @Test
+    fun testSanitizeIncomingContextTitleRejectsAlbumEchoInPlaylistSession() {
+        // Notification EXTRA_SUB_TEXT merely repeating the track's album name without an explicit
+        // "Album • " prefix must return null so it never clobbers an active playlist context
+        assertNull(
+            PlaybackTracker.sanitizeIncomingContextTitle(
+                rawContextTitle = "Random Access Memories",
+                album = "Random Access Memories",
+                trackTitle = "Get Lucky",
+                contextUri = null,
+                contextTypeHint = null
+            )
+        )
+
+        // Distinct playlist name in EXTRA_SUB_TEXT is preserved
+        assertEquals(
+            "Chill Vibes",
+            PlaybackTracker.sanitizeIncomingContextTitle(
+                rawContextTitle = "Chill Vibes",
+                album = "Random Access Memories",
+                trackTitle = "Get Lucky",
+                contextUri = null,
+                contextTypeHint = null
+            )
+        )
+
+        // Explicit "playlist" hint preserves playlist title even if identical to album name
+        assertEquals(
+            "Random Access Memories",
+            PlaybackTracker.sanitizeIncomingContextTitle(
+                rawContextTitle = "Random Access Memories",
+                album = "Random Access Memories",
+                trackTitle = "Get Lucky",
+                contextUri = null,
+                contextTypeHint = "playlist"
+            )
+        )
+    }
+
+    @Test
+    fun testResolveEffectiveContextUriAndBuildPlayPayload() {
+        val importedPlaylistBookmarkWithoutContextField = Bookmark(
+            id = "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
+            contextUri = null,
+            contextTitle = "Today's Top Hits",
+            trackTitle = "Espresso",
+            artist = "Sabrina Carpenter",
+            trackUri = "spotify:track:4cOdK2wGLETKBW3PvgPWqT",
+            positionMs = 45_000L
+        )
+        assertEquals(
+            "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
+            ResumeHelper.resolveEffectiveContextUri(importedPlaylistBookmarkWithoutContextField)
+        )
+
+        val syntheticAlbumBookmark = Bookmark(
+            id = "album:future_nostalgia",
+            contextUri = "album:future_nostalgia",
+            contextTitle = "Future Nostalgia",
+            trackTitle = "Levitating",
+            artist = "Dua Lipa",
+            trackUri = "spotify:track:levitating",
+            positionMs = 30_000L
+        )
+        assertNull(ResumeHelper.resolveEffectiveContextUri(syntheticAlbumBookmark))
+
+        // buildPlayPayload must reject synthetic "album:..." as context_uri and use uris: [trackUri] instead
+        val syntheticPayload = SpotifyApiClient.buildPlayPayload(
+            contextUri = "album:future_nostalgia",
+            trackUri = "spotify:track:levitating",
+            positionMs = 30_000L
+        )
+        assertFalse(syntheticPayload.contains("context_uri"))
+        assertTrue(syntheticPayload.contains("\"uris\":[\"spotify:track:levitating\"]"))
+
+        val canonicalPlaylistPayload = SpotifyApiClient.buildPlayPayload(
+            contextUri = "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
+            trackUri = "spotify:track:4cOdK2wGLETKBW3PvgPWqT",
+            positionMs = 45_000L
+        )
+        assertTrue(canonicalPlaylistPayload.contains("\"context_uri\":\"spotify:playlist:37i9dQZF1DXcBWIGoYBM5M\""))
+    }
+
+    @Test
+    fun testComputeBookmarkIdentityPreservesPlaylistsAndHandlesAlbums() {
+        // Distinct playlist title produces local playlist URI
+        val (plId, plCtx) = PlaybackTracker.computeBookmarkIdentity(
+            contextUri = null,
+            contextTitle = "Summer Vibes",
+            album = "Hit Collection",
+            trackTitle = "Sunshine",
+            trackUri = "spotify:track:123",
+            contextTypeHint = null
+        )
+        assertTrue(plId.startsWith("spotify:playlist:local_summer_vibes"))
+        assertEquals("spotify:playlist:local_summer_vibes", plCtx)
+
+        // Explicit album type hint produces album identity
+        val (albumId, albumCtx) = PlaybackTracker.computeBookmarkIdentity(
+            contextUri = null,
+            contextTitle = "Thriller",
+            album = "Thriller",
+            trackTitle = "Billie Jean",
+            trackUri = "spotify:track:456",
+            contextTypeHint = "album"
+        )
+        assertTrue(albumId.startsWith("album:thriller"))
+        assertNull(albumCtx)
     }
 }
 

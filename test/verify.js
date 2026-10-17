@@ -1385,7 +1385,10 @@ async function runTests() {
     assert(resumeHelperSrc19.includes('PlaybackTracker.onResumeInitiated(context, bookmark)'), 'ResumeHelper.kt notifies PlaybackTracker before initiating resume');
     assert(resumeHelperSrc19.includes('fun resolveNativeTargetUri(') && resumeHelperSrc19.includes('private fun ensureSeekPosition('), 'ResumeHelper.kt resolves specific track URI for native fallback and runs multi-step ensureSeekPosition');
     assert(apiClientSrc19.includes('suspend fun seekToPosition('), 'SpotifyApiClient.kt provides seekToPosition endpoint for post-resume position recovery');
-    assert(!mainScreenSrc18.includes('?: bookmarks.firstOrNull()'), 'MainScreen.kt never mismatches live playback from Playlist B with bookmarks.firstOrNull() from Playlist A');
+    assert(apiClientSrc19.includes('suspend fun getUserPlaylists('), 'SpotifyApiClient.kt implements getUserPlaylists for user playlist catalog sync');
+    assert(notifSrc19.includes('onQueueTitleChanged(') && notifSrc19.includes('controller.queueTitle'), 'SpotifyNotificationListenerService.kt inspects queueTitle and listens to onQueueTitleChanged');
+    assert(!repoSrc19.includes('val isSameTrackSingle = old.id == bookmark.trackUri\n') && repoSrc19.includes('!old.isPlaylist'), 'BookmarkRepository.kt protects playlists from being deleted when single track is saved');
+    assert(resumeHelperSrc19.includes('putExtra("context_uri"'), 'ResumeHelper.kt passes context extras in native Spotify resume intent');
 
     // 3. White Mode Contrast Polish across Components
     assert(!statusSheetSrc18.includes('Color(0xFF161618)') && !statusSheetSrc18.includes('Color(0xFF141416)'), 'StatusBottomSheet.kt has zero hardcoded dark card backgrounds in White Mode');

@@ -1694,7 +1694,9 @@
 
             // Bookmark saving logic: handles Playlists AND Albums (plus fallback-resumed playlists where context is omitted by Spotify)
             let effectiveContext = (context && (context.type === 'playlist' || context.type === 'album')) ? context : null;
-            if (!effectiveContext && track && track.uri) {
+            if (effectiveContext) {
+                engineState.activeResumedContext = effectiveContext;
+            } else if (track && track.uri) {
                 const savedMap = getBookmarks();
                 const resumedMatch = (engineState.pendingResume && engineState.pendingResume.track_uri === track.uri)
                     ? engineState.pendingResume
@@ -1702,6 +1704,9 @@
                 if (resumedMatch && resumedMatch.context_uri) {
                     const inferredType = resumedMatch.context_type || (resumedMatch.context_uri.includes(':album:') ? 'album' : 'playlist');
                     effectiveContext = { type: inferredType, uri: resumedMatch.context_uri };
+                    engineState.activeResumedContext = effectiveContext;
+                } else if (engineState.activeResumedContext && engineState.activeResumedContext.uri && isPlaying) {
+                    effectiveContext = engineState.activeResumedContext;
                 }
             }
 
@@ -1734,7 +1739,7 @@
                 let safeProgress = progress;
                 if (inResumeGrace && engineState.pendingResume.playlist_id === entityId) {
                     const targetPos = Number(engineState.pendingResume.progress_ms) || 0;
-                    if (targetPos > 3000 && progress < targetPos - 3000) {
+                    if (engineState.pendingResume.track_uri === track.uri && targetPos > 3000 && progress < targetPos - 3000) {
                         safeProgress = targetPos;
                     } else if (isPlaying && progress >= targetPos - 3000) {
                         engineState.pendingResumeAt = 0;
@@ -1825,12 +1830,21 @@
         showToast(`Wiederaufnahme: ${b.playlist_name}...`);
         engineState.pendingResume = b;
         engineState.pendingResumeAt = Date.now();
+        if (b.context_uri) {
+            const inferredType = b.context_type || (String(b.context_uri).includes(':album:') ? 'album' : 'playlist');
+            engineState.activeResumedContext = { type: inferredType, uri: b.context_uri };
+        }
 
         try {
-            const hasContextUri = Boolean(b.context_uri && !String(b.context_uri).startsWith('spotify:playlist:local_'));
+            const ctxStr = b.context_uri ? String(b.context_uri) : '';
+            const hasContextUri = Boolean(
+                ctxStr &&
+                !ctxStr.startsWith('spotify:playlist:local_') &&
+                (ctxStr.startsWith('spotify:playlist:') || ctxStr.startsWith('spotify:album:') || ctxStr.startsWith('spotify:show:'))
+            );
             const body = hasContextUri
                 ? JSON.stringify({
-                    context_uri: b.context_uri,
+                    context_uri: ctxStr,
                     offset: b.track_uri ? { uri: b.track_uri } : undefined,
                     position_ms: Number(b.progress_ms) || 0
                 })

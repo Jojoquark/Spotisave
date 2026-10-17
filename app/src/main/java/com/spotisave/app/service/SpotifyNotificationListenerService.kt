@@ -238,6 +238,10 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
                     handleMetadata(controller, metadata)
                 }
 
+                override fun onQueueTitleChanged(title: CharSequence?) {
+                    handleMetadata(controller, controller.metadata)
+                }
+
                 override fun onSessionDestroyed() {
                     releaseMediaController()
                 }
@@ -273,14 +277,22 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             ?: controller.playbackState?.extras?.getString("context_uri")
             ?: controller.playbackState?.extras?.getString("com.spotify.music.extra.CONTEXT_URI")
 
+        val rawQueueTitle = controller.queueTitle?.toString()?.trim()?.takeIf {
+            it.isNotBlank() && !it.equals("Spotify", ignoreCase = true)
+        }
+
         val contextTitle = controller.extras?.getString("context_title")
             ?: controller.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
             ?: controller.extras?.getString("context_name")
             ?: controller.extras?.getString("playlist_name")
             ?: controller.extras?.getString("queue_title")
+            ?: rawQueueTitle
             ?: controller.playbackState?.extras?.getString("context_title")
             ?: controller.playbackState?.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
             ?: lastNotificationContextTitle
+
+        val effectiveContextType = lastNotificationContextType
+            ?: if (rawQueueTitle != null) "playlist" else null
 
         val playbackState = controller.playbackState
         val position = computeCurrentPosition(playbackState, duration)
@@ -298,7 +310,7 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             contextUri = contextUri,
             contextTitle = contextTitle,
             coverUrl = coverUrl,
-            contextTypeHint = lastNotificationContextType
+            contextTypeHint = effectiveContextType
         )
     }
 
@@ -323,14 +335,22 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             ?: state.extras?.getString("context_uri")
             ?: state.extras?.getString("com.spotify.music.extra.CONTEXT_URI")
 
+        val rawQueueTitle = controller.queueTitle?.toString()?.trim()?.takeIf {
+            it.isNotBlank() && !it.equals("Spotify", ignoreCase = true)
+        }
+
         val contextTitle = controller.extras?.getString("context_title")
             ?: controller.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
             ?: controller.extras?.getString("context_name")
             ?: controller.extras?.getString("playlist_name")
             ?: controller.extras?.getString("queue_title")
+            ?: rawQueueTitle
             ?: state.extras?.getString("context_title")
             ?: state.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
             ?: lastNotificationContextTitle
+
+        val effectiveContextType = lastNotificationContextType
+            ?: if (rawQueueTitle != null) "playlist" else null
 
         val position = computeCurrentPosition(state, duration)
 
@@ -346,7 +366,7 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             contextUri = contextUri,
             contextTitle = contextTitle,
             coverUrl = coverUrl,
-            contextTypeHint = lastNotificationContextType
+            contextTypeHint = effectiveContextType
         )
     }
 

@@ -23,6 +23,26 @@ object ResumeHelper {
     private const val TAG = "ResumeHelper"
 
     /**
+     * Ermittelt die kanonische Context-URI eines Bookmarks (inkl. Fallback auf bookmark.id
+     * für importierte Lesezeichen ohne explizites contextUri-Feld).
+     */
+    fun resolveEffectiveContextUri(bookmark: Bookmark): String? {
+        val raw = bookmark.contextUri?.takeIf { it.isNotBlank() }
+            ?: bookmark.id.takeIf {
+                it.startsWith("spotify:playlist:") ||
+                    it.startsWith("spotify:album:") ||
+                    it.startsWith("spotify:show:")
+            }
+        return raw?.takeIf {
+            !it.startsWith("spotify:playlist:local_") &&
+                (it.startsWith("spotify:playlist:") ||
+                    it.startsWith("spotify:album:") ||
+                    it.startsWith("spotify:show:") ||
+                    it.startsWith("spotify:artist:"))
+        }
+    }
+
+    /**
      * Bestimmt die optimale Ziel-URI für einen nativen Android ACTION_VIEW Intent:
      * Bevorzugt die konkrete Track-/Episoden-URI gegenüber einer Playlist-URI,
      * da Spotify bei einer reinen Playlist-URI lediglich die Playlist-Übersicht öffnet
@@ -39,8 +59,8 @@ object ResumeHelper {
         if (hasValidTrackUri) {
             return bookmark.trackUri
         }
-        val ctx = bookmark.contextUri
-        if (!ctx.isNullOrBlank() && ctx.startsWith("spotify:") && !ctx.startsWith("spotify:playlist:local_")) {
+        val ctx = resolveEffectiveContextUri(bookmark)
+        if (!ctx.isNullOrBlank()) {
             return ctx
         }
         return bookmark.trackUri
@@ -59,6 +79,7 @@ object ResumeHelper {
 
         // 0. Aktuellen Stand einer evtl. laufenden anderen Playlist sichern & Schutzfenster aktivieren
         PlaybackTracker.onResumeInitiated(context, bookmark)
+        val effectiveContextUri = resolveEffectiveContextUri(bookmark)
 
         val authManager = SpotifyAuthManager.getInstance(context)
         if (authManager.isLoggedIn()) {
@@ -67,22 +88,23 @@ object ResumeHelper {
                     val apiClient = SpotifyApiClient.getInstance(context)
                     var result = withContext(Dispatchers.IO) {
                         apiClient.resumePlayback(
-                            contextUri = bookmark.contextUri,
+                            contextUri = effectiveContextUri,
                             trackUri = bookmark.trackUri,
                             positionMs = bookmark.positionMs
                         )
                     }
 
                     // Falls Spotify auf dem Smartphone im Ruhezustand war (404 No Active Device),
-                    // lokalen Player kurz aufwecken und Web API erneut versuchen
-                    if (result.isFailure) {
+                    // lokalen Player kurz aufwecken und Web API erneut versuchen (nicht bei 403 Free-Account)
+                    val errMsg = result.exceptionOrNull()?.message.orEmpty()
+                    if (result.isFailure && errMsg.contains("404")) {
                         try {
                             SpotifyNotificationListenerService.currentMediaController?.transportControls?.play()
                         } catch (_: Exception) {}
-                        delay(750L)
+                        delay(650L)
                         result = withContext(Dispatchers.IO) {
                             apiClient.resumePlayback(
-                                contextUri = bookmark.contextUri,
+                                contextUri = effectiveContextUri,
                                 trackUri = bookmark.trackUri,
                                 positionMs = bookmark.positionMs
                             )
@@ -126,16 +148,19 @@ object ResumeHelper {
 
     /**
      * Überprüft mehrstufig, ob der Ziel-Track im MediaController geladen ist, und setzt
-     * die exakte Hörposition (positionMs), falls Spotify den Titel bei 0:00 gestartet hat.
+     * die exakte Hörposition (positionMs), falls Spotify den Titel bei 0:00 gestartet hat
+     * oder nach dem Stream-Buffering noch einmal auf 0:00 zurücksetzt.
      */
     private fun ensureSeekPosition(bookmark: Bookmark, apiClient: SpotifyApiClient? = null) {
         if (bookmark.positionMs <= 0L) return
         CoroutineScope(Dispatchers.Main).launch {
             val hasCanonicalTrackUri = bookmark.trackUri.isNotBlank() &&
                 bookmark.trackUri != "spotify:track:active" &&
-                bookmark.trackUri != "spotify:track:notification"
+                bookmark.trackUri != "spotify:track:notification" &&
+                !bookmark.trackUri.startsWith("spotify:track:local_")
 
-            for (attempt in 1..12) {
+            var stableHits = 0
+            for (attempt in 1..18) {
                 delay(380L)
                 val controller = SpotifyNotificationListenerService.currentMediaController
                 if (controller != null) {
@@ -150,6 +175,7 @@ object ResumeHelper {
                     if (trackMatches) {
                         val livePos = SpotifyNotificationListenerService.getActivePlaybackPosition()
                         if (livePos < bookmark.positionMs - 3000L || livePos > bookmark.positionMs + 15_000L) {
+                            stableHits = 0
                             try {
                                 controller.transportControls.seekTo(bookmark.positionMs)
                                 controller.transportControls.play()
@@ -162,18 +188,21 @@ object ResumeHelper {
                                 }
                             }
                         } else {
-                            // Zielposition erfolgreich erreicht!
+                            // Zielposition erreicht -> mindestens 2 aufeinanderfolgende Messungen abwarten,
+                            // damit ein verzögerter 0:00-Reset nach dem Stream-Buffering abgefangen wird!
+                            stableHits++
                             try {
                                 controller.transportControls.play()
                             } catch (_: Exception) {}
-                            return@launch
+                            if (stableHits >= 2) {
+                                return@launch
+                            }
                         }
                     }
-                } else if (apiClient != null && attempt == 3) {
+                } else if (apiClient != null && (attempt == 2 || attempt == 5 || attempt == 9)) {
                     withContext(Dispatchers.IO) {
                         apiClient.seekToPosition(bookmark.positionMs)
                     }
-                    return@launch
                 }
             }
         }
@@ -238,6 +267,12 @@ object ResumeHelper {
         val spotifyIntent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUriString)).apply {
             setPackage("com.spotify.music")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val effectiveCtx = resolveEffectiveContextUri(bookmark)
+            if (!effectiveCtx.isNullOrBlank()) {
+                putExtra("context_uri", effectiveCtx)
+                putExtra("com.spotify.music.extra.CONTEXT_URI", effectiveCtx)
+                putExtra("playlist_uri", effectiveCtx)
+            }
         }
 
         try {

@@ -58,16 +58,18 @@ class BookmarkRepository private constructor(context: Context) {
                 val existingAll = dbHelper.getAllBookmarks()
                 for (old in existingAll) {
                     if (old.id == bookmark.id) continue
-                    val isSameTrackSingle = old.id == bookmark.trackUri
+                    val isSameTrackSingle = old.id == bookmark.trackUri && !old.isPlaylist
                     val isMisclassifiedAlbumForSameTrack = old.id.startsWith("album:") &&
-                        (old.trackUri == bookmark.trackUri ||
+                        (old.trackUri == bookmark.trackUri &&
                             (bookmark.contextTitle.isNotBlank() &&
                                 bookmark.contextTitle != "Spotify" &&
                                 bookmark.contextTitle != "Playlist" &&
                                 old.contextTitle.equals(bookmark.contextTitle, ignoreCase = true)))
                     val isLocalPlaylistPlaceholder = old.id.startsWith("spotify:playlist:local_") &&
                         !bookmark.id.startsWith("spotify:playlist:local_") &&
-                        (old.trackUri == bookmark.trackUri ||
+                        (bookmark.contextTitle.isNotBlank() &&
+                            bookmark.contextTitle != "Spotify" &&
+                            bookmark.contextTitle != "Playlist" &&
                             old.contextTitle.equals(bookmark.contextTitle, ignoreCase = true))
 
                     if (isSameTrackSingle || isMisclassifiedAlbumForSameTrack || isLocalPlaylistPlaceholder) {
@@ -98,11 +100,13 @@ class BookmarkRepository private constructor(context: Context) {
             var changed = false
             for (old in all) {
                 if (old.id == canonicalId) continue
-                val matchesTrack = trackUri.isNotBlank() && old.trackUri == trackUri
-                val matchesAlbumId = normalizedAlbumId != null && old.id == normalizedAlbumId && matchesTrack
+                val matchesAlbumId = normalizedAlbumId != null && old.id == normalizedAlbumId && old.trackUri == trackUri
                 val matchesLocalPl = old.id.startsWith("spotify:playlist:local_") &&
-                    (matchesTrack || (!contextTitle.isNullOrBlank() && old.contextTitle.equals(contextTitle, ignoreCase = true)))
-                if (old.id == trackUri || matchesAlbumId || matchesLocalPl) {
+                    (!contextTitle.isNullOrBlank() &&
+                        contextTitle != "Spotify" &&
+                        contextTitle != "Playlist" &&
+                        old.contextTitle.equals(contextTitle, ignoreCase = true))
+                if (matchesAlbumId || matchesLocalPl) {
                     dbHelper.deleteBookmark(old.id)
                     changed = true
                 }

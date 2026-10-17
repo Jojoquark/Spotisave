@@ -314,10 +314,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             repository.deleteBookmark(bm.id)
                             repository.saveBookmark(upgraded)
                             repository.cleanupSupersededBookmarks(
+                                canonicalId = realPlUri,
                                 trackUri = upgraded.trackUri,
-                                playlistContextUri = realPlUri,
-                                playlistTitle = upgradedTitle,
-                                trackTitle = upgraded.trackTitle
+                                album = matchingPlHistory.album,
+                                contextTitle = upgradedTitle
                             )
                             continue
                         }

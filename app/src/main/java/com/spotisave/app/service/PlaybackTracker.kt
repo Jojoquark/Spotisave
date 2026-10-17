@@ -54,8 +54,17 @@ object PlaybackTracker {
     @Volatile private var activeResumedCoverUrl: String? = null
 
     // In-Memory Cache für Playlist-Namen und Playlist-Cover (verhindert redundante API-Aufrufe)
-    private val playlistNameCache = java.util.concurrent.ConcurrentHashMap<String, String>()
-    private val playlistCoverCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    val playlistNameCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+    val playlistCoverCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    fun cachePlaylistMetadata(uri: String, name: String?, coverUrl: String?) {
+        if (!name.isNullOrBlank()) {
+            playlistNameCache[uri] = name
+        }
+        if (!coverUrl.isNullOrBlank()) {
+            playlistCoverCache[uri] = coverUrl
+        }
+    }
 
     fun isWithinResumeGrace(now: Long = System.currentTimeMillis()): Boolean {
         val pending = pendingResumeBookmark ?: return false

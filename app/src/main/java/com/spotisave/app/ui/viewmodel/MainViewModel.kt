@@ -288,12 +288,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val userPlaylists = userPlaylistsResult.getOrNull().orEmpty()
                 for (pl in userPlaylists) {
                     val uri = "spotify:playlist:${pl.id}"
-                    if (pl.name.isNotBlank()) {
-                        PlaybackTracker.playlistNameCache[uri] = pl.name
-                    }
-                    if (!pl.coverUrl.isNullOrBlank()) {
-                        PlaybackTracker.playlistCoverCache[uri] = pl.coverUrl
-                    }
+                    PlaybackTracker.cachePlaylistMetadata(uri, pl.name, pl.coverUrl)
                 }
 
                 val currentBookmarks = bookmarks.value

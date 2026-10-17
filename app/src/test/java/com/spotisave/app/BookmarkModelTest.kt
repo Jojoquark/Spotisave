@@ -477,5 +477,12 @@ class BookmarkModelTest {
         assertTrue(albumId.startsWith("album:thriller"))
         assertNull(albumCtx)
     }
+
+    @Test
+    fun testCachePlaylistMetadata() {
+        PlaybackTracker.cachePlaylistMetadata("spotify:playlist:test_123", "Test Playlist", "https://example.com/cover.jpg")
+        assertEquals("Test Playlist", PlaybackTracker.playlistNameCache["spotify:playlist:test_123"])
+        assertEquals("https://example.com/cover.jpg", PlaybackTracker.playlistCoverCache["spotify:playlist:test_123"])
+    }
 }
 

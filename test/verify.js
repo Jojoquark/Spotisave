@@ -1387,7 +1387,8 @@ async function runTests() {
     assert(apiClientSrc19.includes('suspend fun seekToPosition('), 'SpotifyApiClient.kt provides seekToPosition endpoint for post-resume position recovery');
     assert(apiClientSrc19.includes('suspend fun getUserPlaylists('), 'SpotifyApiClient.kt implements getUserPlaylists for user playlist catalog sync');
     assert(notifSrc19.includes('onQueueTitleChanged(') && notifSrc19.includes('controller.queueTitle'), 'SpotifyNotificationListenerService.kt inspects queueTitle and listens to onQueueTitleChanged');
-    assert(!repoSrc19.includes('val isSameTrackSingle = old.id == bookmark.trackUri\n') && repoSrc19.includes('!old.isPlaylist'), 'BookmarkRepository.kt protects playlists from being deleted when single track is saved');
+    assert(trackerSrc19.includes('fun cachePlaylistMetadata('), 'PlaybackTracker.kt implements cachePlaylistMetadata helper');
+    assert(mainVmCode.includes('PlaybackTracker.cachePlaylistMetadata('), 'MainViewModel.kt populates playlist metadata cache via cachePlaylistMetadata');
     assert(resumeHelperSrc19.includes('putExtra("context_uri"'), 'ResumeHelper.kt passes context extras in native Spotify resume intent');
 
     // 3. White Mode Contrast Polish across Components

@@ -191,11 +191,18 @@ class SpotifyApiClient(private val context: Context) {
          */
         fun buildPlayPayload(contextUri: String?, trackUri: String, positionMs: Long): String {
             val json = JSONObject()
-            if (!contextUri.isNullOrBlank()) {
+            val hasCanonicalContext = !contextUri.isNullOrBlank() && !contextUri.startsWith("spotify:playlist:local_")
+            val hasCanonicalTrack = trackUri.isNotBlank() &&
+                trackUri != "spotify:track:active" &&
+                trackUri != "spotify:track:notification"
+
+            if (hasCanonicalContext) {
                 json.put("context_uri", contextUri)
-                val offset = JSONObject()
-                offset.put("uri", trackUri)
-                json.put("offset", offset)
+                if (hasCanonicalTrack) {
+                    val offset = JSONObject()
+                    offset.put("uri", trackUri)
+                    json.put("offset", offset)
+                }
             } else {
                 val urisArray = JSONArray()
                 urisArray.put(trackUri)
@@ -389,9 +396,13 @@ class SpotifyApiClient(private val context: Context) {
                 }
             }
 
-            // 2. Fallback: 400 Bad Request -> Fallback auf direkte Track-URI
-            if (resp.code == 400 && trackUri.isNotBlank()) {
-                Log.d(TAG, "PUT /me/player/play gab 400 zurück -> Fallback auf Einzeltitel")
+            // 2. Fallback: 400 / 403 / 404 bei Offset in Playlist -> Fallback auf direkte Track-URI
+            if ((resp.code == 400 || resp.code == 403 || (resp.code == 404 && targetDeviceId != null)) &&
+                trackUri.isNotBlank() &&
+                trackUri != "spotify:track:active" &&
+                trackUri != "spotify:track:notification"
+            ) {
+                Log.d(TAG, "PUT /me/player/play gab ${resp.code} zurück -> Fallback auf Einzeltitel")
                 val fallbackPayload = JSONObject().apply {
                     val arr = JSONArray()
                     arr.put(trackUri)
@@ -416,6 +427,23 @@ class SpotifyApiClient(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Unerwarteter Fehler bei resumePlayback", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Springt via Web API explizit an die gewünschte Millisekunden-Position (PUT /me/player/seek).
+     */
+    suspend fun seekToPosition(positionMs: Long): Result<Boolean> {
+        return try {
+            val safePos = positionMs.coerceAtLeast(0L)
+            val resp = sendRequest("/me/player/seek?position_ms=$safePos", method = "PUT")
+            if (resp.code in 200..204) {
+                Result.success(true)
+            } else {
+                Result.failure(Exception("HTTP ${resp.code}: ${resp.body}"))
+            }
+        } catch (e: Exception) {
             Result.failure(e)
         }
     }

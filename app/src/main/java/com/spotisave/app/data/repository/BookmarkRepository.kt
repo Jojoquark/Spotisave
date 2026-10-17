@@ -53,9 +53,63 @@ class BookmarkRepository private constructor(context: Context) {
 
     fun saveBookmark(bookmark: Bookmark) {
         scope.launch {
-            dbHelper.insertOrUpdate(bookmark)
+            var toSave = bookmark
+            if (bookmark.isPlaylist) {
+                val existingAll = dbHelper.getAllBookmarks()
+                for (old in existingAll) {
+                    if (old.id == bookmark.id) continue
+                    val isSameTrackSingle = old.id == bookmark.trackUri
+                    val isMisclassifiedAlbumForSameTrack = old.id.startsWith("album:") &&
+                        (old.trackUri == bookmark.trackUri ||
+                            (bookmark.contextTitle.isNotBlank() &&
+                                bookmark.contextTitle != "Spotify" &&
+                                bookmark.contextTitle != "Playlist" &&
+                                old.contextTitle.equals(bookmark.contextTitle, ignoreCase = true)))
+                    val isLocalPlaylistPlaceholder = old.id.startsWith("spotify:playlist:local_") &&
+                        !bookmark.id.startsWith("spotify:playlist:local_") &&
+                        (old.trackUri == bookmark.trackUri ||
+                            old.contextTitle.equals(bookmark.contextTitle, ignoreCase = true))
+
+                    if (isSameTrackSingle || isMisclassifiedAlbumForSameTrack || isLocalPlaylistPlaceholder) {
+                        if (old.trackUri == toSave.trackUri && toSave.positionMs <= 1000L && old.positionMs > toSave.positionMs) {
+                            toSave = toSave.copy(positionMs = old.positionMs)
+                        }
+                        dbHelper.deleteBookmark(old.id)
+                    }
+                }
+            }
+            dbHelper.insertOrUpdate(toSave)
             val updated = dbHelper.getAllBookmarks()
             _bookmarks.value = updated
+        }
+    }
+
+    fun cleanupSupersededBookmarks(
+        canonicalId: String,
+        trackUri: String,
+        album: String? = null,
+        contextTitle: String? = null
+    ) {
+        scope.launch {
+            val normalizedAlbumId = album?.takeIf { it.isNotBlank() && it != "Spotify" }?.let {
+                "album:" + it.trim().lowercase().replace(Regex("[^a-z0-9_]"), "_")
+            }
+            val all = dbHelper.getAllBookmarks()
+            var changed = false
+            for (old in all) {
+                if (old.id == canonicalId) continue
+                val matchesTrack = trackUri.isNotBlank() && old.trackUri == trackUri
+                val matchesAlbumId = normalizedAlbumId != null && old.id == normalizedAlbumId && matchesTrack
+                val matchesLocalPl = old.id.startsWith("spotify:playlist:local_") &&
+                    (matchesTrack || (!contextTitle.isNullOrBlank() && old.contextTitle.equals(contextTitle, ignoreCase = true)))
+                if (old.id == trackUri || matchesAlbumId || matchesLocalPl) {
+                    dbHelper.deleteBookmark(old.id)
+                    changed = true
+                }
+            }
+            if (changed) {
+                _bookmarks.value = dbHelper.getAllBookmarks()
+            }
         }
     }
 
@@ -89,6 +143,16 @@ class BookmarkRepository private constructor(context: Context) {
                     coverUrl = coverUrl ?: existing.coverUrl
                 )
                 dbHelper.insertOrUpdate(updated)
+                if (updated.isPlaylist) {
+                    for (old in all) {
+                        if (old.id != updated.id &&
+                            (old.id.startsWith("album:") || old.id.startsWith("spotify:playlist:local_")) &&
+                            (old.trackUri == updated.trackUri || old.contextTitle.equals(contextTitle, ignoreCase = true))
+                        ) {
+                            dbHelper.deleteBookmark(old.id)
+                        }
+                    }
+                }
                 _bookmarks.value = dbHelper.getAllBookmarks()
             }
         }

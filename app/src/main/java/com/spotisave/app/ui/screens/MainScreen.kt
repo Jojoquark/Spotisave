@@ -256,10 +256,21 @@ fun MainScreen(
 
                     // Top Hero Card "Zuletzt gehört"
                     item {
-                        val matchingBookmark = if (activePlayback != null) {
-                            bookmarks.find { it.trackUri == activePlayback?.trackUri || (it.contextUri != null && it.contextUri == activePlayback?.contextUri) }
+                        val active = activePlayback
+                        val matchingBookmark = if (active != null && active.trackTitle.isNotBlank()) {
+                            bookmarks.find {
+                                !active.contextUri.isNullOrBlank() &&
+                                    (it.contextUri == active.contextUri || it.id == active.contextUri)
+                            } ?: bookmarks.find {
+                                it.trackUri == active.trackUri &&
+                                    (active.contextUri.isNullOrBlank() || it.contextUri == active.contextUri)
+                            }
                         } else null
-                        val latest = matchingBookmark ?: bookmarks.firstOrNull()
+                        val latest = if (active != null && active.trackTitle.isNotBlank()) {
+                            matchingBookmark
+                        } else {
+                            bookmarks.firstOrNull()
+                        }
                         HeroCard(
                             activePlayback = activePlayback,
                             latestBookmark = latest,

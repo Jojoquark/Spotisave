@@ -10,6 +10,7 @@ import android.widget.Toast
 import com.spotisave.app.data.api.SpotifyApiClient
 import com.spotisave.app.data.api.SpotifyAuthManager
 import com.spotisave.app.data.model.Bookmark
+import com.spotisave.app.service.PlaybackTracker
 import com.spotisave.app.service.SpotifyNotificationListenerService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,26 +23,69 @@ object ResumeHelper {
     private const val TAG = "ResumeHelper"
 
     /**
+     * Bestimmt die optimale Ziel-URI für einen nativen Android ACTION_VIEW Intent:
+     * Bevorzugt die konkrete Track-/Episoden-URI gegenüber einer Playlist-URI,
+     * da Spotify bei einer reinen Playlist-URI lediglich die Playlist-Übersicht öffnet
+     * statt den gespeicherten Song abzuspielen. Der Playlist-Kontext bleibt über
+     * PlaybackTracker.onResumeInitiated vollständig erhalten.
+     */
+    fun resolveNativeTargetUri(bookmark: Bookmark): String {
+        val hasValidTrackUri = bookmark.trackUri.isNotBlank() &&
+            bookmark.trackUri != "spotify:track:active" &&
+            bookmark.trackUri != "spotify:track:notification" &&
+            (bookmark.trackUri.startsWith("spotify:track:") || bookmark.trackUri.startsWith("spotify:episode:"))
+
+        if (hasValidTrackUri) {
+            return bookmark.trackUri
+        }
+        val ctx = bookmark.contextUri
+        if (!ctx.isNullOrBlank() && ctx.startsWith("spotify:") && !ctx.startsWith("spotify:playlist:local_")) {
+            return ctx
+        }
+        return bookmark.trackUri
+    }
+
+    /**
      * Führt die 1-Click-Wiederaufnahme aus (Hybrid-Modus):
-     * 1. Falls Spotify Web API autorisiert ist: PUT /me/player/play mit context_uri + offset + position_ms.
-     * 2. Falls MediaController aktiv ist: Direktes seekTo & play im laufenden Player ohne Reset auf 0:00.
-     * 3. Primärer nativer Intent an Spotify App (spotify:playlist:... bzw. spotify:track:...).
-     * 4. Robuster Fallback auf Spotify Web Player, falls die App nicht auflösbar ist.
+     * 1. Sichert zuerst evtl. laufende andere Playlist und aktiviert das Resume-Schutzfenster.
+     * 2. Falls Spotify Web API autorisiert ist: PUT /me/player/play mit context_uri + offset + position_ms.
+     * 3. Falls MediaController bereits auf demselben Song steht: Direktes seekTo & play ohne Reset auf 0:00.
+     * 4. Primärer nativer Intent an Spotify App mit mehrstufiger Seek-Verifikation.
+     * 5. Robuster Fallback auf Spotify Web Player, falls die App nicht auflösbar ist.
      */
     fun resumeBookmark(context: Context, bookmark: Bookmark) {
-        Log.i(TAG, "1-Click Resume für '${bookmark.trackTitle}' an Position ${bookmark.positionMs} ms")
+        Log.i(TAG, "1-Click Resume für '${bookmark.trackTitle}' (${bookmark.id}) an Position ${bookmark.positionMs} ms")
+
+        // 0. Aktuellen Stand einer evtl. laufenden anderen Playlist sichern & Schutzfenster aktivieren
+        PlaybackTracker.onResumeInitiated(context, bookmark)
 
         val authManager = SpotifyAuthManager.getInstance(context)
         if (authManager.isLoggedIn()) {
             CoroutineScope(Dispatchers.Main).launch {
                 try {
                     val apiClient = SpotifyApiClient.getInstance(context)
-                    val result = withContext(Dispatchers.IO) {
+                    var result = withContext(Dispatchers.IO) {
                         apiClient.resumePlayback(
                             contextUri = bookmark.contextUri,
                             trackUri = bookmark.trackUri,
                             positionMs = bookmark.positionMs
                         )
+                    }
+
+                    // Falls Spotify auf dem Smartphone im Ruhezustand war (404 No Active Device),
+                    // lokalen Player kurz aufwecken und Web API erneut versuchen
+                    if (result.isFailure) {
+                        try {
+                            SpotifyNotificationListenerService.currentMediaController?.transportControls?.play()
+                        } catch (_: Exception) {}
+                        delay(750L)
+                        result = withContext(Dispatchers.IO) {
+                            apiClient.resumePlayback(
+                                contextUri = bookmark.contextUri,
+                                trackUri = bookmark.trackUri,
+                                positionMs = bookmark.positionMs
+                            )
+                        }
                     }
 
                     if (result.isSuccess) {
@@ -56,6 +100,11 @@ object ResumeHelper {
                         if (launchIntent != null) {
                             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             try { context.startActivity(launchIntent) } catch (_: Exception) {}
+                        }
+
+                        // Sicherstellen, dass die Zielposition auch nach dem Track-Load eingehalten wird
+                        if (bookmark.positionMs > 0L) {
+                            ensureSeekPosition(bookmark, apiClient)
                         }
                         return@launch
                     }
@@ -75,14 +124,77 @@ object ResumeHelper {
     }
 
     /**
+     * Überprüft mehrstufig, ob der Ziel-Track im MediaController geladen ist, und setzt
+     * die exakte Hörposition (positionMs), falls Spotify den Titel bei 0:00 gestartet hat.
+     */
+    private fun ensureSeekPosition(bookmark: Bookmark, apiClient: SpotifyApiClient? = null) {
+        if (bookmark.positionMs <= 0L) return
+        CoroutineScope(Dispatchers.Main).launch {
+            val hasCanonicalTrackUri = bookmark.trackUri.isNotBlank() &&
+                bookmark.trackUri != "spotify:track:active" &&
+                bookmark.trackUri != "spotify:track:notification"
+
+            for (attempt in 1..12) {
+                delay(380L)
+                val controller = SpotifyNotificationListenerService.currentMediaController
+                if (controller != null) {
+                    val meta = controller.metadata
+                    val currentUri = meta?.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
+                        ?: meta?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
+                    val currentTitle = meta?.getString(MediaMetadata.METADATA_KEY_TITLE)
+
+                    val trackMatches = (hasCanonicalTrackUri && currentUri == bookmark.trackUri) ||
+                        (!currentTitle.isNullOrBlank() && currentTitle.equals(bookmark.trackTitle, ignoreCase = true))
+
+                    if (trackMatches) {
+                        val livePos = SpotifyNotificationListenerService.getActivePlaybackPosition()
+                        if (livePos < bookmark.positionMs - 3000L || livePos > bookmark.positionMs + 15_000L) {
+                            try {
+                                controller.transportControls.seekTo(bookmark.positionMs)
+                                controller.transportControls.play()
+                                Log.d(TAG, "ensureSeekPosition (Versuch $attempt): MediaController seekTo(${bookmark.positionMs})")
+                            } catch (_: Exception) {}
+
+                            if (apiClient != null && attempt >= 2) {
+                                withContext(Dispatchers.IO) {
+                                    apiClient.seekToPosition(bookmark.positionMs)
+                                }
+                            }
+                        } else {
+                            // Zielposition erfolgreich erreicht!
+                            try {
+                                controller.transportControls.play()
+                            } catch (_: Exception) {}
+                            return@launch
+                        }
+                    }
+                } else if (apiClient != null && attempt == 3) {
+                    withContext(Dispatchers.IO) {
+                        apiClient.seekToPosition(bookmark.positionMs)
+                    }
+                    return@launch
+                }
+            }
+        }
+    }
+
+    /**
      * Nativer Intent & MediaController Fallback ohne Web API Abhängigkeit.
      */
     fun executeNativeResume(context: Context, bookmark: Bookmark) {
         val mediaController = SpotifyNotificationListenerService.currentMediaController
         val currentTrackUri = mediaController?.metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
             ?: mediaController?.metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
+        val currentTrackTitle = mediaController?.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
 
-        val isAlreadyCurrentTrack = mediaController != null && (currentTrackUri == bookmark.trackUri)
+        val hasCanonicalTrackUri = bookmark.trackUri.isNotBlank() &&
+            bookmark.trackUri != "spotify:track:active" &&
+            bookmark.trackUri != "spotify:track:notification"
+
+        val isAlreadyCurrentTrack = mediaController != null && (
+            (hasCanonicalTrackUri && currentTrackUri == bookmark.trackUri) ||
+                (!currentTrackTitle.isNullOrBlank() && currentTrackTitle.equals(bookmark.trackTitle, ignoreCase = true))
+            )
 
         if (isAlreadyCurrentTrack && mediaController != null) {
             // Direkt im laufenden Player anspringen ohne Re-Initialization
@@ -92,6 +204,10 @@ object ResumeHelper {
                 Log.d(TAG, "MediaController seekTo & play direkt ausgeführt")
             } catch (e: Exception) {
                 Log.w(TAG, "MediaController seekTo fehlgeschlagen: ${e.message}")
+            }
+
+            if (bookmark.positionMs > 0L) {
+                ensureSeekPosition(bookmark, null)
             }
 
             // Spotify im Vordergrund öffnen ohne den Titel zurückzusetzen
@@ -112,12 +228,10 @@ object ResumeHelper {
             }
         }
 
-        // Primärer nativer Intent an Spotify App (für Playlist oder abweichenden Track)
-        val targetUriString = if (!bookmark.contextUri.isNullOrBlank() && bookmark.contextUri.startsWith("spotify:")) {
-            bookmark.contextUri
-        } else {
-            bookmark.trackUri
-        }
+        // Primärer nativer Intent an Spotify App:
+        // Startet gezielt den gespeicherten Track (resolveNativeTargetUri), damit Spotify nicht bloß
+        // die Playlist-Übersicht öffnet, und springt anschließend via ensureSeekPosition an positionMs.
+        val targetUriString = resolveNativeTargetUri(bookmark)
 
         val spotifyIntent = Intent(Intent.ACTION_VIEW, Uri.parse(targetUriString)).apply {
             setPackage("com.spotify.music")
@@ -127,15 +241,9 @@ object ResumeHelper {
         try {
             context.startActivity(spotifyIntent)
 
-            // Falls MediaController gekoppelt ist, verzögert an exakte Hörposition springen sobald geladen
+            // Sobald der Ziel-Track in der MediaSession geladen ist, an die exakte Hörposition springen
             if (bookmark.positionMs > 0L) {
-                CoroutineScope(Dispatchers.Main).launch {
-                    delay(700L)
-                    try {
-                        SpotifyNotificationListenerService.currentMediaController?.transportControls?.seekTo(bookmark.positionMs)
-                        SpotifyNotificationListenerService.currentMediaController?.transportControls?.play()
-                    } catch (_: Exception) {}
-                }
+                ensureSeekPosition(bookmark, null)
             }
 
             Toast.makeText(

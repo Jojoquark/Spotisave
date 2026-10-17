@@ -1052,21 +1052,15 @@ private fun TopPlaylistCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Cover Artwork
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(tokens.cardElevated)
-                        .border(1.dp, if (tokens.isDark) HairlineBorder else HairlineBorderSubtle, RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.QueueMusic,
-                        contentDescription = null,
-                        tint = SpotifyGreen,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+                AsyncCoverImage(
+                    coverUrl = stats.topPlaylistCover,
+                    fallbackIcon = Icons.Default.QueueMusic,
+                    modifier = Modifier.size(54.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    iconTint = SpotifyGreen,
+                    iconSize = 24.dp,
+                    contentDescription = stats.topPlaylistTitle
+                )
 
                 Spacer(modifier = Modifier.width(12.dp))
 

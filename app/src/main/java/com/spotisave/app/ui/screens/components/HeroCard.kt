@@ -94,14 +94,21 @@ fun HeroCard(
     val isPlaying = activePlayback?.isPlaying == true
     val trackUri = if (isLive) activePlayback!!.trackUri else latestBookmark?.trackUri ?: ""
 
-    val contextUri = if (isLive) activePlayback?.contextUri else latestBookmark?.contextUri
-    val rawContextTitle = if (isLive) activePlayback?.contextTitle else latestBookmark?.contextTitle
+    val contextUri = if (isLive) activePlayback?.contextUri ?: latestBookmark?.contextUri else latestBookmark?.contextUri
+    val rawContextTitle = if (isLive) activePlayback?.contextTitle ?: latestBookmark?.contextTitle else latestBookmark?.contextTitle
     val album = if (isLive) activePlayback!!.album else latestBookmark?.contextTitle ?: "Spotify"
 
+    val hasPlaylistTitle = !rawContextTitle.isNullOrBlank() &&
+        rawContextTitle != "Spotify" &&
+        !rawContextTitle.equals(album, ignoreCase = true)
+
     val isPlaylist = contextUri?.startsWith("spotify:playlist:") == true ||
-        latestBookmark?.isPlaylist == true
-    val isAlbum = contextUri?.startsWith("spotify:album:") == true ||
-        latestBookmark?.isAlbum == true
+        latestBookmark?.isPlaylist == true ||
+        (isLive && hasPlaylistTitle)
+    val isAlbum = !isPlaylist && (
+        contextUri?.startsWith("spotify:album:") == true ||
+            latestBookmark?.isAlbum == true
+        )
 
     val displayContextTitle = when {
         !rawContextTitle.isNullOrBlank() && rawContextTitle != "Spotify" -> rawContextTitle
@@ -380,18 +387,30 @@ fun HeroCard(
             Button(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    val fallbackContextUri = when {
+                        !contextUri.isNullOrBlank() -> contextUri
+                        isPlaylist && displayContextTitle.isNotBlank() ->
+                            "spotify:playlist:local_${displayContextTitle.trim().lowercase().replace(Regex("[^a-z0-9_]"), "_")}"
+                        else -> null
+                    }
+                    val fallbackId = when {
+                        !fallbackContextUri.isNullOrBlank() -> fallbackContextUri
+                        isAlbum && album.isNotBlank() && album != "Spotify" ->
+                            "album:${album.trim().lowercase().replace(Regex("[^a-z0-9_]"), "_")}"
+                        else -> trackUri
+                    }
                     val targetBookmark = if (isLive && trackUri.isNotBlank()) {
                         latestBookmark?.copy(
                             trackTitle = trackTitle,
                             artist = artist,
                             trackUri = trackUri,
-                            contextUri = contextUri ?: latestBookmark.contextUri,
+                            contextUri = fallbackContextUri ?: latestBookmark.contextUri,
                             contextTitle = if (displayContextTitle.isNotBlank()) displayContextTitle else latestBookmark.contextTitle,
                             positionMs = positionMs,
                             durationMs = if (durationMs > 0) durationMs else latestBookmark.durationMs
                         ) ?: Bookmark(
-                            id = contextUri ?: if (album.isNotBlank() && album != "Spotify") "album:${album.lowercase().replace(" ", "_")}" else trackUri,
-                            contextUri = contextUri,
+                            id = fallbackId,
+                            contextUri = fallbackContextUri,
                             contextTitle = if (displayContextTitle.isNotBlank()) displayContextTitle else "Spotify",
                             trackTitle = trackTitle,
                             artist = artist,
@@ -401,8 +420,8 @@ fun HeroCard(
                         )
                     } else {
                         latestBookmark ?: Bookmark(
-                            id = contextUri ?: trackUri,
-                            contextUri = contextUri,
+                            id = fallbackId,
+                            contextUri = fallbackContextUri,
                             contextTitle = if (displayContextTitle.isNotBlank()) displayContextTitle else "Spotify",
                             trackTitle = trackTitle,
                             artist = artist,

@@ -3,7 +3,11 @@ package com.spotisave.app
 import com.spotisave.app.data.model.Bookmark
 import com.spotisave.app.data.model.HistoryTrackEntry
 import com.spotisave.app.data.model.PlaybackStateModel
+import com.spotisave.app.service.SpotifyNotificationListenerService
+import com.spotisave.app.ui.util.ResumeHelper
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BookmarkModelTest {
@@ -275,4 +279,90 @@ class BookmarkModelTest {
         assertEquals(entry.timestamp, restored.timestamp)
         assertEquals(entry.source, restored.source)
     }
+
+    @Test
+    fun testHistoryTrackEntryToBookmarkPlaylistVsAlbumDisambiguation() {
+        // 1. Playlist track where contextUri was temporarily missing in local broadcast,
+        //    but contextTitle ("Chill Vibes") is distinct from the track's album ("Random Access Memories")
+        val playlistWithoutUri = HistoryTrackEntry(
+            id = "hist_pl_no_uri",
+            trackUri = "spotify:track:getlucky",
+            trackTitle = "Get Lucky",
+            artist = "Daft Punk",
+            album = "Random Access Memories",
+            contextUri = null,
+            contextTitle = "Chill Vibes",
+            coverUrl = null,
+            durationMs = 248_000L,
+            listenedMs = 75_000L,
+            timestamp = 1700000100000L,
+            source = "Broadcast"
+        )
+        val bmPlaylist = playlistWithoutUri.toBookmark()
+        assertEquals("spotify:playlist:local_chill_vibes", bmPlaylist.id)
+        assertEquals("spotify:playlist:local_chill_vibes", bmPlaylist.contextUri)
+        assertTrue(bmPlaylist.isPlaylist)
+        assertFalse(bmPlaylist.isAlbum)
+        assertEquals("Chill Vibes", bmPlaylist.displayContextTitle)
+
+        // 2. Genuine album playback where contextTitle matches the album name
+        val genuineAlbumEntry = HistoryTrackEntry(
+            id = "hist_album_1",
+            trackUri = "spotify:track:getlucky",
+            trackTitle = "Get Lucky",
+            artist = "Daft Punk",
+            album = "Random Access Memories",
+            contextUri = null,
+            contextTitle = "Random Access Memories",
+            coverUrl = null,
+            durationMs = 248_000L,
+            listenedMs = 90_000L,
+            timestamp = 1700000200000L,
+            source = "Broadcast"
+        )
+        val bmAlbum = genuineAlbumEntry.toBookmark()
+        assertEquals("album:random_access_memories", bmAlbum.id)
+        assertFalse(bmAlbum.isPlaylist)
+        assertTrue(bmAlbum.isAlbum)
+    }
+
+    @Test
+    fun testNotificationContextTypeDetection() {
+        assertEquals("playlist", SpotifyNotificationListenerService.detectContextTypeFromText("Playlist • Workout Hits"))
+        assertEquals("playlist", SpotifyNotificationListenerService.detectContextTypeFromText("Wiedergabeliste • Deutschrap"))
+        assertEquals("playlist", SpotifyNotificationListenerService.detectContextTypeFromText("Aus Playlist Chill Vibes"))
+        assertEquals("playlist", SpotifyNotificationListenerService.detectContextTypeFromText("Playing from playlist Roadtrip"))
+        assertEquals("album", SpotifyNotificationListenerService.detectContextTypeFromText("Album • Future Nostalgia"))
+        assertEquals("album", SpotifyNotificationListenerService.detectContextTypeFromText("Playing from album Midnights"))
+        assertEquals(null, SpotifyNotificationListenerService.detectContextTypeFromText("Future Nostalgia"))
+        assertEquals(null, SpotifyNotificationListenerService.detectContextTypeFromText(null))
+    }
+
+    @Test
+    fun testResolveNativeTargetUriPrefersSpecificTrackForPlaylistResume() {
+        val playlistBookmark = Bookmark(
+            id = "spotify:playlist:pl_a",
+            contextUri = "spotify:playlist:pl_a",
+            contextTitle = "Playlist A",
+            trackTitle = "Track 7",
+            artist = "Artist A",
+            trackUri = "spotify:track:track_7_real_uri",
+            positionMs = 84_000L,
+            durationMs = 210_000L
+        )
+        // Native ACTION_VIEW must use trackUri so Spotify starts playing Track 7 instead of opening Playlist A overview
+        assertEquals("spotify:track:track_7_real_uri", ResumeHelper.resolveNativeTargetUri(playlistBookmark))
+
+        // If trackUri is a local placeholder, fall back to contextUri
+        val placeholderTrackBookmark = playlistBookmark.copy(trackUri = "spotify:track:local_12345")
+        assertEquals("spotify:playlist:pl_a", ResumeHelper.resolveNativeTargetUri(placeholderTrackBookmark))
+
+        // If contextUri is local placeholder playlist and trackUri is valid, use trackUri
+        val localPlaylistBookmark = playlistBookmark.copy(
+            id = "spotify:playlist:local_my_mix",
+            contextUri = "spotify:playlist:local_my_mix"
+        )
+        assertEquals("spotify:track:track_7_real_uri", ResumeHelper.resolveNativeTargetUri(localPlaylistBookmark))
+    }
 }
+

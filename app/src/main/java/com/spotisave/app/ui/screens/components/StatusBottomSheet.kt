@@ -204,16 +204,15 @@ fun StatusBottomSheet(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Vordergrunddienst",
-
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = TextPrimary
+                            color = titleCol
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = if (isServiceRunning) "Aktiv (Hintergrund-Schutz an)" else "Inaktiv",
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (isServiceRunning) AppleSystemGreen else TextTertiary
+                            color = if (isServiceRunning) AppleSystemGreen else mutedCol
                         )
                     }
 
@@ -222,10 +221,10 @@ fun StatusBottomSheet(
                         onCheckedChange = { onToggleService(it) },
                         modifier = Modifier.testTag("foreground_service_switch"),
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = CanvasBlack,
+                            checkedThumbColor = if (isDark) CanvasBlack else androidx.compose.ui.graphics.Color.White,
                             checkedTrackColor = SpotifyGreen,
-                            uncheckedThumbColor = TextTertiary,
-                            uncheckedTrackColor = SurfaceCard
+                            uncheckedThumbColor = mutedCol,
+                            uncheckedTrackColor = if (isDark) SurfaceCard else SurfaceCardLight
                         )
                     )
                 }
@@ -238,8 +237,8 @@ fun StatusBottomSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(SurfaceCardElevated)
-                    .border(1.dp, HairlineBorder, RoundedCornerShape(16.dp))
+                    .background(cardBg)
+                    .border(1.dp, borderCol, RoundedCornerShape(16.dp))
                     .padding(16.dp)
             ) {
                 Column {
@@ -253,7 +252,7 @@ fun StatusBottomSheet(
                                 text = "Spotify MediaSession Erkennung",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = TextPrimary
+                                color = titleCol
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
@@ -308,8 +307,8 @@ fun StatusBottomSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(SurfaceCardElevated)
-                        .border(1.dp, HairlineBorder, RoundedCornerShape(16.dp))
+                        .background(cardBg)
+                        .border(1.dp, borderCol, RoundedCornerShape(16.dp))
                         .padding(16.dp)
                 ) {
                     Column {
@@ -317,13 +316,13 @@ fun StatusBottomSheet(
                             text = "Akku-Leistungsoptimierung",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = TextPrimary
+                            color = titleCol
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "Für absolute Zuverlässigkeit im Standby empfiehlt sich die Ausnahme von der Akku-Drosselung.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
+                            color = bodyCol
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         OutlinedButton(
@@ -340,12 +339,12 @@ fun StatusBottomSheet(
                                 .fillMaxWidth()
                                 .heightIn(min = 48.dp)
                                 .testTag("battery_optimization_button"),
-                            border = BorderStroke(1.dp, HairlineBorder),
+                            border = BorderStroke(1.dp, borderCol),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Text(
                                 text = "Akkuschonung für SpotiSave deaktivieren",
-                                color = TextPrimary,
+                                color = titleCol,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -361,8 +360,8 @@ fun StatusBottomSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(SurfaceCardElevated)
-                    .border(1.dp, HairlineBorder, RoundedCornerShape(16.dp))
+                    .background(cardBg)
+                    .border(1.dp, borderCol, RoundedCornerShape(16.dp))
                     .padding(16.dp)
             ) {
                 Row(
@@ -375,13 +374,13 @@ fun StatusBottomSheet(
                             text = "Nur Playlists anzeigen",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = TextPrimary
+                            color = titleCol
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = "Blendet einzelne Tracks ohne verknüpfte Spotify-Playlist in der Hauptliste aus.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary
+                            color = bodyCol
                         )
                     }
 
@@ -389,10 +388,10 @@ fun StatusBottomSheet(
                         checked = onlyPlaylistsFilter,
                         onCheckedChange = { onToggleOnlyPlaylists(it) },
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = CanvasBlack,
+                            checkedThumbColor = if (isDark) CanvasBlack else androidx.compose.ui.graphics.Color.White,
                             checkedTrackColor = SpotifyGreen,
-                            uncheckedThumbColor = TextMuted,
-                            uncheckedTrackColor = SurfaceCard
+                            uncheckedThumbColor = mutedCol,
+                            uncheckedTrackColor = if (isDark) SurfaceCard else SurfaceCardLight
                         ),
                         modifier = Modifier.testTag("filter_playlists_switch")
                     )
@@ -406,8 +405,8 @@ fun StatusBottomSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .background(SurfaceCardElevated)
-                    .border(1.dp, HairlineBorder, RoundedCornerShape(16.dp))
+                    .background(cardBg)
+                    .border(1.dp, borderCol, RoundedCornerShape(16.dp))
                     .padding(16.dp)
             ) {
                 Column {
@@ -415,13 +414,13 @@ fun StatusBottomSheet(
                         text = "Datensicherung (Backup & Restore)",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
-                        color = TextPrimary
+                        color = titleCol
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "Sichere deine gespeicherten Hörpositionen als JSON in die Zwischenablage oder stelle sie nach einer Neuinstallation wieder her.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
+                        color = bodyCol
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(
@@ -478,12 +477,12 @@ fun StatusBottomSheet(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                                 .testTag("backup_import_button"),
-                            border = BorderStroke(1.dp, HairlineBorder),
+                            border = BorderStroke(1.dp, borderCol),
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Text(
                                 text = "Wiederherstellen",
-                                color = TextPrimary,
+                                color = titleCol,
                                 fontWeight = FontWeight.SemiBold,
                                 style = MaterialTheme.typography.labelLarge
                             )
@@ -503,7 +502,7 @@ fun StatusBottomSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 5. Statistiken
+            // 6. Statistiken
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -511,12 +510,12 @@ fun StatusBottomSheet(
                 Text(
                     text = "Gespeicherte Bookmarks: $totalBookmarks",
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary
+                    color = mutedCol
                 )
                 Text(
                     text = "Quelle: $activeSource",
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextTertiary
+                    color = mutedCol
                 )
             }
         }

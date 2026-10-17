@@ -27,9 +27,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.spotisave.app.ui.theme.HairlineBorderLight
 import com.spotisave.app.ui.theme.HairlineBorderSubtle
+import com.spotisave.app.ui.theme.LocalIsDarkTheme
 import com.spotisave.app.ui.theme.SpotifyGreen
 import com.spotisave.app.ui.theme.SurfaceCardElevated
+import com.spotisave.app.ui.theme.SurfaceCardLightElevated
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -75,8 +78,8 @@ fun AsyncCoverImage(
     iconTint: Color = SpotifyGreen,
     iconSize: Dp = 24.dp,
     contentDescription: String? = null,
-    backgroundColor: Color = SurfaceCardElevated,
-    borderColor: Color = HairlineBorderSubtle
+    backgroundColor: Color = if (LocalIsDarkTheme.current) SurfaceCardElevated else SurfaceCardLightElevated,
+    borderColor: Color = if (LocalIsDarkTheme.current) HairlineBorderSubtle else HairlineBorderLight
 ) {
     var bitmap by remember(coverUrl) {
         mutableStateOf(coverUrl?.let { CoverImageCache.get(it) })

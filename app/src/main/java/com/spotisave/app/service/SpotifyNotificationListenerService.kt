@@ -40,6 +40,28 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
         @Volatile
         private var lastNotificationContextTitle: String? = null
 
+        @Volatile
+        private var lastNotificationContextType: String? = null
+
+        /**
+         * Erkennt explizite Kontext-Typen ("playlist" oder "album") anhand typischer Spotify-Präfixe.
+         */
+        fun detectContextTypeFromText(raw: String?): String? {
+            if (raw.isNullOrBlank()) return null
+            val lower = raw.trim().lowercase()
+            val playlistPrefixes = listOf(
+                "playlist • ", "playlist: ", "playlist - ", "aus playlist ",
+                "from playlist ", "wiedergabeliste • ", "wiedergabeliste: "
+            )
+            if (playlistPrefixes.any { lower.startsWith(it) }) return "playlist"
+
+            val albumPrefixes = listOf(
+                "album • ", "album: ", "album - ", "aus album ", "from album "
+            )
+            if (albumPrefixes.any { lower.startsWith(it) }) return "album"
+            return null
+        }
+
         /**
          * Bereinigt Text aus Notification-Extras um Playlist- oder Albumnamen zu extrahieren.
          */
@@ -49,7 +71,11 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             val lower = cleaned.lowercase()
             if (lower == "spotify" || lower == "musik" || lower == "music") return null
 
-            val playlistPrefixes = listOf("playlist • ", "playlist: ", "playlist - ", "aus playlist ", "album • ", "album: ")
+            val playlistPrefixes = listOf(
+                "playlist • ", "playlist: ", "playlist - ", "aus playlist ",
+                "from playlist ", "wiedergabeliste • ", "wiedergabeliste: ",
+                "album • ", "album: ", "album - ", "aus album ", "from album "
+            )
             for (prefix in playlistPrefixes) {
                 if (lower.startsWith(prefix)) {
                     val title = cleaned.substring(prefix.length).trim()
@@ -118,16 +144,22 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
         val notification = sbn.notification ?: return
         val extras = notification.extras ?: return
 
-        // Extrahiere potentiellen Playlist-Namen aus Notification-Extras
+        // Extrahiere potentiellen Playlist-Namen & Typ aus Notification-Extras
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
         val summaryText = extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT)?.toString()
         val infoText = extras.getCharSequence(Notification.EXTRA_INFO_TEXT)?.toString()
         val candidateTitle = extractContextTitleFromText(subText)
             ?: extractContextTitleFromText(summaryText)
             ?: extractContextTitleFromText(infoText)
-        if (!candidateTitle.isNullOrBlank()) {
-            lastNotificationContextTitle = candidateTitle
-        }
+        val candidateType = detectContextTypeFromText(subText)
+            ?: detectContextTypeFromText(summaryText)
+            ?: detectContextTypeFromText(infoText)
+
+        lastNotificationContextTitle = candidateTitle
+        lastNotificationContextType = candidateType
+
+        val notifContextUri = extras.getString("context_uri")
+            ?: extras.getString("com.spotify.music.extra.CONTEXT_URI")
 
         // 1. Suche MediaSession Token
         val token: MediaSession.Token? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -152,8 +184,10 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
                     artist = text ?: "Spotify",
                     album = subText ?: "Spotify",
                     durationMs = 0L,
+                    contextUri = notifContextUri,
                     contextTitle = candidateTitle,
-                    source = "NotificationFallback"
+                    source = "NotificationFallback",
+                    contextTypeHint = candidateType
                 )
             }
         }
@@ -231,13 +265,17 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             ?: metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI)
 
         val contextUri = controller.extras?.getString("context_uri")
+            ?: controller.extras?.getString("com.spotify.music.extra.CONTEXT_URI")
             ?: controller.playbackState?.extras?.getString("context_uri")
+            ?: controller.playbackState?.extras?.getString("com.spotify.music.extra.CONTEXT_URI")
 
         val contextTitle = controller.extras?.getString("context_title")
+            ?: controller.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
             ?: controller.extras?.getString("context_name")
             ?: controller.extras?.getString("playlist_name")
             ?: controller.extras?.getString("queue_title")
             ?: controller.playbackState?.extras?.getString("context_title")
+            ?: controller.playbackState?.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
             ?: lastNotificationContextTitle
 
         val playbackState = controller.playbackState
@@ -255,7 +293,8 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             isPlaying = isPlaying,
             contextUri = contextUri,
             contextTitle = contextTitle,
-            coverUrl = coverUrl
+            coverUrl = coverUrl,
+            contextTypeHint = lastNotificationContextType
         )
     }
 
@@ -276,13 +315,17 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             ?: metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI)
 
         val contextUri = controller.extras?.getString("context_uri")
+            ?: controller.extras?.getString("com.spotify.music.extra.CONTEXT_URI")
             ?: state.extras?.getString("context_uri")
+            ?: state.extras?.getString("com.spotify.music.extra.CONTEXT_URI")
 
         val contextTitle = controller.extras?.getString("context_title")
+            ?: controller.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
             ?: controller.extras?.getString("context_name")
             ?: controller.extras?.getString("playlist_name")
             ?: controller.extras?.getString("queue_title")
             ?: state.extras?.getString("context_title")
+            ?: state.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
             ?: lastNotificationContextTitle
 
         val position = computeCurrentPosition(state, duration)
@@ -298,7 +341,8 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             isPlaying = isPlaying,
             contextUri = contextUri,
             contextTitle = contextTitle,
-            coverUrl = coverUrl
+            coverUrl = coverUrl,
+            contextTypeHint = lastNotificationContextType
         )
     }
 

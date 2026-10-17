@@ -32,9 +32,21 @@ data class HistoryTrackEntry(
      * Konvertiert den Verlaufseintrag in ein startbares Bookmark für 1-Click Resume.
      */
     fun toBookmark(): Bookmark {
-        val bmId = when {
+        val hasDistinctPlaylistTitle = contextTitle.isNotBlank() &&
+            contextTitle != "Spotify" &&
+            !contextTitle.equals(album, ignoreCase = true) &&
+            !contextTitle.equals(trackTitle, ignoreCase = true)
+        val effectiveContextUri = when {
             !contextUri.isNullOrBlank() -> contextUri
-            album.isNotBlank() && album != "Spotify" -> {
+            hasDistinctPlaylistTitle -> {
+                val slug = contextTitle.trim().lowercase().replace(Regex("[^a-z0-9_]"), "_")
+                "spotify:playlist:local_$slug"
+            }
+            else -> null
+        }
+        val bmId = when {
+            !effectiveContextUri.isNullOrBlank() -> effectiveContextUri
+            album.isNotBlank() && album != "Spotify" && contextTitle.equals(album, ignoreCase = true) -> {
                 val normalized = album.trim().lowercase().replace(Regex("[^a-z0-9_]"), "_")
                 "album:$normalized"
             }
@@ -42,7 +54,7 @@ data class HistoryTrackEntry(
         }
         return Bookmark(
             id = bmId,
-            contextUri = contextUri,
+            contextUri = effectiveContextUri,
             contextTitle = contextTitle,
             trackTitle = trackTitle,
             artist = artist,

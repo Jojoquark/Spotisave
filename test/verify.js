@@ -1358,6 +1358,124 @@ async function runTests() {
     assert(contrastBlackOnWhite >= 18.0, `White Mode: Black text on CanvasWhite contrast is ${contrastBlackOnWhite.toFixed(1)}:1 (Exceeds WCAG AAA 7:1)`);
     assert(contrastSecondaryOnWhite >= 4.5, `White Mode: Secondary text on CanvasWhite contrast is ${contrastSecondaryOnWhite.toFixed(1)}:1 (Exceeds WCAG AA 4.5:1)`);
 
+    // ----------------------------------------------------
+    // TEST 19: Multi-Playlist Isolation, Playlist-vs-Album Disambiguation & Resume Reliability
+    // ----------------------------------------------------
+    console.log('\nTest Group 19: Multi-Playlist Isolation, Playlist-vs-Album Disambiguation & Resume Reliability');
+
+    const trackerSrc19 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/service/PlaybackTracker.kt'), 'utf8');
+    const notifSrc19 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/service/SpotifyNotificationListenerService.kt'), 'utf8');
+    const receiverSrc19 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/service/SpotifyBroadcastReceiver.kt'), 'utf8');
+    const repoSrc19 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/repository/BookmarkRepository.kt'), 'utf8');
+    const resumeHelperSrc19 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/util/ResumeHelper.kt'), 'utf8');
+    const apiClientSrc19 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/api/SpotifyApiClient.kt'), 'utf8');
+    const asyncCoverSrc19 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/AsyncCoverImage.kt'), 'utf8');
+
+    // 1. Playlist vs. Album Disambiguation in Native Android
+    assert(trackerSrc19.includes('fun computeBookmarkIdentity(') && trackerSrc19.includes('spotify:playlist:local_'), 'PlaybackTracker.kt disambiguates playlists from albums via computeBookmarkIdentity and local playlist IDs');
+    assert(trackerSrc19.includes('fun resolveKnownPlaylistContextUri('), 'PlaybackTracker.kt resolves missing contextUri against known playlists, bookmarks, and history');
+    assert(notifSrc19.includes('fun detectContextTypeFromText(') && notifSrc19.includes('com.spotify.music.extra.CONTEXT_URI'), 'SpotifyNotificationListenerService.kt detects playlist/album hints from notification headers and extras');
+    assert(receiverSrc19.includes('val trackUri = intent.getStringExtra(EXTRA_ID)') && receiverSrc19.includes('intent.getLongExtra(EXTRA_PLAYBACK_POSITION'), 'SpotifyBroadcastReceiver.kt extracts trackUri and handles Int/Long position in playbackstatechanged');
+    assert(repoSrc19.includes('fun cleanupSupersededBookmarks('), 'BookmarkRepository.kt automatically cleans up superseded album/local bookmarks when upgraded to a playlist bookmark');
+    assert(mainVmCode.includes('cleanupSupersededBookmarks('), 'MainViewModel.kt retroactively upgrades false album bookmarks using listening history');
+
+    // 2. Multi-Playlist Context Isolation & Resume Grace Protection
+    assert(trackerSrc19.includes('fun onResumeInitiated(') && trackerSrc19.includes('RESUME_GRACE_MS'), 'PlaybackTracker.kt implements onResumeInitiated and RESUME_GRACE_MS protection window');
+    assert(trackerSrc19.includes('PreResumeFlush'), 'PlaybackTracker.kt flushes outgoing playlist track before switching to resumed playlist');
+    assert(resumeHelperSrc19.includes('PlaybackTracker.onResumeInitiated(context, bookmark)'), 'ResumeHelper.kt notifies PlaybackTracker before initiating resume');
+    assert(resumeHelperSrc19.includes('fun resolveNativeTargetUri(') && resumeHelperSrc19.includes('private fun ensureSeekPosition('), 'ResumeHelper.kt resolves specific track URI for native fallback and runs multi-step ensureSeekPosition');
+    assert(apiClientSrc19.includes('suspend fun seekToPosition('), 'SpotifyApiClient.kt provides seekToPosition endpoint for post-resume position recovery');
+    assert(!mainScreenSrc18.includes('?: bookmarks.firstOrNull()'), 'MainScreen.kt never mismatches live playback from Playlist B with bookmarks.firstOrNull() from Playlist A');
+
+    // 3. White Mode Contrast Polish across Components
+    assert(!statusSheetSrc18.includes('Color(0xFF161618)') && !statusSheetSrc18.includes('Color(0xFF141416)'), 'StatusBottomSheet.kt has zero hardcoded dark card backgrounds in White Mode');
+    assert(asyncCoverSrc19.includes('LocalIsDarkTheme.current'), 'AsyncCoverImage.kt adapts placeholder background and icon tint to White/Dark Mode');
+    assert(statsScreenSrc18.includes('AsyncCoverImage(') && statsScreenSrc18.includes('coverUrl = stats.topPlaylistCover'), 'StatsScreen.kt TopPlaylistCard renders real playlist cover artwork via AsyncCoverImage');
+    assert(indexHtml.includes('body.light-mode .hero-card') && indexHtml.includes('body.light-mode .modal-sheet'), 'index.html provides light-mode surface styling for hero-card and modal-sheet');
+
+    // 4. Interactive VM Test: Multi-Playlist Save + Resume Playlist A without losing progress or clobbering Playlist B
+    {
+        let currentMockPlayer = null;
+        let playRequests = [];
+        const { sandbox } = setupSandbox(async (url, opts) => {
+            if (url.includes('/me/player/play')) {
+                const body = opts && opts.body ? JSON.parse(opts.body) : {};
+                playRequests.push({ url, body });
+                // Simulate Scenario where context play returns 400 so fallback 2 (direct track URI) is used
+                if (body.context_uri === 'spotify:playlist:pl_alpha' && body.offset) {
+                    return { ok: false, status: 400, json: async () => ({ error: { status: 400 } }) };
+                }
+                return { ok: true, status: 204, json: async () => ({}) };
+            }
+            if (url.includes('/playlists/pl_alpha')) {
+                return { ok: true, status: 200, json: async () => ({ name: 'Alpha Roadtrip', images: [{ url: 'https://example.com/alpha.jpg' }] }) };
+            }
+            if (url.includes('/playlists/pl_beta')) {
+                return { ok: true, status: 200, json: async () => ({ name: 'Beta Workout', images: [{ url: 'https://example.com/beta.jpg' }] }) };
+            }
+            if (url.includes('/me/player')) {
+                return { ok: true, status: 200, json: async () => currentMockPlayer };
+            }
+            return { ok: true, status: 200, json: async () => ({}) };
+        });
+        sandbox.localStorage.setItem('sp_access_token', 'mock_token');
+
+        // Step A: Play Playlist Alpha at 85,000ms
+        currentMockPlayer = {
+            is_playing: true,
+            progress_ms: 85000,
+            item: {
+                name: 'Alpha Song',
+                duration_ms: 210000,
+                uri: 'spotify:track:alpha_track_1',
+                artists: [{ name: 'Alpha Artist' }],
+                album: { name: 'Alpha Album', images: [{ url: 'https://example.com/a_album.jpg' }] }
+            },
+            context: { type: 'playlist', uri: 'spotify:playlist:pl_alpha' }
+        };
+        await sandbox.checkNowPlaying(false);
+
+        // Step B: Switch to Playlist Beta at 42,000ms
+        currentMockPlayer = {
+            is_playing: true,
+            progress_ms: 42000,
+            item: {
+                name: 'Beta Song',
+                duration_ms: 195000,
+                uri: 'spotify:track:beta_track_1',
+                artists: [{ name: 'Beta Artist' }],
+                album: { name: 'Beta Album', images: [{ url: 'https://example.com/b_album.jpg' }] }
+            },
+            context: { type: 'playlist', uri: 'spotify:playlist:pl_beta' }
+        };
+        await sandbox.checkNowPlaying(false);
+
+        let bms = JSON.parse(sandbox.localStorage.getItem('sp_bookmarks') || '{}');
+        assert(bms['pl_alpha'] && bms['pl_alpha'].progress_ms === 85000, 'Multi-Playlist Save: Playlist Alpha bookmark remains intact at 85000ms after switching to Playlist Beta');
+        assert(bms['pl_beta'] && bms['pl_beta'].progress_ms === 42000, 'Multi-Playlist Save: Playlist Beta bookmark is saved independently at 42000ms');
+
+        // Step C: Resume Playlist Alpha (triggers Fallback 2 track URI play, and Spotify initially reports progress_ms: 0 with context: null)
+        currentMockPlayer = {
+            is_playing: true,
+            progress_ms: 0,
+            item: {
+                name: 'Alpha Song',
+                duration_ms: 210000,
+                uri: 'spotify:track:alpha_track_1',
+                artists: [{ name: 'Alpha Artist' }],
+                album: { name: 'Alpha Album', images: [{ url: 'https://example.com/a_album.jpg' }] }
+            },
+            context: null
+        };
+        await sandbox.resumeBookmark('pl_alpha');
+        await sandbox.checkNowPlaying(false);
+
+        bms = JSON.parse(sandbox.localStorage.getItem('sp_bookmarks') || '{}');
+        assert(bms['pl_alpha'].progress_ms === 85000, 'Multi-Playlist Resume Grace: Transitional 0ms poll after resuming Playlist Alpha does NOT reset its 85000ms saved progress');
+        assert(bms['pl_beta'].progress_ms === 42000, 'Multi-Playlist Resume Isolation: Resuming Playlist Alpha leaves Playlist Beta bookmark untouched at 42000ms');
+        assert(Object.keys(bms).length === 2, 'Multi-Playlist Context Preservation: Track-URI fallback without context re-associates with pl_alpha instead of creating a duplicate album bookmark');
+    }
+
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);
     console.log('========================================\n');

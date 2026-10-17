@@ -73,6 +73,47 @@
             --text-tertiary: rgba(60, 60, 67, 0.50);
         }
 
+        body.light-mode .now-playing-card,
+        body.light-mode .hero-card {
+            background: linear-gradient(165deg, #FFFFFF 0%, #F5F5FA 100%);
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+            border-color: rgba(40, 205, 65, 0.35);
+        }
+
+        body.light-mode .modal-sheet {
+            background: var(--bg-glass-modal);
+            border-color: rgba(0, 0, 0, 0.10);
+            box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.12);
+        }
+
+        body.light-mode .status-pill,
+        body.light-mode .btn-secondary,
+        body.light-mode .btn-icon-only {
+            background: rgba(0, 0, 0, 0.05);
+            border-color: rgba(0, 0, 0, 0.10);
+            color: var(--text-primary);
+        }
+
+        body.light-mode .btn-secondary:hover,
+        body.light-mode .btn-icon-only:hover {
+            background: rgba(0, 0, 0, 0.09);
+        }
+
+        body.light-mode .text-input,
+        body.light-mode .uri-display-row,
+        body.light-mode .metric-tile {
+            background: #F2F2F7;
+            border-color: rgba(0, 0, 0, 0.12);
+            color: var(--text-primary);
+        }
+
+        body.light-mode .toast-pill {
+            background: rgba(255, 255, 255, 0.92);
+            color: #000000;
+            border-color: rgba(0, 0, 0, 0.12);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+        }
+
         /* HEADER THEME TOGGLE (Apple HIG 44px touch target) */
         .theme-toggle-btn {
             width: 44px;
@@ -1651,14 +1692,26 @@
                 }
             }
 
-            // Bookmark saving logic: handles Playlists AND Albums
-            if (context && (context.type === 'playlist' || context.type === 'album')) {
-                let entityId = context.uri.split(':').pop();
+            // Bookmark saving logic: handles Playlists AND Albums (plus fallback-resumed playlists where context is omitted by Spotify)
+            let effectiveContext = (context && (context.type === 'playlist' || context.type === 'album')) ? context : null;
+            if (!effectiveContext && track && track.uri) {
+                const savedMap = getBookmarks();
+                const resumedMatch = (engineState.pendingResume && engineState.pendingResume.track_uri === track.uri)
+                    ? engineState.pendingResume
+                    : Object.values(savedMap).find(item => item && item.track_uri === track.uri && item.context_uri);
+                if (resumedMatch && resumedMatch.context_uri) {
+                    const inferredType = resumedMatch.context_type || (resumedMatch.context_uri.includes(':album:') ? 'album' : 'playlist');
+                    effectiveContext = { type: inferredType, uri: resumedMatch.context_uri };
+                }
+            }
+
+            if (effectiveContext && (effectiveContext.type === 'playlist' || effectiveContext.type === 'album')) {
+                let entityId = effectiveContext.uri.split(':').pop();
                 let entityName = '';
                 let entityImage = trackImg;
 
-                if (context.type === 'playlist') {
-                    const plInfo = await fetchPlaylistInfo(context.uri);
+                if (effectiveContext.type === 'playlist') {
+                    const plInfo = await fetchPlaylistInfo(effectiveContext.uri);
                     entityId = plInfo.id;
                     entityName = plInfo.name;
                     entityImage = plInfo.image || trackImg;
@@ -1669,21 +1722,42 @@
                 const bookmarks = getBookmarks();
                 const existing = bookmarks[entityId];
 
+                // Resume-Schutzfenster: verhindert, dass der 800ms-Check nach Resume die gespeicherte Position mit 0ms überschreibt,
+                // während Spotify den Ziel-Track noch lädt oder an die Zielposition springt.
+                const nowMs = Date.now();
+                const inResumeGrace = Boolean(
+                    engineState.pendingResume &&
+                    engineState.pendingResumeAt &&
+                    (nowMs - engineState.pendingResumeAt < 10000)
+                );
+
+                let safeProgress = progress;
+                if (inResumeGrace && engineState.pendingResume.playlist_id === entityId) {
+                    const targetPos = Number(engineState.pendingResume.progress_ms) || 0;
+                    if (targetPos > 3000 && progress < targetPos - 3000) {
+                        safeProgress = targetPos;
+                    } else if (isPlaying && progress >= targetPos - 3000) {
+                        engineState.pendingResumeAt = 0;
+                    }
+                } else if (!isPlaying && progress <= 1000 && existing && existing.track_uri === track.uri && (existing.progress_ms || 0) > 3000) {
+                    safeProgress = existing.progress_ms;
+                }
+
                 // Bookmark if track changed, progress changed by >= 2s, or manual trigger
                 const trackChanged = !existing || existing.track_uri !== track.uri;
-                const progressChanged = !existing || Math.abs((existing.progress_ms || 0) - progress) >= 2000;
+                const progressChanged = !existing || Math.abs((existing.progress_ms || 0) - safeProgress) >= 2000;
 
                 if (trackChanged || progressChanged || manual) {
                     bookmarks[entityId] = {
                         playlist_id: entityId,
                         playlist_name: entityName,
                         playlist_image: entityImage,
-                        context_uri: context.uri,
-                        context_type: context.type,
+                        context_uri: effectiveContext.uri,
+                        context_type: effectiveContext.type,
                         track_name: track.name || 'Unbekannter Titel',
                         artist_name: artistName,
                         track_uri: track.uri,
-                        progress_ms: progress,
+                        progress_ms: safeProgress,
                         duration_ms: duration,
                         updated_at: Date.now()
                     };
@@ -1695,7 +1769,7 @@
                     }
                     if (manual) {
                         triggerHaptic('success');
-                        showToast(`Gespeichert: ${entityName} (${formatTime(progress)})`);
+                        showToast(`Gespeichert: ${entityName} (${formatTime(safeProgress)})`);
                     }
                 }
 
@@ -1750,13 +1824,20 @@
 
         showToast(`Wiederaufnahme: ${b.playlist_name}...`);
         engineState.pendingResume = b;
+        engineState.pendingResumeAt = Date.now();
 
         try {
-            const body = JSON.stringify({
-                context_uri: b.context_uri,
-                offset: b.track_uri ? { uri: b.track_uri } : undefined,
-                position_ms: Number(b.progress_ms) || 0
-            });
+            const hasContextUri = Boolean(b.context_uri && !String(b.context_uri).startsWith('spotify:playlist:local_'));
+            const body = hasContextUri
+                ? JSON.stringify({
+                    context_uri: b.context_uri,
+                    offset: b.track_uri ? { uri: b.track_uri } : undefined,
+                    position_ms: Number(b.progress_ms) || 0
+                })
+                : JSON.stringify({
+                    uris: b.track_uri ? [b.track_uri] : [],
+                    position_ms: Number(b.progress_ms) || 0
+                });
 
             let targetDeviceId = null;
             let res = await spFetch('/me/player/play', {

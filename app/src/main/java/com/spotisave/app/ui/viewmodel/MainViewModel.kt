@@ -183,7 +183,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             bookmarks.collect { list ->
-                if (list.any { it.isPlaylist && ((it.contextTitle.isBlank() || it.contextTitle == "Spotify" || it.contextTitle == "Playlist") || it.coverUrl.isNullOrBlank()) }) {
+                val needsEnrichment = list.any {
+                    (it.isPlaylist && (
+                        it.id.startsWith("spotify:playlist:local_") ||
+                            it.contextTitle.isBlank() ||
+                            it.contextTitle == "Spotify" ||
+                            it.contextTitle == "Playlist" ||
+                            it.coverUrl.isNullOrBlank()
+                        ))
+                }
+                if (needsEnrichment) {
                     resolveMissingPlaylistTitles()
                 }
             }
@@ -229,13 +238,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val track = state.track
                     val app = getApplication<Application>()
                     var resolvedContextTitle: String? = null
+                    var resolvedCoverUrl: String? = track.coverUrl
 
                     if (!state.contextUri.isNullOrBlank() && state.contextUri.startsWith("spotify:playlist:")) {
                         val plId = state.contextUri.removePrefix("spotify:playlist:")
                         val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
                         if (plInfo != null) {
                             resolvedContextTitle = plInfo.name
+                            if (!plInfo.coverUrl.isNullOrBlank()) {
+                                resolvedCoverUrl = plInfo.coverUrl
+                            }
                         }
+                    } else if (!state.contextUri.isNullOrBlank() && state.contextUri.startsWith("spotify:album:")) {
+                        resolvedContextTitle = track.albumName.takeIf { it.isNotBlank() }
                     }
 
                     PlaybackTracker.onMetadataChanged(
@@ -247,14 +262,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         durationMs = track.durationMs,
                         contextUri = state.contextUri,
                         contextTitle = resolvedContextTitle,
-                        coverUrl = track.coverUrl,
+                        coverUrl = resolvedCoverUrl,
                         source = "SpotifyWebApi"
                     )
                     PlaybackTracker.onPlaybackStateChanged(
                         context = app,
                         isPlaying = state.isPlaying,
                         positionMs = state.progressMs,
-                        source = "SpotifyWebApi"
+                        source = "SpotifyWebApi",
+                        trackUri = track.uri
                     )
                 }
             } catch (e: Exception) {
@@ -268,9 +284,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val currentBookmarks = bookmarks.value
+                val history = listeningHistory.value
                 for (bm in currentBookmarks) {
+                    // 1. Falls ein Lesezeichen fälschlicherweise als "album:..." oder "spotify:playlist:local_..."
+                    // gespeichert wurde, aber im Hörverlauf (recently-played) eine echte spotify:playlist:... URI hat:
+                    if (bm.id.startsWith("album:") || bm.id.startsWith("spotify:playlist:local_")) {
+                        val matchingPlHistory = history.firstOrNull {
+                            it.contextUri?.startsWith("spotify:playlist:") == true &&
+                                !it.contextUri.startsWith("spotify:playlist:local_") &&
+                                (it.trackUri == bm.trackUri ||
+                                    (bm.contextTitle.isNotBlank() &&
+                                        bm.contextTitle != "Spotify" &&
+                                        it.contextTitle.equals(bm.contextTitle, ignoreCase = true)))
+                        }
+                        if (matchingPlHistory?.contextUri != null) {
+                            val realPlUri = matchingPlHistory.contextUri
+                            val plId = realPlUri.removePrefix("spotify:playlist:")
+                            val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
+                            val upgradedTitle = plInfo?.name?.takeIf { it.isNotBlank() }
+                                ?: matchingPlHistory.contextTitle.takeIf { it.isNotBlank() && it != "Spotify" }
+                                ?: bm.contextTitle
+                            val upgradedCover = plInfo?.coverUrl ?: bm.coverUrl
+                            val upgraded = bm.copy(
+                                id = realPlUri,
+                                contextUri = realPlUri,
+                                contextTitle = upgradedTitle,
+                                coverUrl = upgradedCover
+                            )
+                            repository.deleteBookmark(bm.id)
+                            repository.saveBookmark(upgraded)
+                            repository.cleanupSupersededBookmarks(
+                                trackUri = upgraded.trackUri,
+                                playlistContextUri = realPlUri,
+                                playlistTitle = upgradedTitle,
+                                trackTitle = upgraded.trackTitle
+                            )
+                            continue
+                        }
+                    }
+
+                    // 2. Fehlende Playlist-Namen und Cover von der Spotify Web API nachladen
                     val uri = bm.contextUri
-                    if (!uri.isNullOrBlank() && uri.startsWith("spotify:playlist:")) {
+                    if (!uri.isNullOrBlank() &&
+                        uri.startsWith("spotify:playlist:") &&
+                        !uri.startsWith("spotify:playlist:local_")
+                    ) {
                         val needsName = bm.contextTitle.isBlank() || bm.contextTitle == "Spotify" || bm.contextTitle == "Playlist"
                         val needsCover = bm.coverUrl.isNullOrBlank()
                         if (needsName || needsCover) {
@@ -305,6 +363,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     for (t in tracks) {
                         repository.recordHistoryEntry(t)
                     }
+                    resolveMissingPlaylistTitles()
                     Log.i("MainViewModel", "Spotify-History synchronisiert: ${tracks.size} Titel aktualisiert")
                 }
             } catch (e: Exception) {

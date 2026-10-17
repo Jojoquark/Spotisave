@@ -44,8 +44,14 @@ class SpotifyBroadcastReceiver : BroadcastReceiver() {
                 val trackTitle = intent.getStringExtra(EXTRA_TRACK)
                 val artist = intent.getStringExtra(EXTRA_ARTIST)
                 val album = intent.getStringExtra(EXTRA_ALBUM)
-                val lengthMs = intent.getIntExtra(EXTRA_LENGTH, 0).toLong()
-                val contextUri = intent.getStringExtra("context_uri") ?: intent.getStringExtra("context")
+                val lengthMs = intent.getIntExtra(EXTRA_LENGTH, 0).toLong().takeIf { it > 0L }
+                    ?: intent.getLongExtra(EXTRA_LENGTH, 0L)
+                val contextUri = intent.getStringExtra("context_uri")
+                    ?: intent.getStringExtra("context")
+                    ?: intent.getStringExtra("com.spotify.music.extra.CONTEXT_URI")
+                val contextTitle = intent.getStringExtra("context_title")
+                    ?: intent.getStringExtra("context_name")
+                    ?: intent.getStringExtra("com.spotify.music.extra.CONTEXT_TITLE")
 
                 PlaybackTracker.onMetadataChanged(
                     context = context,
@@ -55,19 +61,23 @@ class SpotifyBroadcastReceiver : BroadcastReceiver() {
                     album = album,
                     durationMs = lengthMs,
                     contextUri = contextUri,
+                    contextTitle = contextTitle,
                     source = "Broadcast"
                 )
             }
 
             ACTION_PLAYBACK_STATE_CHANGED -> {
                 val isPlaying = intent.getBooleanExtra(EXTRA_PLAYING, false)
-                val positionMs = intent.getIntExtra(EXTRA_PLAYBACK_POSITION, 0).toLong()
+                val positionMs = intent.getIntExtra(EXTRA_PLAYBACK_POSITION, -1).takeIf { it >= 0 }?.toLong()
+                    ?: intent.getLongExtra(EXTRA_PLAYBACK_POSITION, 0L)
+                val trackUri = intent.getStringExtra(EXTRA_ID)
 
                 PlaybackTracker.onPlaybackStateChanged(
                     context = context,
                     isPlaying = isPlaying,
                     positionMs = positionMs,
-                    source = "Broadcast"
+                    source = "Broadcast",
+                    trackUri = trackUri
                 )
             }
 

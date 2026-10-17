@@ -372,7 +372,10 @@ object StatisticsEngine {
                 val totalTimeMs = entries.sumOf { it.listenedMs }
                 val durationMs = latest.durationMs
 
-                val matchingBm = bookmarks.find { it.trackUri == latest.trackUri }
+                val matchingBm = bookmarks.find {
+                    it.trackUri == latest.trackUri &&
+                        (latest.contextUri.isNullOrBlank() || it.contextUri == latest.contextUri || it.id == latest.contextUri)
+                } ?: bookmarks.find { it.trackUri == latest.trackUri }
                     ?: latest.toBookmark()
 
                 TopTrackStat(
@@ -436,7 +439,10 @@ object StatisticsEngine {
                 .sortedByDescending { it.timestamp }
                 .take(limit)
                 .map { entry ->
-                    val matchingBm = bookmarks.find { it.trackUri == entry.trackUri } ?: entry.toBookmark()
+                    val matchingBm = bookmarks.find {
+                        it.trackUri == entry.trackUri &&
+                            (entry.contextUri.isNullOrBlank() || it.contextUri == entry.contextUri || it.id == entry.contextUri)
+                    } ?: entry.toBookmark()
                     HistoryEntry(
                         id = entry.id,
                         trackTitle = entry.trackTitle,

@@ -40,7 +40,17 @@ class BookmarkRepository private constructor(context: Context) {
     fun reloadBookmarks() {
         scope.launch {
             val list = dbHelper.getAllBookmarks()
-            _bookmarks.value = list
+            val cleanList = list.filterNot { bm ->
+                val isBad = bm.id.contains("warteschlange", ignoreCase = true) ||
+                    bm.id.contains("queue", ignoreCase = true) ||
+                    bm.contextTitle.equals("Warteschlange", ignoreCase = true) ||
+                    bm.contextTitle.equals("Queue", ignoreCase = true)
+                if (isBad) {
+                    dbHelper.deleteBookmark(bm.id)
+                }
+                isBad
+            }
+            _bookmarks.value = cleanList
         }
     }
 
@@ -52,12 +62,23 @@ class BookmarkRepository private constructor(context: Context) {
     }
 
     fun saveBookmark(bookmark: Bookmark) {
+        if (bookmark.id.contains("warteschlange", ignoreCase = true) ||
+            bookmark.id.contains("queue", ignoreCase = true) ||
+            bookmark.contextTitle.equals("Warteschlange", ignoreCase = true) ||
+            bookmark.contextTitle.equals("Queue", ignoreCase = true)
+        ) {
+            return
+        }
         scope.launch {
             var toSave = bookmark
             if (bookmark.isPlaylist) {
                 val existingAll = dbHelper.getAllBookmarks()
                 for (old in existingAll) {
                     if (old.id == bookmark.id) continue
+                    val isGenericQueue = old.id.contains("warteschlange", ignoreCase = true) ||
+                        old.id.contains("queue", ignoreCase = true) ||
+                        old.contextTitle.equals("Warteschlange", ignoreCase = true) ||
+                        old.contextTitle.equals("Queue", ignoreCase = true)
                     val isSameTrackSingle = old.id == bookmark.trackUri && !old.isPlaylist
                     val isMisclassifiedAlbumForSameTrack = old.id.startsWith("album:") && old.trackUri == bookmark.trackUri
                     val isLocalPlaylistPlaceholder = old.id.startsWith("spotify:playlist:local_") &&
@@ -67,7 +88,7 @@ class BookmarkRepository private constructor(context: Context) {
                             bookmark.contextTitle != "Playlist" &&
                             old.contextTitle.equals(bookmark.contextTitle, ignoreCase = true))
 
-                    if (isSameTrackSingle || isMisclassifiedAlbumForSameTrack || isLocalPlaylistPlaceholder) {
+                    if (isGenericQueue || isSameTrackSingle || isMisclassifiedAlbumForSameTrack || isLocalPlaylistPlaceholder) {
                         if (old.trackUri == toSave.trackUri && toSave.positionMs <= 1000L && old.positionMs > toSave.positionMs) {
                             toSave = toSave.copy(positionMs = old.positionMs)
                         }
@@ -95,13 +116,17 @@ class BookmarkRepository private constructor(context: Context) {
             var changed = false
             for (old in all) {
                 if (old.id == canonicalId) continue
+                val isGenericQueue = old.id.contains("warteschlange", ignoreCase = true) ||
+                    old.id.contains("queue", ignoreCase = true) ||
+                    old.contextTitle.equals("Warteschlange", ignoreCase = true) ||
+                    old.contextTitle.equals("Queue", ignoreCase = true)
                 val matchesAlbumId = normalizedAlbumId != null && old.id == normalizedAlbumId && old.trackUri == trackUri
                 val matchesLocalPl = old.id.startsWith("spotify:playlist:local_") &&
                     (!contextTitle.isNullOrBlank() &&
                         contextTitle != "Spotify" &&
                         contextTitle != "Playlist" &&
                         old.contextTitle.equals(contextTitle, ignoreCase = true))
-                if (matchesAlbumId || matchesLocalPl) {
+                if (isGenericQueue || matchesAlbumId || matchesLocalPl) {
                     dbHelper.deleteBookmark(old.id)
                     changed = true
                 }
@@ -133,6 +158,9 @@ class BookmarkRepository private constructor(context: Context) {
     }
 
     fun updateBookmarkContextTitle(idOrContextUri: String, contextTitle: String, coverUrl: String? = null) {
+        if (contextTitle.equals("Warteschlange", ignoreCase = true) || contextTitle.equals("Queue", ignoreCase = true)) {
+            return
+        }
         scope.launch {
             val all = dbHelper.getAllBookmarks()
             val existing = all.find { it.id == idOrContextUri || it.contextUri == idOrContextUri }
@@ -145,8 +173,10 @@ class BookmarkRepository private constructor(context: Context) {
                 if (updated.isPlaylist) {
                     for (old in all) {
                         if (old.id != updated.id &&
-                            (old.id.startsWith("album:") || old.id.startsWith("spotify:playlist:local_")) &&
-                            (old.trackUri == updated.trackUri || old.contextTitle.equals(contextTitle, ignoreCase = true))
+                            (old.id.startsWith("album:") || old.id.startsWith("spotify:playlist:local_") ||
+                                old.id.contains("warteschlange", ignoreCase = true) ||
+                                old.contextTitle.equals("Warteschlange", ignoreCase = true)) &&
+                            (old.trackUri == updated.trackUri || old.contextTitle.equals(contextTitle, ignoreCase = true) || old.id.contains("warteschlange", ignoreCase = true))
                         ) {
                             dbHelper.deleteBookmark(old.id)
                         }

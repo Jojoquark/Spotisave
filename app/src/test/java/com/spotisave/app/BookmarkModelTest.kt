@@ -689,5 +689,126 @@ class BookmarkModelTest {
         assertEquals("SpotiSave 1.2.0 - Fluid Liquid Glass & Update Engine", info.releaseTitle)
         assertEquals("https://github.com/Jojoquark/Spotisave/releases/download/v1.2.0/spotisave-release.apk", info.apkDownloadUrl)
     }
+
+    @Test
+    fun testGenericQueueLabelFiltering() {
+        assertTrue(SpotifyNotificationListenerService.isGenericQueueOrLabel("Warteschlange"))
+        assertTrue(SpotifyNotificationListenerService.isGenericQueueOrLabel("Queue"))
+        assertTrue(SpotifyNotificationListenerService.isGenericQueueOrLabel("queue"))
+        assertTrue(SpotifyNotificationListenerService.isGenericQueueOrLabel("Wiedergabeschlange"))
+        assertTrue(SpotifyNotificationListenerService.isGenericQueueOrLabel("Wiedergabe aus Playlist"))
+        assertTrue(SpotifyNotificationListenerService.isGenericQueueOrLabel("Playing from playlist"))
+
+        assertFalse(SpotifyNotificationListenerService.isGenericQueueOrLabel("Frankreich 🇫🇷🥖🧀🍷🍇🍻🛁👰‍♀️👱‍♀️🏡"))
+        assertFalse(SpotifyNotificationListenerService.isGenericQueueOrLabel("Summer Hits 2026"))
+        assertFalse(SpotifyNotificationListenerService.isGenericQueueOrLabel("Rock Classics"))
+    }
+
+    @Test
+    fun testExtractContextTitleFromText() {
+        assertNull(SpotifyNotificationListenerService.extractContextTitleFromText("Warteschlange"))
+        assertNull(SpotifyNotificationListenerService.extractContextTitleFromText("Queue"))
+        assertNull(SpotifyNotificationListenerService.extractContextTitleFromText("Wiedergabe aus Playlist"))
+
+        assertEquals(
+            "Frankreich 🇫🇷🥖🧀🍷🍇🍻🛁👰‍♀️👱‍♀️🏡",
+            SpotifyNotificationListenerService.extractContextTitleFromText("Wiedergabe aus Playlist\nFrankreich 🇫🇷🥖🧀🍷🍇🍻🛁👰‍♀️👱‍♀️🏡")
+        )
+        assertEquals(
+            "Frankreich 🇫🇷🥖🧀🍷🍇🍻🛁👰‍♀️👱‍♀️🏡",
+            SpotifyNotificationListenerService.extractContextTitleFromText("Playlist • Frankreich 🇫🇷🥖🧀🍷🍇🍻🛁👰‍♀️👱‍♀️🏡")
+        )
+        assertEquals(
+            "Roadtrip Vibes",
+            SpotifyNotificationListenerService.extractContextTitleFromText("Aus Playlist: Roadtrip Vibes")
+        )
+    }
+
+    @Test
+    fun testSanitizeIncomingContextTitleRejectsQueue() {
+        assertNull(
+            PlaybackTracker.sanitizeIncomingContextTitle(
+                rawContextTitle = "Warteschlange",
+                album = "Album Name",
+                trackTitle = "Track Name",
+                contextUri = null,
+                contextTypeHint = "playlist"
+            )
+        )
+        assertNull(
+            PlaybackTracker.sanitizeIncomingContextTitle(
+                rawContextTitle = "Queue",
+                album = "Album Name",
+                trackTitle = "Track Name",
+                contextUri = null,
+                contextTypeHint = "playlist"
+            )
+        )
+        assertEquals(
+            "Frankreich 🇫🇷🥖🧀🍷🍇🍻🛁👰‍♀️👱‍♀️🏡",
+            PlaybackTracker.sanitizeIncomingContextTitle(
+                rawContextTitle = "Frankreich 🇫🇷🥖🧀🍷🍇🍻🛁👰‍♀️👱‍♀️🏡",
+                album = "Burli",
+                trackTitle = "Ein Kompliment",
+                contextUri = null,
+                contextTypeHint = "playlist"
+            )
+        )
+    }
+
+    @Test
+    fun testComputeBookmarkIdentityRejectsGenericQueue() {
+        val (idQueue, uriQueue) = PlaybackTracker.computeBookmarkIdentity(
+            contextUri = null,
+            contextTitle = "Warteschlange",
+            album = "Burli",
+            trackTitle = "Ein Kompliment",
+            trackUri = "spotify:track:4cOdK2wGLETKBW3PvgPWqT",
+            contextTypeHint = "playlist"
+        )
+        // Must NOT create spotify:playlist:local_warteschlange
+        assertFalse(idQueue.contains("warteschlange"))
+        assertNull(uriQueue)
+
+        val (idReal, uriReal) = PlaybackTracker.computeBookmarkIdentity(
+            contextUri = null,
+            contextTitle = "Frankreich 🇫🇷🥖🧀🍷🍇🍻🛁👰‍♀️👱‍♀️🏡",
+            album = "Burli",
+            trackTitle = "Ein Kompliment",
+            trackUri = "spotify:track:4cOdK2wGLETKBW3PvgPWqT",
+            contextTypeHint = "playlist"
+        )
+        assertTrue(idReal.startsWith("spotify:playlist:local_"))
+        assertTrue(idReal.contains("frankreich"))
+        assertEquals(idReal, uriReal)
+    }
+
+    @Test
+    fun testIsSameTrackMatching() {
+        assertTrue(
+            PlaybackTracker.isSameTrack(
+                uriA = "spotify:track:4cOdK2wGLETKBW3PvgPWqT",
+                titleA = "Ein Kompliment",
+                uriB = "4cOdK2wGLETKBW3PvgPWqT",
+                titleB = "Ein Kompliment"
+            )
+        )
+        assertTrue(
+            PlaybackTracker.isSameTrack(
+                uriA = "spotify:track:active",
+                titleA = "Ein Kompliment",
+                uriB = "spotify:track:4cOdK2wGLETKBW3PvgPWqT",
+                titleB = "ein kompliment"
+            )
+        )
+        assertFalse(
+            PlaybackTracker.isSameTrack(
+                uriA = "spotify:track:111",
+                titleA = "Track A",
+                uriB = "spotify:track:222",
+                titleB = "Track B"
+            )
+        )
+    }
 }
 

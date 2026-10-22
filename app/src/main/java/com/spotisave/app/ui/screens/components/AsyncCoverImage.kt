@@ -97,6 +97,19 @@ fun AsyncCoverImage(
         }
         withContext(Dispatchers.IO) {
             try {
+                if (coverUrl.startsWith("file://") || coverUrl.startsWith("/")) {
+                    val filePath = if (coverUrl.startsWith("file://")) coverUrl.removePrefix("file://") else coverUrl
+                    val file = java.io.File(filePath)
+                    if (file.exists() && file.canRead()) {
+                        val decoded = BitmapFactory.decodeFile(file.absolutePath)
+                        if (decoded != null) {
+                            CoverImageCache.put(coverUrl, decoded)
+                            bitmap = decoded
+                            return@withContext
+                        }
+                    }
+                }
+
                 val url = URL(coverUrl)
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = 7000

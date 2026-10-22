@@ -351,6 +351,62 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val currentBookmarks = bookmarks.value
                 val history = listeningHistory.value
                 for (bm in currentBookmarks) {
+                    val isGenericQueueBookmark = bm.id.contains("warteschlange", ignoreCase = true) ||
+                        bm.id.contains("queue", ignoreCase = true) ||
+                        bm.contextTitle.equals("Warteschlange", ignoreCase = true) ||
+                        bm.contextTitle.equals("Queue", ignoreCase = true)
+
+                    if (isGenericQueueBookmark) {
+                        // Versuche echten Playlist-Kontext über NowPlaying oder RecentlyPlayed zu retten
+                        val nowPlayingResult = apiClient.getNowPlaying().getOrNull()
+                        var recoveredPlUri: String? = null
+                        var recoveredPlTitle: String? = null
+
+                        if (nowPlayingResult?.track != null && PlaybackTracker.isSameTrack(nowPlayingResult.track.uri, nowPlayingResult.track.title, bm.trackUri, bm.trackTitle)) {
+                            if (nowPlayingResult.contextUri?.startsWith("spotify:playlist:") == true && !nowPlayingResult.contextUri.startsWith("spotify:playlist:local_")) {
+                                recoveredPlUri = nowPlayingResult.contextUri
+                            }
+                        }
+
+                        if (recoveredPlUri == null) {
+                            val recentResult = apiClient.getRecentlyPlayed(50).getOrNull().orEmpty()
+                            val matchRecent = recentResult.firstOrNull {
+                                it.trackUri == bm.trackUri &&
+                                    it.contextUri?.startsWith("spotify:playlist:") == true &&
+                                    !it.contextUri.startsWith("spotify:playlist:local_")
+                            }
+                            if (matchRecent != null) {
+                                recoveredPlUri = matchRecent.contextUri
+                                recoveredPlTitle = matchRecent.contextTitle
+                            }
+                        }
+
+                        if (recoveredPlUri != null) {
+                            val plId = recoveredPlUri.removePrefix("spotify:playlist:")
+                            val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
+                            val upgradedTitle = plInfo?.name?.takeIf { it.isNotBlank() } ?: recoveredPlTitle ?: "Playlist"
+                            val upgradedCover = plInfo?.coverUrl ?: bm.coverUrl
+                            val upgraded = bm.copy(
+                                id = recoveredPlUri,
+                                contextUri = recoveredPlUri,
+                                contextTitle = upgradedTitle,
+                                coverUrl = upgradedCover
+                            )
+                            repository.deleteBookmark(bm.id)
+                            repository.saveBookmark(upgraded)
+                            repository.cleanupSupersededBookmarks(
+                                canonicalId = recoveredPlUri,
+                                trackUri = upgraded.trackUri,
+                                album = null,
+                                contextTitle = upgradedTitle
+                            )
+                            continue
+                        } else {
+                            repository.deleteBookmark(bm.id)
+                            continue
+                        }
+                    }
+
                     // 1. Falls ein Lesezeichen fälschlicherweise als "album:..." oder "spotify:playlist:local_..."
                     // gespeichert wurde, aber in den Playlists des Nutzers oder im Verlauf vorkommt:
                     if (bm.id.startsWith("album:") || bm.id.startsWith("spotify:playlist:local_")) {

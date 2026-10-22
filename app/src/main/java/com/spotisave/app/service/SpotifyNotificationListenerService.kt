@@ -3,6 +3,7 @@ package com.spotisave.app.service
 import android.app.Notification
 import android.content.ComponentName
 import android.content.Context
+import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSession
@@ -15,6 +16,8 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.io.File
+import java.io.FileOutputStream
 
 /**
  * Fallback- und Dauer-Erkennungsdienst auf Basis von Androids NotificationListenerService.
@@ -44,23 +47,44 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
         private var lastNotificationContextType: String? = null
 
         /**
+         * Filtert generische Warteschlangen- und System-Bezeichnungen heraus.
+         * Spotify setzt auf Android oft den MediaSession queueTitle auf "Warteschlange" bzw. "Queue".
+         * Dieser darf NIEMALS als Playlist-Name interpretiert werden!
+         */
+        fun isGenericQueueOrLabel(raw: String?): Boolean {
+            if (raw.isNullOrBlank()) return true
+            val lower = raw.trim().lowercase()
+            return lower in listOf(
+                "warteschlange", "queue", "play queue", "wiedergabeschlange",
+                "in der warteschlange", "file d'attente", "cola", "coda",
+                "kø", "kö", "wiedergabeliste", "playlist", "album", "spotify",
+                "musik", "music", "podcast", "titel in der warteschlange",
+                "next in queue", "wiedergabe aus playlist", "playing from playlist",
+                "wiedergabe aus album", "playing from album", "aus playlist",
+                "aus album", "from playlist", "from album"
+            )
+        }
+
+        /**
          * Erkennt explizite Kontext-Typen ("playlist" oder "album") anhand typischer Spotify-Präfixe.
          */
         fun detectContextTypeFromText(raw: String?): String? {
             if (raw.isNullOrBlank()) return null
             val lower = raw.trim().lowercase()
-            val playlistPrefixes = listOf(
-                "playlist • ", "playlist: ", "playlist - ", "aus playlist ",
-                "from playlist ", "playing from playlist ", "wiedergabe aus playlist ",
-                "wiedergabeliste • ", "wiedergabeliste: "
-            )
-            if (playlistPrefixes.any { lower.startsWith(it) }) return "playlist"
+            if (lower.startsWith("wiedergabe aus playlist") ||
+                lower.startsWith("playing from playlist") ||
+                lower.startsWith("aus playlist") ||
+                lower.startsWith("from playlist") ||
+                lower.startsWith("playlist") ||
+                lower.startsWith("wiedergabeliste")
+            ) return "playlist"
 
-            val albumPrefixes = listOf(
-                "album • ", "album: ", "album - ", "aus album ",
-                "from album ", "playing from album ", "wiedergabe aus album "
-            )
-            if (albumPrefixes.any { lower.startsWith(it) }) return "album"
+            if (lower.startsWith("wiedergabe aus album") ||
+                lower.startsWith("playing from album") ||
+                lower.startsWith("aus album") ||
+                lower.startsWith("from album") ||
+                lower.startsWith("album")
+            ) return "album"
             return null
         }
 
@@ -70,23 +94,59 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
         fun extractContextTitleFromText(raw: String?): String? {
             if (raw.isNullOrBlank()) return null
             val cleaned = raw.trim()
-            val lower = cleaned.lowercase()
-            if (lower == "spotify" || lower == "musik" || lower == "music") return null
+            if (isGenericQueueOrLabel(cleaned)) return null
 
-            val playlistPrefixes = listOf(
-                "playlist • ", "playlist: ", "playlist - ", "aus playlist ",
-                "from playlist ", "playing from playlist ", "wiedergabe aus playlist ",
-                "wiedergabeliste • ", "wiedergabeliste: ",
-                "album • ", "album: ", "album - ", "aus album ",
-                "from album ", "playing from album ", "wiedergabe aus album "
-            )
-            for (prefix in playlistPrefixes) {
-                if (lower.startsWith(prefix)) {
-                    val title = cleaned.substring(prefix.length).trim()
-                    if (title.isNotBlank()) return title
+            // Mehrzeilige Notification-Strings aufteilen (z.B. "Wiedergabe aus Playlist\nFrankreich ...")
+            if (cleaned.contains("\n")) {
+                val lines = cleaned.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+                for (line in lines) {
+                    val candidate = extractContextTitleFromText(line)
+                    if (!candidate.isNullOrBlank()) return candidate
                 }
             }
-            return cleaned
+
+            val lower = cleaned.lowercase()
+            val prefixes = listOf(
+                "wiedergabe aus playlist: ", "wiedergabe aus playlist • ", "wiedergabe aus playlist - ", "wiedergabe aus playlist ",
+                "playing from playlist: ", "playing from playlist • ", "playing from playlist ",
+                "aus playlist: ", "aus playlist • ", "aus playlist - ", "aus playlist ",
+                "from playlist: ", "from playlist • ", "from playlist ",
+                "playlist: ", "playlist • ", "playlist - ", "wiedergabeliste: ", "wiedergabeliste • ",
+                "wiedergabe aus: ", "playing from: ",
+                "wiedergabe aus album: ", "wiedergabe aus album • ", "wiedergabe aus album - ", "wiedergabe aus album ",
+                "playing from album: ", "playing from album • ", "playing from album ",
+                "aus album: ", "aus album • ", "aus album - ", "aus album ",
+                "from album: ", "from album • ", "from album ",
+                "album: ", "album • ", "album - "
+            )
+            for (prefix in prefixes) {
+                if (lower.startsWith(prefix)) {
+                    val candidate = cleaned.substring(prefix.length).trim()
+                    if (candidate.isNotBlank() && !isGenericQueueOrLabel(candidate)) {
+                        return candidate
+                    }
+                }
+            }
+            return if (!isGenericQueueOrLabel(cleaned)) cleaned else null
+        }
+
+        /**
+         * Speichert ein Cover-Bitmap lokal im Cache-Verzeichnis und gibt den file:// URI-String zurück.
+         */
+        fun saveCoverBitmapToCache(context: Context, key: String, bitmap: Bitmap): String? {
+            return try {
+                val dir = File(context.cacheDir, "covers").apply { if (!exists()) mkdirs() }
+                val safeKey = key.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(32)
+                val file = File(dir, "art_${safeKey}_${key.hashCode()}.jpg")
+                if (!file.exists() || file.length() == 0L) {
+                    FileOutputStream(file).use { out ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                    }
+                }
+                "file://${file.absolutePath}"
+            } catch (_: Exception) {
+                null
+            }
         }
 
         /**
@@ -149,21 +209,41 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
         val extras = notification.extras ?: return
 
         // Extrahiere potentiellen Playlist-Namen & Typ aus Notification-Extras
+        val contextTitleExtra = extras.getString("com.spotify.music.extra.CONTEXT_TITLE")
+            ?: extras.getString("context_title")
+            ?: extras.getString("playlist_name")
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
         val summaryText = extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT)?.toString()
         val infoText = extras.getCharSequence(Notification.EXTRA_INFO_TEXT)?.toString()
-        val candidateTitle = extractContextTitleFromText(subText)
+        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+
+        val candidateTitle = extractContextTitleFromText(contextTitleExtra)
+            ?: extractContextTitleFromText(subText)
             ?: extractContextTitleFromText(summaryText)
             ?: extractContextTitleFromText(infoText)
-        val candidateType = detectContextTypeFromText(subText)
+            ?: extractContextTitleFromText(bigText)
+        val candidateType = detectContextTypeFromText(contextTitleExtra)
+            ?: detectContextTypeFromText(subText)
             ?: detectContextTypeFromText(summaryText)
             ?: detectContextTypeFromText(infoText)
+            ?: detectContextTypeFromText(bigText)
 
         lastNotificationContextTitle = candidateTitle
         lastNotificationContextType = candidateType
 
         val notifContextUri = extras.getString("context_uri")
             ?: extras.getString("com.spotify.music.extra.CONTEXT_URI")
+
+        val notifArt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            extras.getParcelable(Notification.EXTRA_LARGE_ICON, Bitmap::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            extras.getParcelable(Notification.EXTRA_LARGE_ICON)
+        }
+
+        val notifCoverUrl = if (notifArt != null) {
+            saveCoverBitmapToCache(applicationContext, notifContextUri ?: "notif_art", notifArt)
+        } else null
 
         // 1. Suche MediaSession Token
         val token: MediaSession.Token? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -190,6 +270,7 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
                     durationMs = 0L,
                     contextUri = notifContextUri,
                     contextTitle = candidateTitle,
+                    coverUrl = notifCoverUrl,
                     source = "NotificationFallback",
                     contextTypeHint = candidateType
                 )
@@ -239,7 +320,10 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
                 }
 
                 override fun onQueueTitleChanged(title: CharSequence?) {
-                    handleMetadata(controller, controller.metadata)
+                    val qTitle = title?.toString()
+                    if (!qTitle.isNullOrBlank() && !isGenericQueueOrLabel(qTitle)) {
+                        handleMetadata(controller, controller.metadata)
+                    }
                 }
 
                 override fun onSessionDestroyed() {
@@ -268,31 +352,43 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
         val mediaUri = metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
             ?: metadata.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
 
-        val coverUrl = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+        val onlineCoverUrl = metadata.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
             ?: metadata.getString(MediaMetadata.METADATA_KEY_ART_URI)
             ?: metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI)
+
+        val localArtBitmap = metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+            ?: metadata.getBitmap(MediaMetadata.METADATA_KEY_ART)
+
+        val coverUrl = if (!onlineCoverUrl.isNullOrBlank() && (onlineCoverUrl.startsWith("http://") || onlineCoverUrl.startsWith("https://"))) {
+            onlineCoverUrl
+        } else if (localArtBitmap != null) {
+            saveCoverBitmapToCache(applicationContext, mediaUri ?: title ?: "cover", localArtBitmap)
+        } else {
+            onlineCoverUrl
+        }
+
+        val rawQueueTitle = controller.queueTitle?.toString()?.trim()?.takeIf {
+            !isGenericQueueOrLabel(it) && !it.equals("Spotify", ignoreCase = true)
+        }
 
         val contextUri = controller.extras?.getString("context_uri")
             ?: controller.extras?.getString("com.spotify.music.extra.CONTEXT_URI")
             ?: controller.playbackState?.extras?.getString("context_uri")
             ?: controller.playbackState?.extras?.getString("com.spotify.music.extra.CONTEXT_URI")
 
-        val rawQueueTitle = controller.queueTitle?.toString()?.trim()?.takeIf {
-            it.isNotBlank() && !it.equals("Spotify", ignoreCase = true)
-        }
-
-        val contextTitle = controller.extras?.getString("context_title")
+        val rawCandidateTitle = controller.extras?.getString("context_title")
             ?: controller.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
             ?: controller.extras?.getString("context_name")
             ?: controller.extras?.getString("playlist_name")
-            ?: controller.extras?.getString("queue_title")
-            ?: rawQueueTitle
+            ?: lastNotificationContextTitle
             ?: controller.playbackState?.extras?.getString("context_title")
             ?: controller.playbackState?.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
-            ?: lastNotificationContextTitle
+            ?: rawQueueTitle
+
+        val contextTitle = extractContextTitleFromText(rawCandidateTitle)
 
         val effectiveContextType = lastNotificationContextType
-            ?: if (rawQueueTitle != null) "playlist" else null
+            ?: if (!contextTitle.isNullOrBlank()) "playlist" else null
 
         val playbackState = controller.playbackState
         val position = computeCurrentPosition(playbackState, duration)
@@ -326,31 +422,43 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
         val mediaUri = metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
             ?: metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
 
-        val coverUrl = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+        val onlineCoverUrl = metadata?.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
             ?: metadata?.getString(MediaMetadata.METADATA_KEY_ART_URI)
             ?: metadata?.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI)
+
+        val localArtBitmap = metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+            ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+
+        val coverUrl = if (!onlineCoverUrl.isNullOrBlank() && (onlineCoverUrl.startsWith("http://") || onlineCoverUrl.startsWith("https://"))) {
+            onlineCoverUrl
+        } else if (localArtBitmap != null) {
+            saveCoverBitmapToCache(applicationContext, mediaUri ?: title ?: "cover", localArtBitmap)
+        } else {
+            onlineCoverUrl
+        }
+
+        val rawQueueTitle = controller.queueTitle?.toString()?.trim()?.takeIf {
+            !isGenericQueueOrLabel(it) && !it.equals("Spotify", ignoreCase = true)
+        }
 
         val contextUri = controller.extras?.getString("context_uri")
             ?: controller.extras?.getString("com.spotify.music.extra.CONTEXT_URI")
             ?: state.extras?.getString("context_uri")
             ?: state.extras?.getString("com.spotify.music.extra.CONTEXT_URI")
 
-        val rawQueueTitle = controller.queueTitle?.toString()?.trim()?.takeIf {
-            it.isNotBlank() && !it.equals("Spotify", ignoreCase = true)
-        }
-
-        val contextTitle = controller.extras?.getString("context_title")
+        val rawCandidateTitle = controller.extras?.getString("context_title")
             ?: controller.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
             ?: controller.extras?.getString("context_name")
             ?: controller.extras?.getString("playlist_name")
-            ?: controller.extras?.getString("queue_title")
-            ?: rawQueueTitle
+            ?: lastNotificationContextTitle
             ?: state.extras?.getString("context_title")
             ?: state.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
-            ?: lastNotificationContextTitle
+            ?: rawQueueTitle
+
+        val contextTitle = extractContextTitleFromText(rawCandidateTitle)
 
         val effectiveContextType = lastNotificationContextType
-            ?: if (rawQueueTitle != null) "playlist" else null
+            ?: if (!contextTitle.isNullOrBlank()) "playlist" else null
 
         val position = computeCurrentPosition(state, duration)
 

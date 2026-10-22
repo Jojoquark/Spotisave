@@ -1626,6 +1626,51 @@ async function runTests() {
            trackerSrc22.includes('lastContextUri!!.contains(":collection")'),
            'PlaybackTracker.kt preserves active session context across track boundaries for Lieblingssongs (Collection)');
 
+    // ==========================================
+    // Test Group 23: Generic Queue Label (Warteschlange) Filtering & Cover Art Preservation
+    // ==========================================
+    console.log('\nTest Group 23: Generic Queue Label (Warteschlange) Filtering & Cover Art Preservation');
+    const notifSrc23 = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/spotisave/app/service/SpotifyNotificationListenerService.kt'), 'utf8');
+    const trackerSrc23 = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/spotisave/app/service/PlaybackTracker.kt'), 'utf8');
+    const repoSrc23 = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/spotisave/app/data/repository/BookmarkRepository.kt'), 'utf8');
+    const mainVmSrc23 = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/spotisave/app/ui/viewmodel/MainViewModel.kt'), 'utf8');
+    const asyncCoverSrc23 = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/spotisave/app/ui/screens/components/AsyncCoverImage.kt'), 'utf8');
+
+    // 1. Queue label detection
+    assert(notifSrc23.includes('fun isGenericQueueOrLabel(raw: String?)') &&
+           notifSrc23.includes('"warteschlange"') &&
+           notifSrc23.includes('"queue"'),
+           'SpotifyNotificationListenerService.kt implements isGenericQueueOrLabel recognizing Warteschlange and Queue');
+
+    // 2. Multiline & prefix parsing in extractContextTitleFromText
+    assert(notifSrc23.includes('fun extractContextTitleFromText(') &&
+           notifSrc23.includes('isGenericQueueOrLabel'),
+           'SpotifyNotificationListenerService.kt filters queue labels in extractContextTitleFromText');
+
+    // 3. Notification bitmap caching
+    assert(notifSrc23.includes('fun saveCoverBitmapToCache(') &&
+           notifSrc23.includes('Bitmap.CompressFormat.JPEG'),
+           'SpotifyNotificationListenerService.kt caches notification Bitmaps via saveCoverBitmapToCache');
+
+    // 4. PlaybackTracker sanitization & identity
+    assert(trackerSrc23.includes('SpotifyNotificationListenerService.isGenericQueueOrLabel') &&
+           trackerSrc23.includes('fun sanitizeIncomingContextTitle'),
+           'PlaybackTracker.kt filters out generic queue titles in sanitizeIncomingContextTitle');
+    assert(trackerSrc23.includes('fun isSameTrack('),
+           'PlaybackTracker.kt implements fuzzy/normalized isSameTrack comparison');
+
+    // 5. BookmarkRepository cleanup
+    assert(repoSrc23.includes('warteschlange') && repoSrc23.includes('reloadBookmarks'),
+           'BookmarkRepository.kt purges corrupted Warteschlange bookmarks on database reload');
+
+    // 6. MainViewModel proactive resolution
+    assert(mainVmSrc23.includes('isGenericQueueBookmark') && mainVmSrc23.includes('apiClient.getNowPlaying()'),
+           'MainViewModel.kt actively rescues or purges Warteschlange bookmarks in resolveMissingPlaylistTitles');
+
+    // 7. AsyncCoverImage local file decoding
+    assert(asyncCoverSrc23.includes('file://') && asyncCoverSrc23.includes('BitmapFactory.decodeFile'),
+           'AsyncCoverImage.kt decodes local file:// cached cover artwork');
+
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);
     console.log('========================================\n');

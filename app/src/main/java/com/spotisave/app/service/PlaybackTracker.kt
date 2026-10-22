@@ -90,7 +90,8 @@ object PlaybackTracker {
                 !it.equals("Playlist", ignoreCase = true) &&
                 !it.equals("Album", ignoreCase = true) &&
                 !it.equals("Musik", ignoreCase = true) &&
-                !it.equals("Music", ignoreCase = true)
+                !it.equals("Music", ignoreCase = true) &&
+                !SpotifyNotificationListenerService.isGenericQueueOrLabel(it)
         } ?: return null
 
         val cleanAlbum = album?.trim()?.takeIf { it.isNotBlank() && !it.equals("Spotify", ignoreCase = true) }
@@ -201,13 +202,24 @@ object PlaybackTracker {
             return Pair(contextUri, contextUri)
         }
 
+        val isGenericQueue = SpotifyNotificationListenerService.isGenericQueueOrLabel(cleanCtxTitle)
         val hasDistinctPlaylistTitle = cleanCtxTitle != null &&
+            !isGenericQueue &&
             !cleanCtxTitle.equals(cleanAlbum, ignoreCase = true) &&
             !cleanCtxTitle.equals(cleanTrack, ignoreCase = true)
 
-        if (contextTypeHint == "playlist" || hasDistinctPlaylistTitle) {
-            val rawName = cleanCtxTitle ?: "playlist"
-            val slug = rawName.lowercase().replace(Regex("[^a-z0-9_]"), "_").trim('_').ifEmpty { "playlist" }
+        if ((contextTypeHint == "playlist" && !isGenericQueue) || hasDistinctPlaylistTitle) {
+            val rawName = cleanCtxTitle?.takeIf { !isGenericQueue } ?: "playlist"
+            val slug = rawName.lowercase()
+                .replace(Regex("[^a-z0-9_]"), "_")
+                .trim('_')
+                .ifEmpty {
+                    if (rawName.isNotBlank() && rawName != "playlist") {
+                        "playlist_" + Math.abs(rawName.hashCode())
+                    } else {
+                        "playlist"
+                    }
+                }
             val localPlaylistUri = "spotify:playlist:local_$slug"
             return Pair(localPlaylistUri, localPlaylistUri)
         }
@@ -228,7 +240,11 @@ object PlaybackTracker {
         contextTitle: String?
     ): String? {
         val cleanTitle = contextTitle?.trim()?.takeIf {
-            it.isNotBlank() && it != "Spotify" && it != "Playlist" && it != "Album"
+            it.isNotBlank() &&
+                it != "Spotify" &&
+                it != "Playlist" &&
+                it != "Album" &&
+                !SpotifyNotificationListenerService.isGenericQueueOrLabel(it)
         }
 
         if (cleanTitle != null) {
@@ -245,25 +261,37 @@ object PlaybackTracker {
 
             if (cleanTitle != null) {
                 val bmByTitle = savedBookmarks.firstOrNull {
-                    it.isPlaylist && it.contextTitle.equals(cleanTitle, ignoreCase = true)
+                    it.isPlaylist &&
+                        !it.id.contains("warteschlange", ignoreCase = true) &&
+                        !it.contextTitle.equals("Warteschlange", ignoreCase = true) &&
+                        it.contextTitle.equals(cleanTitle, ignoreCase = true)
                 }
                 if (bmByTitle != null) return bmByTitle.contextUri ?: bmByTitle.id
 
                 val histByTitle = historyEntries.firstOrNull {
-                    it.isPlaylist && it.contextTitle.equals(cleanTitle, ignoreCase = true)
+                    it.isPlaylist &&
+                        !it.contextUri.orEmpty().contains("warteschlange", ignoreCase = true) &&
+                        !it.contextTitle.equals("Warteschlange", ignoreCase = true) &&
+                        it.contextTitle.equals(cleanTitle, ignoreCase = true)
                 }
                 if (histByTitle?.contextUri != null) return histByTitle.contextUri
             }
 
             if (!trackUri.isNullOrBlank()) {
                 val bmByTrack = savedBookmarks.firstOrNull {
-                    it.isPlaylist && it.trackUri == trackUri &&
+                    it.isPlaylist &&
+                        it.trackUri == trackUri &&
+                        !it.id.contains("warteschlange", ignoreCase = true) &&
+                        !it.contextTitle.equals("Warteschlange", ignoreCase = true) &&
                         (cleanTitle == null || it.contextTitle.equals(cleanTitle, ignoreCase = true))
                 }
                 if (bmByTrack != null) return bmByTrack.contextUri ?: bmByTrack.id
 
                 val histByTrack = historyEntries.firstOrNull {
-                    it.isPlaylist && it.trackUri == trackUri &&
+                    it.isPlaylist &&
+                        it.trackUri == trackUri &&
+                        !it.contextUri.orEmpty().contains("warteschlange", ignoreCase = true) &&
+                        !it.contextTitle.equals("Warteschlange", ignoreCase = true) &&
                         (cleanTitle == null || it.contextTitle.equals(cleanTitle, ignoreCase = true))
                 }
                 if (histByTrack?.contextUri != null) return histByTrack.contextUri
@@ -672,7 +700,7 @@ object PlaybackTracker {
                 trackTitle = lastTrackTitle,
                 artist = lastArtist,
                 album = lastAlbum,
-                contextTitle = lastContextTitle,
+                contextTitle = lastContextTitle?.takeIf { !SpotifyNotificationListenerService.isGenericQueueOrLabel(it) },
                 contextUri = lastContextUri,
                 coverUrl = lastCoverUrl,
                 positionMs = lastPositionMs,
@@ -725,7 +753,9 @@ object PlaybackTracker {
             bookmarkId.startsWith("album:")
 
         val resolvedContextTitle = when {
-            !lastContextTitle.isNullOrBlank() && lastContextTitle != "Spotify" -> lastContextTitle!!
+            !lastContextTitle.isNullOrBlank() &&
+                lastContextTitle != "Spotify" &&
+                !SpotifyNotificationListenerService.isGenericQueueOrLabel(lastContextTitle) -> lastContextTitle!!
             !effectiveContextUri.isNullOrBlank() && playlistNameCache.containsKey(effectiveContextUri) -> playlistNameCache[effectiveContextUri]!!
             isPlaylist -> "Playlist"
             lastAlbum.isNotBlank() && lastAlbum != "Spotify" -> lastAlbum
@@ -788,6 +818,24 @@ object PlaybackTracker {
         }
     }
 
+    fun isSameTrack(uriA: String?, titleA: String?, uriB: String?, titleB: String?): Boolean {
+        if (uriA.isNullOrBlank() || uriB.isNullOrBlank()) {
+            if (!titleA.isNullOrBlank() && !titleB.isNullOrBlank()) {
+                return titleA.trim().equals(titleB.trim(), ignoreCase = true)
+            }
+            return false
+        }
+        val idA = uriA.substringAfterLast(":").substringBefore("?").trim()
+        val idB = uriB.substringAfterLast(":").substringBefore("?").trim()
+        if (idA.isNotBlank() && idB.isNotBlank() && idA.equals(idB, ignoreCase = true)) {
+            return true
+        }
+        if (!titleA.isNullOrBlank() && !titleB.isNullOrBlank() && titleA.trim().equals(titleB.trim(), ignoreCase = true)) {
+            return true
+        }
+        return false
+    }
+
     fun enrichFromSpotifyApi(context: Context) {
         val authManager = SpotifyAuthManager.getInstance(context)
         if (!authManager.isLoggedIn()) return
@@ -818,6 +866,12 @@ object PlaybackTracker {
                             }
                             val repository = BookmarkRepository.initialize(context)
                             repository.updateBookmarkContextTitle(curContextUri, plInfo.name, plInfo.coverUrl)
+                            repository.cleanupSupersededBookmarks(
+                                canonicalId = curContextUri,
+                                trackUri = lastTrackUri,
+                                album = lastAlbum,
+                                contextTitle = plInfo.name
+                            )
                             updateRepositoryState(context, "WebApiEnrich")
                             flushBookmark(context, "WebApiEnrich")
                         }
@@ -835,7 +889,7 @@ object PlaybackTracker {
                         if (resumed != null && resumed.trackUri.isNotBlank() &&
                             resumed.trackUri != "spotify:track:active" &&
                             resumed.trackUri != "spotify:track:notification" &&
-                            apiTrack.uri != resumed.trackUri
+                            !isSameTrack(apiTrack.uri, apiTrack.title, resumed.trackUri, resumed.trackTitle)
                         ) {
                             return@launch
                         }
@@ -845,7 +899,7 @@ object PlaybackTracker {
                     if (lastTrackUri.isNotBlank() &&
                         lastTrackUri != "spotify:track:active" &&
                         lastTrackUri != "spotify:track:notification" &&
-                        apiTrack.uri != lastTrackUri
+                        !isSameTrack(apiTrack.uri, apiTrack.title, lastTrackUri, lastTrackTitle)
                     ) {
                         return@launch
                     }
@@ -899,6 +953,12 @@ object PlaybackTracker {
                                 }
                                 val repository = BookmarkRepository.initialize(context)
                                 repository.updateBookmarkContextTitle(apiContextUri, plInfo.name, plInfo.coverUrl)
+                                repository.cleanupSupersededBookmarks(
+                                    canonicalId = apiContextUri,
+                                    trackUri = lastTrackUri,
+                                    album = lastAlbum,
+                                    contextTitle = plInfo.name
+                                )
                             }
                         }
                     }

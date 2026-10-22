@@ -1714,8 +1714,28 @@
                     const inferredType = resumedMatch.context_type || (resumedMatch.context_uri.includes(':album:') ? 'album' : 'playlist');
                     effectiveContext = { type: inferredType, uri: resumedMatch.context_uri };
                     engineState.activeResumedContext = effectiveContext;
-                } else if (engineState.activeResumedContext && engineState.activeResumedContext.uri && isPlaying) {
-                    effectiveContext = engineState.activeResumedContext;
+                } else {
+                    // Multi-tier check for Liked Songs / Lieblingssongs when context is null
+                    try {
+                        const trackIdClean = track.id || (track.uri ? track.uri.split(':').pop() : '');
+                        if (trackIdClean) {
+                            const libRes = await spFetch(`/me/tracks/contains?ids=${trackIdClean}`);
+                            if (libRes && libRes.ok) {
+                                const libData = await libRes.json();
+                                if (Array.isArray(libData) && libData[0] === true) {
+                                    effectiveContext = { type: 'collection', uri: 'spotify:collection:tracks' };
+                                    engineState.activeResumedContext = effectiveContext;
+                                }
+                            }
+                        }
+                    } catch (e) {}
+
+                    // Anti-Bleed: If not in library or playlist, treat as album and clear previous playlist context
+                    if (!effectiveContext) {
+                        const albumId = (track.album && track.album.id) ? track.album.id : (track.album && track.album.name ? track.album.name.toLowerCase().replace(/[^a-z0-9]/g, '_') : 'default');
+                        effectiveContext = { type: 'album', uri: `spotify:album:${albumId}` };
+                        engineState.activeResumedContext = null;
+                    }
                 }
             }
 

@@ -62,6 +62,7 @@ import androidx.compose.material.icons.filled.LightMode
 import com.spotisave.app.ui.screens.components.SpotisaveBottomBar
 import com.spotisave.app.ui.screens.components.SpotifyApiSettingsDialog
 import com.spotisave.app.ui.screens.components.StatusBottomSheet
+import com.spotisave.app.ui.screens.components.UpdateDialog
 import com.spotisave.app.ui.theme.AppleSystemGreen
 import com.spotisave.app.ui.theme.CanvasBlack
 import com.spotisave.app.ui.theme.CanvasWhite
@@ -104,6 +105,9 @@ fun MainScreen(
     val authStatusMessage by viewModel.authStatusMessage.collectAsState()
     val listeningStats by viewModel.listeningStats.collectAsState()
     val isWhiteMode by viewModel.isWhiteMode.collectAsState()
+    val updateInfo by viewModel.updateInfo.collectAsState()
+    val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
+    val updateStatusMessage by viewModel.updateStatusMessage.collectAsState()
 
     var showStatusSheet by remember { mutableStateOf(false) }
     var showApiDialog by remember { mutableStateOf(false) }
@@ -564,12 +568,33 @@ fun MainScreen(
                 onImportJson = { json, onDone ->
                     viewModel.importBookmarksFromJson(json, onDone)
                 },
+                onCheckUpdate = {
+                    viewModel.checkForUpdates(manual = true)
+                },
+                isCheckingUpdate = isCheckingUpdate,
+                updateStatusMessage = updateStatusMessage,
+                currentVersionName = try {
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.1.0"
+                } catch (_: Exception) { "1.1.0" },
                 onDismissRequest = {
                     showStatusSheet = false
                     viewModel.checkPermissions()
                 }
             )
 
+        }
+
+        // Liquid Glass Update Dialog
+        updateInfo?.let { info ->
+            UpdateDialog(
+                updateInfo = info,
+                onDownloadClick = {
+                    viewModel.downloadUpdate(it)
+                },
+                onDismissRequest = {
+                    viewModel.dismissUpdateDialog()
+                }
+            )
         }
 
         // Spotify Web API Settings Dialog

@@ -9,8 +9,10 @@ import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.spotisave.app.SpotisaveApp
+import com.spotisave.app.data.api.AppUpdateInfo
 import com.spotisave.app.data.api.SpotifyApiClient
 import com.spotisave.app.data.api.SpotifyAuthManager
+import com.spotisave.app.data.api.UpdateChecker
 import com.spotisave.app.data.model.Bookmark
 import com.spotisave.app.data.model.HistoryTrackEntry
 import com.spotisave.app.data.model.PlaybackStateModel
@@ -117,6 +119,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
     val isNotificationListenerGranted: StateFlow<Boolean> = _isNotificationListenerGranted.asStateFlow()
 
+    // In-App Auto-Update Checker State
+    private val _updateInfo = MutableStateFlow<AppUpdateInfo?>(null)
+    val updateInfo: StateFlow<AppUpdateInfo?> = _updateInfo.asStateFlow()
+
+    private val _isCheckingUpdate = MutableStateFlow(false)
+    val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
+
+    private val _updateStatusMessage = MutableStateFlow<String?>(null)
+    val updateStatusMessage: StateFlow<String?> = _updateStatusMessage.asStateFlow()
+
+    fun dismissUpdateDialog() {
+        _updateInfo.value = null
+    }
+
+    fun checkForUpdates(manual: Boolean = false) {
+        val currentVersion = try {
+            val pInfo = getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0)
+            pInfo.versionName ?: "1.1.0"
+        } catch (_: Exception) {
+            "1.1.0"
+        }
+
+        viewModelScope.launch {
+            _isCheckingUpdate.value = true
+            _updateStatusMessage.value = if (manual) "Prüfe auf Updates..." else null
+            val result = UpdateChecker.checkForUpdates(currentVersion)
+            _isCheckingUpdate.value = false
+            result.onSuccess { info ->
+                if (info.isUpdateAvailable) {
+                    _updateInfo.value = info
+                    _updateStatusMessage.value = "Neues Update verfügbar: ${info.latestVersion}"
+                } else {
+                    if (manual) {
+                        val msg = "SpotiSave ist auf dem neuesten Stand (v$currentVersion)"
+                        _updateStatusMessage.value = msg
+                        Toast.makeText(getApplication(), msg, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }.onFailure { err ->
+                if (manual) {
+                    _updateStatusMessage.value = "Update-Prüfung nicht möglich (Offline)"
+                    Toast.makeText(getApplication(), "Update-Prüfung nicht möglich: ${err.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    fun downloadUpdate(info: AppUpdateInfo) {
+        val url = info.apkDownloadUrl ?: info.htmlUrl
+        UpdateChecker.startDownload(getApplication(), url, "spotisave-${info.latestVersion}.apk")
+        _updateInfo.value = null
+    }
+
     fun selectTab(tab: Int) {
         _selectedTab.value = tab
     }
@@ -200,6 +255,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (authManager.isLoggedIn()) {
             syncSpotifyHistory()
         }
+        // Automatischer Update-Check beim Start
+        checkForUpdates(manual = false)
     }
 
     fun handleAuthCode(code: String) {

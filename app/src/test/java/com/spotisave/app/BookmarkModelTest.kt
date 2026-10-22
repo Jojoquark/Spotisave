@@ -1,6 +1,7 @@
 package com.spotisave.app
 
 import com.spotisave.app.data.api.SpotifyApiClient
+import com.spotisave.app.data.api.UpdateChecker
 import com.spotisave.app.data.model.Bookmark
 import com.spotisave.app.data.model.HistoryTrackEntry
 import com.spotisave.app.data.model.PlaybackStateModel
@@ -610,6 +611,83 @@ class BookmarkModelTest {
         )
         assertEquals("spotify:collection:tracks", id)
         assertEquals("spotify:collection:tracks", ctx)
+    }
+
+    @Test
+    fun testNativeTargetUriPrioritizesPlaylistContext() {
+        val playlistBm = Bookmark(
+            id = "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
+            contextUri = "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
+            contextTitle = "Today's Top Hits",
+            trackTitle = "Hit Song",
+            artist = "Popular Artist",
+            trackUri = "spotify:track:hit123",
+            positionMs = 30_000L
+        )
+        // For playlists, native resume must launch the playlist URI so Spotify opens inside the playlist
+        assertEquals("spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", ResumeHelper.resolveNativeTargetUri(playlistBm))
+
+        val collectionBm = Bookmark(
+            id = "spotify:collection:tracks",
+            contextUri = "spotify:collection:tracks",
+            contextTitle = "Lieblingssongs",
+            trackTitle = "Fav Song",
+            artist = "Artist",
+            trackUri = "spotify:track:fav123",
+            positionMs = 15_000L
+        )
+        assertEquals("spotify:collection:tracks", ResumeHelper.resolveNativeTargetUri(collectionBm))
+
+        val albumBm = Bookmark(
+            id = "album:abbey_road",
+            contextUri = "spotify:album:0ETFjACtuP2ADo6LFhL6HN",
+            contextTitle = "Abbey Road",
+            trackTitle = "Come Together",
+            artist = "The Beatles",
+            trackUri = "spotify:track:beatles1",
+            positionMs = 20_000L
+        )
+        // For albums, track URI is launched directly
+        assertEquals("spotify:track:beatles1", ResumeHelper.resolveNativeTargetUri(albumBm))
+    }
+
+    @Test
+    fun testUpdateCheckerVersionComparison() {
+        assertTrue(UpdateChecker.isNewerVersion("v1.2.0", "1.1.0"))
+        assertTrue(UpdateChecker.isNewerVersion("1.1.1", "1.1.0"))
+        assertTrue(UpdateChecker.isNewerVersion("v2.0.0", "1.1.0"))
+        assertTrue(UpdateChecker.isNewerVersion("v1.10.0", "v1.9.0"))
+
+        assertFalse(UpdateChecker.isNewerVersion("v1.1.0", "1.1.0"))
+        assertFalse(UpdateChecker.isNewerVersion("1.1.0", "v1.1.0"))
+        assertFalse(UpdateChecker.isNewerVersion("v1.0.9", "1.1.0"))
+        assertFalse(UpdateChecker.isNewerVersion("1.0.0", "1.1.0"))
+        assertFalse(UpdateChecker.isNewerVersion("", "1.1.0"))
+    }
+
+    @Test
+    fun testUpdateCheckerParseReleaseJson() {
+        val mockJson = """
+            {
+                "tag_name": "v1.2.0",
+                "name": "SpotiSave 1.2.0 - Fluid Liquid Glass & Update Engine",
+                "body": "- Neue Update-Prüfung\n- Playlist-Wiederaufnahme verbessert",
+                "html_url": "https://github.com/Jojoquark/Spotisave/releases/tag/v1.2.0",
+                "assets": [
+                    {
+                        "name": "spotisave-release.apk",
+                        "browser_download_url": "https://github.com/Jojoquark/Spotisave/releases/download/v1.2.0/spotisave-release.apk"
+                    }
+                ]
+            }
+        """.trimIndent()
+
+        val info = UpdateChecker.parseReleaseJson(mockJson, "1.1.0")
+        assertTrue(info.isUpdateAvailable)
+        assertEquals("v1.2.0", info.latestVersion)
+        assertEquals("1.1.0", info.currentVersion)
+        assertEquals("SpotiSave 1.2.0 - Fluid Liquid Glass & Update Engine", info.releaseTitle)
+        assertEquals("https://github.com/Jojoquark/Spotisave/releases/download/v1.2.0/spotisave-release.apk", info.apkDownloadUrl)
     }
 }
 

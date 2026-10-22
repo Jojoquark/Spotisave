@@ -59,12 +59,7 @@ class BookmarkRepository private constructor(context: Context) {
                 for (old in existingAll) {
                     if (old.id == bookmark.id) continue
                     val isSameTrackSingle = old.id == bookmark.trackUri && !old.isPlaylist
-                    val isMisclassifiedAlbumForSameTrack = old.id.startsWith("album:") &&
-                        (old.trackUri == bookmark.trackUri &&
-                            (bookmark.contextTitle.isNotBlank() &&
-                                bookmark.contextTitle != "Spotify" &&
-                                bookmark.contextTitle != "Playlist" &&
-                                old.contextTitle.equals(bookmark.contextTitle, ignoreCase = true)))
+                    val isMisclassifiedAlbumForSameTrack = old.id.startsWith("album:") && old.trackUri == bookmark.trackUri
                     val isLocalPlaylistPlaceholder = old.id.startsWith("spotify:playlist:local_") &&
                         !bookmark.id.startsWith("spotify:playlist:local_") &&
                         (bookmark.contextTitle.isNotBlank() &&

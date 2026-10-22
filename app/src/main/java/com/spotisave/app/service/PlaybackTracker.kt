@@ -387,9 +387,14 @@ object PlaybackTracker {
                     // Kein expliziter neuer Kontext-Titel im Event (Standardfall bei lokalem Trackwechsel in einer Playlist)
                     val resolvedByTrack = resolveKnownPlaylistContextUri(context, effectiveIncomingTrackUri, null)
                     val isWithinActivePlaylistSession = (!lastContextUri.isNullOrBlank() &&
-                        lastContextUri!!.startsWith("spotify:playlist:") &&
+                        (lastContextUri!!.startsWith("spotify:playlist:") ||
+                            lastContextUri!!.startsWith("spotify:collection") ||
+                            lastContextUri!!.contains(":collection")) &&
                         (lastIsPlaying || (prevEventTimeMs > 0L && (now - prevEventTimeMs) in 0..ACTIVE_PLAYLIST_SESSION_TTL_MS))) ||
-                        (!activeResumedContextUri.isNullOrBlank() && activeResumedContextUri!!.startsWith("spotify:playlist:"))
+                        (!activeResumedContextUri.isNullOrBlank() &&
+                            (activeResumedContextUri!!.startsWith("spotify:playlist:") ||
+                                activeResumedContextUri!!.startsWith("spotify:collection") ||
+                                activeResumedContextUri!!.contains(":collection")))
 
                     if (!resolvedByTrack.isNullOrBlank()) {
                         lastContextUri = resolvedByTrack

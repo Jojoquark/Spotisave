@@ -69,12 +69,15 @@ object ResumeHelper {
 
     /**
      * Bestimmt die optimale Ziel-URI für einen nativen Android ACTION_VIEW Intent:
-     * Bevorzugt die konkrete Track-/Episoden-URI gegenüber einer Playlist-URI,
-     * da Spotify bei einer reinen Playlist-URI lediglich die Playlist-Übersicht öffnet
-     * statt den gespeicherten Song abzuspielen. Der Playlist-Kontext bleibt über
-     * PlaybackTracker.onResumeInitiated vollständig erhalten.
+     * Bevorzugt bei Playlists und Lieblingssongs die kanonische Playlist-/Collection-URI,
+     * damit die Spotify-App die Playlist öffnet und den Song nicht isoliert im Album startet.
      */
     fun resolveNativeTargetUri(bookmark: Bookmark): String {
+        val ctx = resolveEffectiveContextUri(bookmark)
+        if ((bookmark.isPlaylist || bookmark.isCollection) && !ctx.isNullOrBlank()) {
+            return ctx
+        }
+
         val hasValidTrackUri = bookmark.trackUri.isNotBlank() &&
             bookmark.trackUri != "spotify:track:active" &&
             bookmark.trackUri != "spotify:track:notification" &&
@@ -84,7 +87,6 @@ object ResumeHelper {
         if (hasValidTrackUri) {
             return bookmark.trackUri
         }
-        val ctx = resolveEffectiveContextUri(bookmark)
         if (!ctx.isNullOrBlank()) {
             return ctx
         }
@@ -155,19 +157,35 @@ object ResumeHelper {
                     }
 
                     // Falls Spotify auf dem Smartphone im Ruhezustand war (404 No Active Device),
-                    // lokalen Player kurz aufwecken und Web API erneut versuchen (nicht bei 403 Free-Account)
+                    // lokalen Player kurz aufwecken, warten bis Spotify Connect bereit ist und erneut versuchen
                     val errMsg = result.exceptionOrNull()?.message.orEmpty()
                     if (result.isFailure && errMsg.contains("404")) {
+                        Log.i(TAG, "Spotify Gerät im Ruhezustand (404) -> Wecke Spotify-App auf...")
+                        val wakeIntent = context.packageManager.getLaunchIntentForPackage("com.spotify.music")?.apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        if (wakeIntent != null) {
+                            try { context.startActivity(wakeIntent) } catch (_: Exception) {}
+                        }
                         try {
                             SpotifyNotificationListenerService.currentMediaController?.transportControls?.play()
                         } catch (_: Exception) {}
-                        delay(650L)
-                        result = withContext(Dispatchers.IO) {
-                            apiClient.resumePlayback(
-                                contextUri = effectiveContextUri,
-                                trackUri = bookmark.trackUri,
-                                positionMs = bookmark.positionMs
-                            )
+
+                        // Polling-Schleife: Warte bis zu 5x alle 450ms auf das Erscheinen des aktiven Geräts
+                        for (retry in 1..5) {
+                            delay(450L)
+                            val devices = withContext(Dispatchers.IO) { apiClient.getDevices() }.getOrNull().orEmpty()
+                            if (devices.isNotEmpty()) {
+                                Log.i(TAG, "Spotify Gerät nach Wakeup gefunden: ${devices.first().name} (Versuch $retry)")
+                                result = withContext(Dispatchers.IO) {
+                                    apiClient.resumePlayback(
+                                        contextUri = effectiveContextUri,
+                                        trackUri = bookmark.trackUri,
+                                        positionMs = bookmark.positionMs
+                                    )
+                                }
+                                if (result.isSuccess) break
+                            }
                         }
                     }
 

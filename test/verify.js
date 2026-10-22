@@ -1559,6 +1559,73 @@ async function runTests() {
         assert(lastPlay.body.position_ms === 64000, 'Interactive VM: Resume payload specifies position_ms 64000');
     }
 
+    // ----------------------------------------------------
+    // TEST 21: In-App Auto-Update Checker & Liquid Glass Dialog
+    // ----------------------------------------------------
+    console.log('\nTest Group 21: In-App Auto-Update Checker & Liquid Glass Dialog');
+
+    const updateCheckerSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/api/UpdateChecker.kt'), 'utf8');
+    const updateDialogSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/UpdateDialog.kt'), 'utf8');
+    const mainVmSrc21 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/viewmodel/MainViewModel.kt'), 'utf8');
+    const statusSheetSrc21 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/StatusBottomSheet.kt'), 'utf8');
+    const mainScreenSrc21 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/MainScreen.kt'), 'utf8');
+    const workflowSrc21 = fs.readFileSync(path.join(rootDir, '.github/workflows/build-apk.yml'), 'utf8');
+
+    // 1. UpdateChecker Engine
+    assert(updateCheckerSrc.includes('fun isNewerVersion('), 'UpdateChecker.kt implements semantic version comparator');
+    assert(updateCheckerSrc.includes('fun parseReleaseJson('), 'UpdateChecker.kt parses GitHub release JSON and APK download assets');
+    assert(updateCheckerSrc.includes('suspend fun checkForUpdates('), 'UpdateChecker.kt queries GitHub Releases API');
+    assert(updateCheckerSrc.includes('fun startDownload('), 'UpdateChecker.kt initiates APK download via Android DownloadManager');
+
+    // 2. Liquid Glass Update Dialog Component
+    assert(updateDialogSrc.includes('testTag("update_dialog")'), 'UpdateDialog.kt defines accessible update_dialog testTag');
+    assert(updateDialogSrc.includes('testTag("btn_download_update")'), 'UpdateDialog.kt defines accessible btn_download_update button');
+    assert(updateDialogSrc.includes('LiquidGlassDefaults.SpecularRimBrush'), 'UpdateDialog.kt adopts Apple Liquid Glass specular rim highlights');
+    assert(updateDialogSrc.includes('MeniscusGleamBrush'), 'UpdateDialog.kt renders Apple meniscus gleam reflections');
+
+    // 3. ViewModel & Reactive State Integration
+    assert(mainVmSrc21.includes('val updateInfo: StateFlow<AppUpdateInfo?>'), 'MainViewModel.kt exposes reactive updateInfo StateFlow');
+    assert(mainVmSrc21.includes('val isCheckingUpdate: StateFlow<Boolean>'), 'MainViewModel.kt exposes reactive isCheckingUpdate StateFlow');
+    assert(mainVmSrc21.includes('fun checkForUpdates('), 'MainViewModel.kt provides checkForUpdates with manual and startup trigger modes');
+    assert(mainVmSrc21.includes('fun downloadUpdate('), 'MainViewModel.kt provides downloadUpdate action');
+    assert(mainVmSrc21.includes('checkForUpdates(manual = false)'), 'MainViewModel.kt triggers automatic update check on application startup');
+
+    // 4. UI Settings Integration
+    assert(statusSheetSrc21.includes('testTag("btn_check_updates")'), 'StatusBottomSheet.kt provides accessible btn_check_updates trigger');
+    assert(statusSheetSrc21.includes('currentVersionName: String'), 'StatusBottomSheet.kt displays current installed app version');
+    assert(mainScreenSrc21.includes('UpdateDialog('), 'MainScreen.kt integrates Liquid Glass UpdateDialog');
+
+    // 5. GitHub Releases Automation Workflow
+    assert(workflowSrc21.includes('softprops/action-gh-release@v2'), 'build-apk.yml configures automated GitHub Release creation');
+    assert(workflowSrc21.includes('permissions:\n      contents: write'), 'build-apk.yml configures repository contents: write permission for releases');
+
+    // ----------------------------------------------------
+    // TEST 22: Native Playlist-Target-URI & Connect Device Wake-Up
+    // ----------------------------------------------------
+    console.log('\nTest Group 22: Native Playlist-Target-URI & Connect Device Wake-Up');
+
+    const resumeHelperSrc22 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/util/ResumeHelper.kt'), 'utf8');
+    const repoSrc22 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/repository/BookmarkRepository.kt'), 'utf8');
+    const trackerSrc22 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/service/PlaybackTracker.kt'), 'utf8');
+
+    // 1. Native Target URI: Playlists launch Playlist URI instead of Track Album
+    assert(resumeHelperSrc22.includes('if ((bookmark.isPlaylist || bookmark.isCollection) && !ctx.isNullOrBlank())') &&
+           resumeHelperSrc22.includes('return ctx'),
+           'ResumeHelper.kt prioritizes playlist/collection URI in resolveNativeTargetUri so native Spotify intent launches playlist, not album');
+
+    // 2. Intelligent Device Wake-Up & Polling Loop
+    assert(resumeHelperSrc22.includes('for (retry in 1..5)') && resumeHelperSrc22.includes('apiClient.getDevices()'),
+           'ResumeHelper.kt implements intelligent 5-step polling loop to wait for Spotify Connect device after wake-up intent');
+
+    // 3. Purging Misclassified Album Bookmarks
+    assert(repoSrc22.includes('old.id.startsWith("album:") && old.trackUri == bookmark.trackUri'),
+           'BookmarkRepository.kt cleans up any misclassified album bookmarks when saving a playlist bookmark for the same track');
+
+    // 4. Sticky Collection Sessions across Track Transitions
+    assert(trackerSrc22.includes('lastContextUri!!.startsWith("spotify:collection")') &&
+           trackerSrc22.includes('lastContextUri!!.contains(":collection")'),
+           'PlaybackTracker.kt preserves active session context across track boundaries for Lieblingssongs (Collection)');
+
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);
     console.log('========================================\n');

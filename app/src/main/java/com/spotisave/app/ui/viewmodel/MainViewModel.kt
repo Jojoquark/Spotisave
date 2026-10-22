@@ -362,14 +362,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         var recoveredPlUri: String? = null
                         var recoveredPlTitle: String? = null
 
-                        if (nowPlayingResult?.track != null && PlaybackTracker.isSameTrack(nowPlayingResult.track.uri, nowPlayingResult.track.title, bm.trackUri, bm.trackTitle)) {
+                        if (nowPlayingResult?.track != null && PlaybackTracker.isSameTrack(nowPlayingResult.track.uri, nowPlayingResult.track.name, bm.trackUri, bm.trackTitle)) {
                             if (nowPlayingResult.contextUri?.startsWith("spotify:playlist:") == true && !nowPlayingResult.contextUri.startsWith("spotify:playlist:local_")) {
                                 recoveredPlUri = nowPlayingResult.contextUri
                             }
                         }
 
                         if (recoveredPlUri == null) {
-                            val recentResult = apiClient.getRecentlyPlayed(50).getOrNull().orEmpty()
+                            val recentResult = apiClient.getRecentlyPlayedTracks(50).getOrNull().orEmpty()
                             val matchRecent = recentResult.firstOrNull {
                                 it.trackUri == bm.trackUri &&
                                     it.contextUri?.startsWith("spotify:playlist:") == true &&

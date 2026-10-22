@@ -889,7 +889,7 @@ object PlaybackTracker {
                         if (resumed != null && resumed.trackUri.isNotBlank() &&
                             resumed.trackUri != "spotify:track:active" &&
                             resumed.trackUri != "spotify:track:notification" &&
-                            !isSameTrack(apiTrack.uri, apiTrack.title, resumed.trackUri, resumed.trackTitle)
+                            !isSameTrack(apiTrack.uri, apiTrack.name, resumed.trackUri, resumed.trackTitle)
                         ) {
                             return@launch
                         }
@@ -899,7 +899,7 @@ object PlaybackTracker {
                     if (lastTrackUri.isNotBlank() &&
                         lastTrackUri != "spotify:track:active" &&
                         lastTrackUri != "spotify:track:notification" &&
-                        !isSameTrack(apiTrack.uri, apiTrack.title, lastTrackUri, lastTrackTitle)
+                        !isSameTrack(apiTrack.uri, apiTrack.name, lastTrackUri, lastTrackTitle)
                     ) {
                         return@launch
                     }

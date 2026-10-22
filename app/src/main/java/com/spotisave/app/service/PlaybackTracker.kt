@@ -973,9 +973,10 @@ object PlaybackTracker {
 
                 // 4. Kein expliziter Kontext (context == null) -> Mehrstufige Prüfung:
                 else -> {
-                    val queueTitleMatch = lastNotificationContextTitle?.trim()?.takeIf {
-                        it.equals("Lieblingssongs", ignoreCase = true) || it.equals("Liked Songs", ignoreCase = true)
-                    }
+                    val notifTitle = SpotifyNotificationListenerService.lastNotificationContextTitle
+                    val queueTitleMatch = if (!notifTitle.isNullOrBlank() && (notifTitle.equals("Lieblingssongs", ignoreCase = true) || notifTitle.equals("Liked Songs", ignoreCase = true))) {
+                        notifTitle
+                    } else null
 
                     val isInLibrary = if (queueTitleMatch != null) {
                         true

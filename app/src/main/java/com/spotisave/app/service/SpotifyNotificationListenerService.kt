@@ -41,7 +41,8 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             private set
 
         @Volatile
-        private var lastNotificationContextTitle: String? = null
+        var lastNotificationContextTitle: String? = null
+            private set
 
         @Volatile
         private var lastNotificationContextType: String? = null

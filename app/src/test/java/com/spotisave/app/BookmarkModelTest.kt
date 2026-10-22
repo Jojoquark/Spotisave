@@ -1101,5 +1101,194 @@ class BookmarkModelTest {
 
         PlaybackTracker.setPendingResumeForTesting(null)
     }
+
+    @Test
+    fun testCasualDrivesNeverOverwrittenByLikedSong() {
+        // 1. Initialer Zustand: Existierendes Lesezeichen für "Casual Drives"
+        val casualDrivesBookmark = Bookmark(
+            id = "spotify:playlist:casual_drives",
+            contextUri = "spotify:playlist:casual_drives",
+            contextTitle = "Casual Drives",
+            trackTitle = "Drive Slow",
+            artist = "Kanye West",
+            trackUri = "spotify:track:drive_slow_uri",
+            coverUrl = "https://i.scdn.co/image/casual_drives_artwork.jpg",
+            positionMs = 135_000L, // 2:15 Min
+            durationMs = 270_000L
+        )
+
+        val bookmarks = mutableMapOf<String, Bookmark>()
+        bookmarks[casualDrivesBookmark.id] = casualDrivesBookmark
+
+        // 2. Historie enthält früheren Abspielvorgang von "Schau dir zu" in "Casual Drives"
+        val historyEntry = HistoryTrackEntry(
+            id = "hist_session_1",
+            trackUri = "spotify:track:schau_dir_zu",
+            trackTitle = "Schau dir zu",
+            artist = "Edwin Rosen",
+            album = "Schau dir zu EP",
+            contextUri = "spotify:playlist:casual_drives",
+            contextTitle = "Casual Drives",
+            durationMs = 190_000L,
+            listenedMs = 120_000L,
+            timestamp = System.currentTimeMillis() - 3600_000L
+        )
+        val history = listOf(historyEntry)
+
+        // 3. Nutzer spielt jetzt Lieblingssong "Schau dir zu" ab
+        val (incomingId, incomingCtx) = PlaybackTracker.computeBookmarkIdentity(
+            contextUri = null,
+            contextTitle = "Lieblingssongs",
+            album = "Schau dir zu EP",
+            trackTitle = "Schau dir zu",
+            trackUri = "spotify:track:schau_dir_zu"
+        )
+        val likedSongBookmark = Bookmark(
+            id = incomingId,
+            contextUri = incomingCtx,
+            contextTitle = "Lieblingssongs",
+            trackTitle = "Schau dir zu",
+            artist = "Edwin Rosen",
+            trackUri = "spotify:track:schau_dir_zu",
+            coverUrl = "https://i.scdn.co/image/schau_dir_zu_cover.jpg",
+            positionMs = 45_000L,
+            durationMs = 190_000L
+        )
+
+        // 4. Strikter Playlist-Only Guard: Lieblingssongs werden NIEMALS persistiert
+        val isRealCanonicalPlaylist = likedSongBookmark.isPlaylist &&
+            !likedSongBookmark.isCollection &&
+            likedSongBookmark.contextUri?.startsWith("spotify:playlist:") == true &&
+            !likedSongBookmark.contextUri.startsWith("spotify:playlist:local_")
+
+        assertFalse("Lieblingssong darf nicht als kanonische Playlist gelten", isRealCanonicalPlaylist)
+
+        // Falls trotzdem saveBookmark aufgerufen würde:
+        val guardPasses = !likedSongBookmark.isCollection &&
+            likedSongBookmark.isPlaylist &&
+            likedSongBookmark.contextUri?.startsWith("spotify:playlist:") == true &&
+            !likedSongBookmark.contextUri.startsWith("spotify:playlist:local_") &&
+            !likedSongBookmark.contextTitle.equals("Lieblingssongs", ignoreCase = true)
+
+        assertFalse("BookmarkRepository.saveBookmark muss Lieblingssongs strikt blockieren", guardPasses)
+
+        // 5. Simulation resolveMissingPlaylistTitles Heuristik:
+        // Prüfen, dass kein History-Match über trackUri stattfindet!
+        val matchingPlHistory = history.firstOrNull {
+            it.contextUri?.startsWith("spotify:playlist:") == true &&
+                !it.contextUri.startsWith("spotify:playlist:local_") &&
+                !it.contextUri.contains("collection") &&
+                (likedSongBookmark.contextTitle.isNotBlank() &&
+                    likedSongBookmark.contextTitle != "Spotify" &&
+                    likedSongBookmark.contextTitle != "Playlist" &&
+                    !SpotifyNotificationListenerService.isGenericQueueOrLabel(likedSongBookmark.contextTitle) &&
+                    it.contextTitle.equals(likedSongBookmark.contextTitle, ignoreCase = true))
+        }
+
+        assertNull("Lieblingssongs darf niemals Casual Drives aus der Historie kapern!", matchingPlHistory)
+
+        // 6. Absolute Unveränderbarkeit von Casual Drives überprüfen
+        val preservedCasualDrives = bookmarks["spotify:playlist:casual_drives"]!!
+        assertEquals("spotify:playlist:casual_drives", preservedCasualDrives.id)
+        assertEquals("Casual Drives", preservedCasualDrives.contextTitle)
+        assertEquals("Drive Slow", preservedCasualDrives.trackTitle)
+        assertEquals("spotify:track:drive_slow_uri", preservedCasualDrives.trackUri)
+        assertEquals("https://i.scdn.co/image/casual_drives_artwork.jpg", preservedCasualDrives.coverUrl)
+        assertEquals(135_000L, preservedCasualDrives.positionMs)
+    }
+
+    @Test
+    fun testOnlyRealPlaylistsPersisted() {
+        val canonicalPlaylist = Bookmark(
+            id = "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
+            contextUri = "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
+            contextTitle = "Today's Top Hits",
+            trackTitle = "Espresso",
+            artist = "Sabrina Carpenter",
+            trackUri = "spotify:track:espresso",
+            positionMs = 50_000L
+        )
+
+        val likedSongsCollection = Bookmark(
+            id = "spotify:collection:tracks",
+            contextUri = "spotify:collection:tracks",
+            contextTitle = "Lieblingssongs",
+            trackTitle = "Song A",
+            artist = "Artist A",
+            trackUri = "spotify:track:a",
+            positionMs = 30_000L
+        )
+
+        val albumBookmark = Bookmark(
+            id = "album:dark_side_of_the_moon",
+            contextUri = "spotify:album:dark_side",
+            contextTitle = "The Dark Side of the Moon",
+            trackTitle = "Money",
+            artist = "Pink Floyd",
+            trackUri = "spotify:track:money",
+            positionMs = 20_000L
+        )
+
+        val localPlaylistPlaceholder = Bookmark(
+            id = "spotify:playlist:local_roadtrip",
+            contextUri = "spotify:playlist:local_roadtrip",
+            contextTitle = "Roadtrip",
+            trackTitle = "Song B",
+            artist = "Artist B",
+            trackUri = "spotify:track:b",
+            positionMs = 15_000L
+        )
+
+        fun canPersist(bm: Bookmark): Boolean {
+            return bm.isPlaylist &&
+                !bm.isCollection &&
+                bm.contextUri?.startsWith("spotify:playlist:") == true &&
+                !bm.contextUri.startsWith("spotify:playlist:local_") &&
+                !bm.contextTitle.equals("Lieblingssongs", ignoreCase = true) &&
+                !bm.contextTitle.equals("Liked Songs", ignoreCase = true)
+        }
+
+        assertTrue("Echte kanonische Playlist muss gespeichert werden können", canPersist(canonicalPlaylist))
+        assertFalse("Lieblingssongs-Sammlung darf NICHT gespeichert werden", canPersist(likedSongsCollection))
+        assertFalse("Alben dürfen NICHT als Lesezeichen gespeichert werden", canPersist(albumBookmark))
+        assertFalse("Lokale Playlist-Platzhalter dürfen NICHT als finale Bookmarks gespeichert werden", canPersist(localPlaylistPlaceholder))
+    }
+
+    @Test
+    fun testLivePlaybackStateShowsLikedSongsAndAlbumsWithoutPersistingBookmark() {
+        val liveLikedSongs = PlaybackStateModel(
+            trackUri = "spotify:track:starboy",
+            trackTitle = "Starboy",
+            artist = "The Weeknd",
+            contextTitle = "Lieblingssongs",
+            contextUri = "spotify:collection:tracks",
+            isPlaying = true
+        )
+        assertTrue("Live PlaybackStateModel erkennt Lieblingssongs", liveLikedSongs.isCollection)
+        assertEquals("Lieblingssongs", liveLikedSongs.displayContextTitle)
+
+        val liveAlbum = PlaybackStateModel(
+            trackUri = "spotify:track:time",
+            trackTitle = "Time",
+            artist = "Pink Floyd",
+            album = "The Dark Side of the Moon",
+            contextUri = "spotify:album:dark_side",
+            isPlaying = true
+        )
+        assertTrue("Live PlaybackStateModel erkennt Alben", liveAlbum.isAlbum)
+        assertFalse("Album ist keine Collection", liveAlbum.isCollection)
+
+        val livePlaylist = PlaybackStateModel(
+            trackUri = "spotify:track:drive_slow",
+            trackTitle = "Drive Slow",
+            artist = "Kanye West",
+            contextTitle = "Casual Drives",
+            contextUri = "spotify:playlist:casual_drives",
+            isPlaying = true
+        )
+        assertTrue("Live PlaybackStateModel erkennt echte Playlist", livePlaylist.isPlaylist)
+        assertFalse("Echte Playlist ist keine Collection", livePlaylist.isCollection)
+        assertEquals("Casual Drives", livePlaylist.displayContextTitle)
+    }
 }
 

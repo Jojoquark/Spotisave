@@ -318,7 +318,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         bm.contextTitle.equals("Queue", ignoreCase = true)
 
                     if (isGenericQueueBookmark) {
-                        // Versuche echten Playlist-Kontext über NowPlaying oder RecentlyPlayed zu retten
+                        // Versuche echten Playlist-Kontext über aktives NowPlaying zu retten
                         val nowPlayingResult = apiClient.getNowPlaying().getOrNull()
                         var recoveredPlUri: String? = null
                         var recoveredPlTitle: String? = null
@@ -326,22 +326,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         if (nowPlayingResult?.track != null && PlaybackTracker.isSameTrack(nowPlayingResult.track.uri, nowPlayingResult.track.name, bm.trackUri, bm.trackTitle)) {
                             if (nowPlayingResult.contextUri?.startsWith("spotify:playlist:") == true && !nowPlayingResult.contextUri.startsWith("spotify:playlist:local_")) {
                                 recoveredPlUri = nowPlayingResult.contextUri
-                            }
-                        }
-
-                        if (recoveredPlUri == null) {
-                            val recentResult = apiClient.getRecentlyPlayedTracks(50).getOrNull().orEmpty()
-                            val isPlaceholderBm = bm.trackUri.endsWith(":active") || bm.trackUri.endsWith(":notification") || bm.trackUri.startsWith("spotify:track:local_")
-                            val matchRecent = if (!isPlaceholderBm) {
-                                recentResult.firstOrNull {
-                                    it.trackUri == bm.trackUri &&
-                                        it.contextUri?.startsWith("spotify:playlist:") == true &&
-                                        !it.contextUri.startsWith("spotify:playlist:local_")
-                                }
-                            } else null
-                            if (matchRecent != null) {
-                                recoveredPlUri = matchRecent.contextUri
-                                recoveredPlTitle = matchRecent.contextTitle
                             }
                         }
 
@@ -371,9 +355,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
 
-                    // 1. Falls ein Lesezeichen fälschlicherweise als "album:..." oder "spotify:playlist:local_..."
+                    // Bereinige versehentliche Alben oder Sammlungs-Lesezeichen
+                    if (bm.id.startsWith("album:") || bm.isCollection) {
+                        repository.deleteBookmark(bm.id)
+                        continue
+                    }
+
+                    // 1. Falls ein Lesezeichen fälschlicherweise als "spotify:playlist:local_..."
                     // gespeichert wurde, aber in den Playlists des Nutzers oder im Verlauf vorkommt:
-                    if (bm.id.startsWith("album:") || bm.id.startsWith("spotify:playlist:local_")) {
+                    if (bm.id.startsWith("spotify:playlist:local_")) {
                         val matchingUserPl = userPlaylists.firstOrNull {
                             bm.contextTitle.isNotBlank() &&
                                 bm.contextTitle != "Spotify" &&
@@ -399,16 +389,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             continue
                         }
 
-                        val isPlaceholderBm = bm.trackUri.endsWith(":active") || bm.trackUri.endsWith(":notification") || bm.trackUri.startsWith("spotify:track:local_")
                         val matchingPlHistory = history.firstOrNull {
                             it.contextUri?.startsWith("spotify:playlist:") == true &&
                                 !it.contextUri.startsWith("spotify:playlist:local_") &&
-                                ((!isPlaceholderBm && it.trackUri == bm.trackUri) ||
-                                    (bm.contextTitle.isNotBlank() &&
-                                        bm.contextTitle != "Spotify" &&
-                                        bm.contextTitle != "Playlist" &&
-                                        !com.spotisave.app.service.SpotifyNotificationListenerService.isGenericQueueOrLabel(bm.contextTitle) &&
-                                        it.contextTitle.equals(bm.contextTitle, ignoreCase = true)))
+                                !it.contextUri.contains("collection") &&
+                                (bm.contextTitle.isNotBlank() &&
+                                    bm.contextTitle != "Spotify" &&
+                                    bm.contextTitle != "Playlist" &&
+                                    !com.spotisave.app.service.SpotifyNotificationListenerService.isGenericQueueOrLabel(bm.contextTitle) &&
+                                    it.contextTitle.equals(bm.contextTitle, ignoreCase = true))
                         }
                         if (matchingPlHistory?.contextUri != null) {
                             val realPlUri = matchingPlHistory.contextUri

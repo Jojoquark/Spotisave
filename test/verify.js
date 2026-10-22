@@ -1507,11 +1507,11 @@ async function runTests() {
     assert(bookmarkCardSrc20.includes('bookmark.isCollection') && bookmarkCardSrc20.includes('Icons.Default.Favorite'), 'BookmarkCard.kt renders dedicated Favorite heart icon and Lieblingssongs badge');
     assert(heroCardSrc20.includes('isCollection') && heroCardSrc20.includes('LIEBLINGSSONGS'), 'HeroCard.kt renders dedicated LIEBLINGSSONGS badge and Favorite icon');
 
-    // 4. Web PWA Collection Bookmark & Resume Verification
-    assert(indexHtml.includes('isCollectionContext') && indexHtml.includes('collection_tracks'), 'index.html supports saving Lieblingssongs collection bookmarks');
+    // 4. Web PWA Collection Handling & Strict Playlist Protection
+    assert(indexHtml.includes('isCollectionContext'), 'index.html identifies Lieblingssongs collection context');
     assert(indexHtml.includes('isCollectionBookmark') && indexHtml.includes('spotify:collection:tracks'), 'index.html resumes Lieblingssongs within collection context rather than album');
 
-    // 5. Interactive VM Test: Saving and Resuming from Lieblingssongs (Collection)
+    // 5. Interactive VM Test: Lieblingssongs Updates Live UI but NEVER Creates Persistent Bookmark
     {
         let playRequests = [];
         const { sandbox } = setupSandbox(async (url, opts) => {
@@ -1542,21 +1542,38 @@ async function runTests() {
         });
         sandbox.localStorage.setItem('sp_access_token', 'mock_token');
 
-        // Check Now Playing to trigger bookmark save for collection
+        // Pre-existing Casual Drives playlist bookmark in storage
+        const initialBookmarks = {
+            casual_drives: {
+                playlist_id: 'casual_drives',
+                playlist_name: 'Casual Drives',
+                track_name: 'Drive Slow',
+                track_uri: 'spotify:track:drive123',
+                context_uri: 'spotify:playlist:casual_drives',
+                context_type: 'playlist',
+                progress_ms: 135000,
+                updated_at: Date.now() - 60000
+            }
+        };
+        sandbox.localStorage.setItem('sp_bookmarks', JSON.stringify(initialBookmarks));
+
+        // Check Now Playing to trigger playback check for collection
         await sandbox.checkNowPlaying(false);
 
         const bms = JSON.parse(sandbox.localStorage.getItem('sp_bookmarks') || '{}');
-        assert(bms['collection_tracks'], 'Interactive VM: Lieblingssongs bookmark is saved with key collection_tracks');
-        assert(bms['collection_tracks'].playlist_name === 'Lieblingssongs', 'Interactive VM: Bookmark name is Lieblingssongs');
-        assert(bms['collection_tracks'].progress_ms === 64000, 'Interactive VM: Bookmark progress is 64000ms');
+        assert(!bms['collection_tracks'], 'Interactive VM: Lieblingssongs is strictly ignored and NOT persisted as a bookmark');
+        assert(bms['casual_drives'] !== undefined, 'Interactive VM: Existing playlist bookmark (Casual Drives) remains in bookmarks');
+        assert(bms['casual_drives'].playlist_name === 'Casual Drives', 'Interactive VM: Casual Drives name is preserved (never overwritten)');
+        assert(bms['casual_drives'].track_name === 'Drive Slow', 'Interactive VM: Casual Drives track is preserved (never overwritten by Starboy)');
+        assert(bms['casual_drives'].progress_ms === 135000, 'Interactive VM: Casual Drives progress is preserved at 135000ms');
 
-        // Resume collection bookmark
-        await sandbox.resumeBookmark('collection_tracks');
-        assert(playRequests.length > 0, 'Interactive VM: Resume call was dispatched');
+        // Resume playlist bookmark
+        await sandbox.resumeBookmark('casual_drives');
+        assert(playRequests.length > 0, 'Interactive VM: Resume call was dispatched for playlist');
         const lastPlay = playRequests[playRequests.length - 1];
-        assert(lastPlay.body.context_uri && lastPlay.body.context_uri.includes(':collection'), 'Interactive VM: Resume payload contains collection context_uri (not plain track array)');
-        assert(lastPlay.body.offset && lastPlay.body.offset.uri === 'spotify:track:starboy123', 'Interactive VM: Resume payload specifies track offset within the collection');
-        assert(lastPlay.body.position_ms === 64000, 'Interactive VM: Resume payload specifies position_ms 64000');
+        assert(lastPlay.body.context_uri === 'spotify:playlist:casual_drives', 'Interactive VM: Resume payload contains playlist context_uri');
+        assert(lastPlay.body.offset && lastPlay.body.offset.uri === 'spotify:track:drive123', 'Interactive VM: Resume payload specifies track offset within playlist');
+        assert(lastPlay.body.position_ms === 135000, 'Interactive VM: Resume payload specifies position_ms 135000');
     }
 
     // ----------------------------------------------------
@@ -1730,9 +1747,9 @@ async function runTests() {
     const simulatedBookmarks = {};
 
     function simulateSave(contextUri, contextTitle, trackUri, positionMs) {
-        const id = (contextUri && (contextUri.startsWith('spotify:playlist:') || contextUri.includes(':collection')))
-            ? contextUri
-            : (contextTitle === 'Lieblingssongs' ? 'spotify:collection:tracks' : 'album:default');
+        const isRealPlaylist = contextUri && contextUri.startsWith('spotify:playlist:') && !contextUri.includes(':collection') && !contextUri.startsWith('spotify:playlist:local_');
+        if (!isRealPlaylist) return; // Strict Playlist-Only architecture ignores non-playlists
+        const id = contextUri;
         simulatedBookmarks[id] = {
             id,
             contextUri,
@@ -1749,12 +1766,11 @@ async function runTests() {
 
     // Step B: User switches to Lieblingssongs (Liked Songs, where context may be null or collection)
     const likedSongsTrackUri = 'spotify:track:fav999';
-    // With our new architecture: context is null but isTrackInLibrary is true -> saved to spotify:collection:tracks
+    // With our strict playlist architecture: Lieblingssongs is NOT persisted as a bookmark
     simulateSave('spotify:collection:tracks', 'Lieblingssongs', likedSongsTrackUri, 45000);
 
     // Verify ZERO CONTEXT BLEED:
-    assert(simulatedBookmarks['spotify:collection:tracks'] !== undefined, 'Simulation: Lieblingssongs saved under discrete collection ID');
-    assert(simulatedBookmarks['spotify:collection:tracks'].trackUri === likedSongsTrackUri, 'Simulation: Lieblingssongs track is fav999');
+    assert(simulatedBookmarks['spotify:collection:tracks'] === undefined, 'Simulation: Lieblingssongs is NOT persisted in bookmarks');
     assert(simulatedBookmarks['spotify:playlist:alpha123'].trackUri === 'spotify:track:rock1', 'Simulation: Playlist A track remained rock1 (NO context bleed!)');
     assert(simulatedBookmarks['spotify:playlist:alpha123'].positionMs === 95000, 'Simulation: Playlist A progress preserved at 95000ms (NOT overwritten!)');
 
@@ -1763,10 +1779,9 @@ async function runTests() {
     assert(simulatedBookmarks['spotify:playlist:beta456'] !== undefined, 'Simulation: Playlist B saved under discrete ID');
     assert(simulatedBookmarks['spotify:playlist:beta456'].positionMs === 120000, 'Simulation: Playlist B saved at 120000ms');
 
-    // Verify all 3 bookmarks coexist independently without collision
-    assert(Object.keys(simulatedBookmarks).length === 3, 'Simulation: Exactly 3 independent bookmarks coexist (Playlist A, Playlist B, Lieblingssongs)');
+    // Verify only real playlists coexist independently without collection pollution
+    assert(Object.keys(simulatedBookmarks).length === 2, 'Simulation: Exactly 2 persistent playlist bookmarks coexist (Playlist A, Playlist B)');
     assert(simulatedBookmarks['spotify:playlist:alpha123'].positionMs === 95000, 'Simulation: Playlist A still intact at 95000ms');
-    assert(simulatedBookmarks['spotify:collection:tracks'].positionMs === 45000, 'Simulation: Lieblingssongs still intact at 45000ms');
     assert(simulatedBookmarks['spotify:playlist:beta456'].positionMs === 120000, 'Simulation: Playlist B still intact at 120000ms');
 
     // ==========================================
@@ -1939,6 +1954,102 @@ async function runTests() {
            'Simulation: Casual Drives trackTitle still Drive Slow after rejected 0:00 overwrite');
     assert(database['spotify:playlist:casual_drives'].positionMs === 136000,
            'Simulation: Casual Drives position preserved at 136000ms');
+
+    // ==========================================
+    // Test Group 27: Strict Playlist-Only Architecture & Anti-Overwrite Protection
+    // ==========================================
+    console.log('\nTest Group 27: Strict Playlist-Only Architecture & Anti-Overwrite Protection');
+
+    const trackerSrc27 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/service/PlaybackTracker.kt'), 'utf8');
+    const mainVmSrc27 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/viewmodel/MainViewModel.kt'), 'utf8');
+    const repoSrc27 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/repository/BookmarkRepository.kt'), 'utf8');
+    const indexHtmlSrc27 = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+
+    // 1. PlaybackTracker.kt strict playlist-only guards
+    assert(trackerSrc27.includes('val isRealCanonicalPlaylist = isPlaylist &&') &&
+           trackerSrc27.includes('!isCollection &&') &&
+           trackerSrc27.includes('effectiveContextUri?.startsWith("spotify:playlist:") == true &&') &&
+           trackerSrc27.includes('!effectiveContextUri.startsWith("spotify:playlist:local_")'),
+           'PlaybackTracker.kt flushBookmark strictly guards bookmark saving to real canonical playlists only');
+    assert(trackerSrc27.includes('updateRepositoryState(context, source)') &&
+           trackerSrc27.includes('flushBookmark: Überspringe Bookmark-Speicherung für Nicht-Playlist'),
+           'PlaybackTracker.kt keeps live playback updated for HeroCard while skipping persistent bookmarks for non-playlists');
+    assert(!trackerSrc27.includes('val isPlaceholderTrack = trackUri.isNullOrBlank()') &&
+           trackerSrc27.includes('histByTitle?.contextUri != null'),
+           'PlaybackTracker.kt resolveKnownPlaylistContextUri completely removed dangerous track-only matching');
+
+    // 2. MainViewModel.kt anti-hijack resolution
+    assert(!mainVmSrc27.includes('(!isPlaceholderBm && it.trackUri == bm.trackUri)'),
+           'MainViewModel.kt resolveMissingPlaylistTitles completely deleted dangerous it.trackUri == bm.trackUri history match');
+    assert(mainVmSrc27.includes('if (bm.id.startsWith("album:") || bm.isCollection) {') &&
+           mainVmSrc27.includes('repository.deleteBookmark(bm.id)'),
+           'MainViewModel.kt automatically purges any stray album or collection bookmarks during playlist title resolution');
+
+    // 3. BookmarkRepository.kt strict persistence guards & purge
+    assert(repoSrc27.includes('bm.isCollection ||') &&
+           repoSrc27.includes('!bm.isPlaylist ||') &&
+           repoSrc27.includes('bm.id.startsWith("album:") ||') &&
+           repoSrc27.includes('bm.id == "spotify:collection:tracks"'),
+           'BookmarkRepository.kt reloadBookmarks purges collection and album bookmarks from SQLite');
+    assert(repoSrc27.includes('if (bookmark.isCollection ||') &&
+           repoSrc27.includes('!bookmark.isPlaylist ||') &&
+           repoSrc27.includes('bookmark.contextUri?.startsWith("spotify:playlist:") != true ||') &&
+           repoSrc27.includes('bookmark.contextUri.startsWith("spotify:playlist:local_")'),
+           'BookmarkRepository.kt saveBookmark strictly guards against non-playlist and collection entries');
+
+    // 4. index.html strict playlist-only persistence
+    assert(indexHtmlSrc27.includes('const isRealPlaylist = Boolean(') &&
+           indexHtmlSrc27.includes('effectiveContext.type === \'playlist\' &&') &&
+           indexHtmlSrc27.includes('!isCollectionContext &&') &&
+           indexHtmlSrc27.includes('effectiveContext.uri.startsWith(\'spotify:playlist:\')'),
+           'index.html checkNowPlaying only saves genuine Spotify playlists as bookmarks');
+    assert(indexHtmlSrc27.includes('rContext.type === \'playlist\' && rContext.uri && rContext.uri.startsWith(\'spotify:playlist:\') && !rContext.uri.includes(\':collection\')'),
+           'index.html recentPlayed only saves genuine Spotify playlists as bookmarks');
+
+    // 5. Deep Simulation of the exact user bug: Casual Drives cannot be hijacked by Edwin Rosen - Schau dir zu (Liked Song)
+    {
+        const userSavedBookmarks = {
+            'spotify:playlist:casual_drives': {
+                id: 'spotify:playlist:casual_drives',
+                contextUri: 'spotify:playlist:casual_drives',
+                contextTitle: 'Casual Drives',
+                trackTitle: 'Drive Slow',
+                trackUri: 'spotify:track:drive_slow',
+                coverUrl: 'https://i.scdn.co/image/casual_drives_cover.jpg',
+                positionMs: 135000
+            }
+        };
+
+        // User plays liked song "Schau dir zu" (was previously also played in history)
+        const incomingLikedSong = {
+            trackUri: 'spotify:track:schau_dir_zu',
+            trackTitle: 'Schau dir zu',
+            artist: 'Edwin Rosen',
+            contextUri: 'spotify:collection:tracks',
+            contextTitle: 'Lieblingssongs',
+            isCollection: true,
+            isPlaylist: false
+        };
+
+        // Attempting to save liked song bookmark in repository
+        const canSave = incomingLikedSong.isPlaylist &&
+            !incomingLikedSong.isCollection &&
+            incomingLikedSong.contextUri.startsWith('spotify:playlist:') &&
+            !incomingLikedSong.contextUri.startsWith('spotify:playlist:local_');
+
+        assert(!canSave, 'Simulation: Liked Song "Schau dir zu" is rejected by saveBookmark');
+        if (canSave) {
+            userSavedBookmarks[incomingLikedSong.contextUri] = incomingLikedSong;
+        }
+
+        // Verify Casual Drives is 100% UNTOUCHED
+        const casualDrives = userSavedBookmarks['spotify:playlist:casual_drives'];
+        assert(casualDrives !== undefined, 'Simulation: Casual Drives playlist bookmark exists');
+        assert(casualDrives.trackTitle === 'Drive Slow', 'Simulation: Casual Drives trackTitle is still "Drive Slow" (NOT "Schau dir zu"!)');
+        assert(casualDrives.contextTitle === 'Casual Drives', 'Simulation: Casual Drives title is still "Casual Drives" (NOT "Lieblingssongs"!)');
+        assert(casualDrives.coverUrl === 'https://i.scdn.co/image/casual_drives_cover.jpg', 'Simulation: Casual Drives coverUrl is preserved');
+        assert(casualDrives.positionMs === 135000, 'Simulation: Casual Drives position is preserved at 135000ms');
+    }
 
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);

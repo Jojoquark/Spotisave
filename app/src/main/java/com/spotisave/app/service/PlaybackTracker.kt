@@ -306,6 +306,7 @@ object PlaybackTracker {
             if (cleanTitle != null) {
                 val bmByTitle = savedBookmarks.firstOrNull {
                     it.isPlaylist &&
+                        !it.isCollection &&
                         !it.id.contains("warteschlange", ignoreCase = true) &&
                         !it.contextTitle.equals("Warteschlange", ignoreCase = true) &&
                         it.contextTitle.equals(cleanTitle, ignoreCase = true)
@@ -314,36 +315,13 @@ object PlaybackTracker {
 
                 val histByTitle = historyEntries.firstOrNull {
                     it.isPlaylist &&
+                        !it.isCollection &&
                         !it.contextUri.orEmpty().contains("warteschlange", ignoreCase = true) &&
+                        !it.contextUri.orEmpty().contains("collection", ignoreCase = true) &&
                         !it.contextTitle.equals("Warteschlange", ignoreCase = true) &&
                         it.contextTitle.equals(cleanTitle, ignoreCase = true)
                 }
                 if (histByTitle?.contextUri != null) return histByTitle.contextUri
-            }
-
-            val isPlaceholderTrack = trackUri.isNullOrBlank() ||
-                trackUri == "spotify:track:active" ||
-                trackUri == "spotify:track:notification" ||
-                trackUri.startsWith("spotify:track:local_")
-
-            if (!isPlaceholderTrack) {
-                val bmByTrack = savedBookmarks.firstOrNull {
-                    it.isPlaylist &&
-                        it.trackUri == trackUri &&
-                        !it.id.contains("warteschlange", ignoreCase = true) &&
-                        !it.contextTitle.equals("Warteschlange", ignoreCase = true) &&
-                        (cleanTitle == null || it.contextTitle.equals(cleanTitle, ignoreCase = true))
-                }
-                if (bmByTrack != null) return bmByTrack.contextUri ?: bmByTrack.id
-
-                val histByTrack = historyEntries.firstOrNull {
-                    it.isPlaylist &&
-                        it.trackUri == trackUri &&
-                        !it.contextUri.orEmpty().contains("warteschlange", ignoreCase = true) &&
-                        !it.contextTitle.equals("Warteschlange", ignoreCase = true) &&
-                        (cleanTitle == null || it.contextTitle.equals(cleanTitle, ignoreCase = true))
-                }
-                if (histByTrack?.contextUri != null) return histByTrack.contextUri
             }
             null
         } catch (_: Exception) {
@@ -783,6 +761,9 @@ object PlaybackTracker {
     fun flushBookmark(context: Context, source: String) {
         if (lastTrackTitle.isBlank() || lastTrackUri.isBlank()) return
 
+        // Live-HeroCard stets mit dem aktuellen Wiedergabestatus synchronisieren (egal ob Playlist, Lieblingssong oder Album)
+        updateRepositoryState(context, source)
+
         if (isWithinResumeGrace()) {
             val resumed = pendingResumeBookmark
             if (resumed != null && !matchesResumedTrack(lastTrackUri, lastTrackTitle)) {
@@ -824,12 +805,23 @@ object PlaybackTracker {
             lastContextUri = effectiveContextUri
         }
 
-        val isPlaylist = (!effectiveContextUri.isNullOrBlank() && effectiveContextUri.startsWith("spotify:playlist:")) ||
+        val isCollection = bookmarkId.startsWith("spotify:collection") ||
+            bookmarkId.contains(":collection") ||
+            effectiveContextUri?.startsWith("spotify:collection") == true ||
+            effectiveContextUri?.contains(":collection") == true ||
+            lastContextTitle?.equals("Lieblingssongs", ignoreCase = true) == true ||
+            lastContextTitle?.equals("Liked Songs", ignoreCase = true) == true
+
+        val isPlaylist = !isCollection && (
+            (!effectiveContextUri.isNullOrBlank() && effectiveContextUri.startsWith("spotify:playlist:")) ||
             bookmarkId.startsWith("spotify:playlist:")
+        )
+
         val isAlbum = (!effectiveContextUri.isNullOrBlank() && effectiveContextUri.startsWith("spotify:album:")) ||
             bookmarkId.startsWith("album:")
 
         val resolvedContextTitle = when {
+            isCollection -> if (!lastContextTitle.isNullOrBlank() && lastContextTitle != "Spotify") lastContextTitle!! else "Lieblingssongs"
             !lastContextTitle.isNullOrBlank() &&
                 lastContextTitle != "Spotify" &&
                 !SpotifyNotificationListenerService.isGenericQueueOrLabel(lastContextTitle) -> lastContextTitle!!
@@ -856,20 +848,8 @@ object PlaybackTracker {
 
         try {
             val repository = BookmarkRepository.initialize(context)
-            if (!lastContextUri.isNullOrBlank() && lastTrackUri.isNotBlank() && lastTrackUri != bookmarkId) {
-                repository.deleteBookmark(lastTrackUri)
-            }
-            if (isPlaylist) {
-                repository.cleanupSupersededBookmarks(
-                    canonicalId = bookmarkId,
-                    trackUri = lastTrackUri,
-                    album = lastAlbum,
-                    contextTitle = resolvedContextTitle
-                )
-            }
-            repository.saveBookmark(bookmark)
 
-            // Vollständigen Verlaufseintrag dauerhaft in listening_history persistieren
+            // Vollständigen Verlaufseintrag dauerhaft in listening_history persistieren (Stats / Hörverlauf)
             val sessionId = activeSessionHistoryId ?: "${lastTrackUri}_${System.currentTimeMillis()}"
             activeSessionHistoryId = sessionId
             val historyEntry = HistoryTrackEntry(
@@ -888,8 +868,31 @@ object PlaybackTracker {
             )
             repository.recordHistoryEntry(historyEntry)
 
-            lastSaveTimeMs = System.currentTimeMillis()
-            Log.i(TAG, "Bookmark & History gespeichert: '${bookmark.trackTitle}' (${bookmark.id}) bei ${bookmark.positionMs} ms ($source)")
+            // STRIKTER PLAYLIST-ONLY SCHUTZ:
+            // Persistente Lesezeichen dürfen AUSSCHLIESSLICH für echte, kanonische Spotify-Playlists
+            // ("spotify:playlist:<id>") angelegt oder aktualisiert werden!
+            // Lieblingssongs (Collection), Alben, Warteschlange und Einzeltitel werden NIEMALS als Bookmark persistiert.
+            val isRealCanonicalPlaylist = isPlaylist &&
+                !isCollection &&
+                effectiveContextUri?.startsWith("spotify:playlist:") == true &&
+                !effectiveContextUri.startsWith("spotify:playlist:local_")
+
+            if (isRealCanonicalPlaylist) {
+                if (!lastContextUri.isNullOrBlank() && lastTrackUri.isNotBlank() && lastTrackUri != bookmarkId) {
+                    repository.deleteBookmark(lastTrackUri)
+                }
+                repository.cleanupSupersededBookmarks(
+                    canonicalId = bookmarkId,
+                    trackUri = lastTrackUri,
+                    album = lastAlbum,
+                    contextTitle = resolvedContextTitle
+                )
+                repository.saveBookmark(bookmark)
+                lastSaveTimeMs = System.currentTimeMillis()
+                Log.i(TAG, "Playlist-Bookmark gespeichert: '${bookmark.trackTitle}' (${bookmark.id}) bei ${bookmark.positionMs} ms ($source)")
+            } else {
+                Log.d(TAG, "flushBookmark: Überspringe Bookmark-Speicherung für Nicht-Playlist (${bookmark.id}, Context: $effectiveContextUri, Title: $resolvedContextTitle)")
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Fehler beim Speichern des Bookmarks/History", e)
         }

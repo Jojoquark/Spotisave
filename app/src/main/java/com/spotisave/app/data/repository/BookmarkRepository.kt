@@ -44,7 +44,17 @@ class BookmarkRepository private constructor(context: Context) {
                 val isBad = bm.id.contains("warteschlange", ignoreCase = true) ||
                     bm.id.contains("queue", ignoreCase = true) ||
                     bm.contextTitle.equals("Warteschlange", ignoreCase = true) ||
-                    bm.contextTitle.equals("Queue", ignoreCase = true)
+                    bm.contextTitle.equals("Queue", ignoreCase = true) ||
+                    bm.isCollection ||
+                    !bm.isPlaylist ||
+                    bm.id.startsWith("album:") ||
+                    bm.id == "spotify:collection:tracks" ||
+                    bm.contextUri?.startsWith("spotify:collection") == true ||
+                    bm.contextUri?.contains(":collection") == true ||
+                    bm.contextTitle.equals("Lieblingssongs", ignoreCase = true) ||
+                    bm.contextTitle.equals("Liked Songs", ignoreCase = true) ||
+                    bm.contextUri?.startsWith("spotify:playlist:") != true ||
+                    bm.contextUri.startsWith("spotify:playlist:local_")
                 if (isBad) {
                     dbHelper.deleteBookmark(bm.id)
                 }
@@ -62,10 +72,16 @@ class BookmarkRepository private constructor(context: Context) {
     }
 
     fun saveBookmark(bookmark: Bookmark) {
-        if (bookmark.id.contains("warteschlange", ignoreCase = true) ||
+        if (bookmark.isCollection ||
+            !bookmark.isPlaylist ||
+            bookmark.contextUri?.startsWith("spotify:playlist:") != true ||
+            bookmark.contextUri.startsWith("spotify:playlist:local_") ||
+            bookmark.id.contains("warteschlange", ignoreCase = true) ||
             bookmark.id.contains("queue", ignoreCase = true) ||
             bookmark.contextTitle.equals("Warteschlange", ignoreCase = true) ||
-            bookmark.contextTitle.equals("Queue", ignoreCase = true)
+            bookmark.contextTitle.equals("Queue", ignoreCase = true) ||
+            bookmark.contextTitle.equals("Lieblingssongs", ignoreCase = true) ||
+            bookmark.contextTitle.equals("Liked Songs", ignoreCase = true)
         ) {
             return
         }

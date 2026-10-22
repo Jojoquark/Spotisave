@@ -85,15 +85,14 @@ jobs:
         if: github.ref == 'refs/heads/main' && success()
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.2.0
-          name: SpotiSave v1.2.0
+          tag_name: v1.2.1
+          name: SpotiSave v1.2.1
           body: |
-            ### 🚀 SpotiSave v1.2.0
-            - **Autoritative Wiedergabeerfassung & Null Kontext-Bleed**: Playlists und Lieblingssongs (Liked Songs) werden strikt getrennt geführt. Kein versehentliches Überschreiben oder Verwechseln von Lesezeichen beim Wechseln zwischen Playlists und Bibliothek.
-            - **Adaptiver Hintergrund-Poller**: Intelligente Taktung zwischen 5 Minuten im Leerlauf (akkuschonend) und 4 Sekunden bei aktiver Wiedergabe für sekundengenaue Positionsverfolgung.
-            - **Benachrichtigungen als Sofort-Trigger**: Spotify-Media-Notifications wecken SpotiSave in Echtzeit auf und initiieren unverzüglich autoritative Web-API-Abgleiche.
-            - **In-App Auto-Update Checker**: Erkennt neue Releases automatisch beim Start oder in den Einstellungen mit direktem 1-Klick-Download.
-            - **Apple Liquid Glass Design**: Raffinierte Lichtbrechungen, Meniskus-Effekte und adaptiver Hell-/Dunkelmodus nach Apple HIG.
+            ### 🚀 SpotiSave v1.2.1
+            - **Strikte Playlist-Exklusivität**: Lesezeichen werden ausschließlich für echte Spotify-Playlists (`spotify:playlist:<id>`) persistiert. Lieblingssongs, Alben und Einzeltracks werden live im HeroCard angezeigt, erzeugen jedoch keine Lesezeichen mehr.
+            - **Playlist-Schutz & Kaper-Schutz**: Die Playlist "Casual Drives" (und alle weiteren Playlists) können niemals mehr durch das Abspielen von Lieblingssongs oder Einzeltracks gekapert oder überschrieben werden.
+            - **Bereinigung von Altlasten**: Beim Start werden versehentlich erzeugte Lieblingssongs- oder Album-Einträge automatisch restlos aus der Lesezeichen-Datenbank bereinigt.
+            - **Entfernung gefährlicher Track-Heuristiken**: Kontext-Zuordnungen erfolgen ausschließlich über verifizierte Playlist-Namen und nicht mehr über Track-Matchings aus dem Hörverlauf.
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/debug/app-debug.apk

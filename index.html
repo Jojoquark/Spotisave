@@ -1453,7 +1453,33 @@
 
     function getBookmarks() {
         try {
-            return JSON.parse(localStorage.getItem('sp_bookmarks') || '{}');
+            const raw = JSON.parse(localStorage.getItem('sp_bookmarks') || '{}');
+            let cleaned = false;
+            for (const key of Object.keys(raw)) {
+                const bm = raw[key];
+                const isNonPlaylist = Boolean(
+                    !bm ||
+                    bm.playlist_id === 'collection_tracks' ||
+                    bm.context_type === 'collection' ||
+                    bm.context_type === 'album' ||
+                    bm.playlist_name === 'Lieblingssongs' ||
+                    bm.playlist_name === 'Liked Songs' ||
+                    (bm.context_uri && (
+                        bm.context_uri.includes(':collection') ||
+                        bm.context_uri.startsWith('spotify:collection') ||
+                        bm.context_uri.startsWith('spotify:album:') ||
+                        bm.context_uri.startsWith('spotify:playlist:local_')
+                    ))
+                );
+                if (isNonPlaylist) {
+                    delete raw[key];
+                    cleaned = true;
+                }
+            }
+            if (cleaned) {
+                try { localStorage.setItem('sp_bookmarks', JSON.stringify(raw)); } catch (e) {}
+            }
+            return raw;
         } catch (e) {
             return {};
         }
@@ -1572,20 +1598,13 @@
                             const lastItem = recentData.items[0];
                             const rTrack = lastItem.track;
                             const rContext = lastItem.context;
-                            if (rTrack && rContext && (rContext.type === 'playlist' || rContext.type === 'album')) {
-                                let rEntityId = rContext.uri.split(':').pop();
+                            if (rTrack && rContext && rContext.type === 'playlist' && rContext.uri && rContext.uri.startsWith('spotify:playlist:') && !rContext.uri.includes(':collection')) {
+                                const plInfo = await fetchPlaylistInfo(rContext.uri);
+                                const rEntityId = plInfo.id;
                                 const bookmarks = getBookmarks();
                                 if (!bookmarks[rEntityId]) {
-                                    let rEntityName = '';
-                                    let rEntityImage = (rTrack.album && rTrack.album.images && rTrack.album.images[0]) ? rTrack.album.images[0].url : '';
-                                    if (rContext.type === 'playlist') {
-                                        const plInfo = await fetchPlaylistInfo(rContext.uri);
-                                        rEntityId = plInfo.id;
-                                        rEntityName = plInfo.name;
-                                        rEntityImage = plInfo.image || rEntityImage;
-                                    } else {
-                                        rEntityName = (rTrack.album && rTrack.album.name) ? rTrack.album.name : `Album (${rEntityId.slice(0, 6)})`;
-                                    }
+                                    const rEntityName = plInfo.name;
+                                    const rEntityImage = plInfo.image || ((rTrack.album && rTrack.album.images && rTrack.album.images[0]) ? rTrack.album.images[0].url : '');
                                     bookmarks[rEntityId] = {
                                         playlist_id: rEntityId,
                                         playlist_name: rEntityName,
@@ -1739,23 +1758,25 @@
                 }
             }
 
-            if (effectiveContext && (effectiveContext.type === 'playlist' || effectiveContext.type === 'album' || effectiveContext.type === 'collection')) {
-                let entityId = effectiveContext.uri.split(':').pop();
-                let entityName = '';
-                let entityImage = trackImg;
+            // Strikte Playlist-Only Architektur:
+            // Es werden AUSSCHLIESSLICH echte Spotify-Playlists persistent als Lesezeichen gespeichert!
+            // Lieblingssongs (Collection), Alben und Einzeltracks werden in der Live-Anzeige dargestellt,
+            // erzeugen aber KEINE persistenten Lesezeichen und können bestehende Playlists NIEMALS überschreiben.
+            const isRealPlaylist = Boolean(
+                effectiveContext &&
+                effectiveContext.type === 'playlist' &&
+                !isCollectionContext &&
+                effectiveContext.uri &&
+                effectiveContext.uri.startsWith('spotify:playlist:') &&
+                !effectiveContext.uri.includes(':collection') &&
+                !effectiveContext.uri.startsWith('spotify:playlist:local_')
+            );
 
-                if (effectiveContext.type === 'collection') {
-                    entityId = 'collection_tracks';
-                    entityName = 'Lieblingssongs';
-                    entityImage = trackImg;
-                } else if (effectiveContext.type === 'playlist') {
-                    const plInfo = await fetchPlaylistInfo(effectiveContext.uri);
-                    entityId = plInfo.id;
-                    entityName = plInfo.name;
-                    entityImage = plInfo.image || trackImg;
-                } else {
-                    entityName = (track.album && track.album.name) ? track.album.name : `Album (${entityId.slice(0, 6)})`;
-                }
+            if (isRealPlaylist) {
+                const plInfo = await fetchPlaylistInfo(effectiveContext.uri);
+                const entityId = plInfo.id;
+                const entityName = plInfo.name;
+                const entityImage = plInfo.image || trackImg;
 
                 const bookmarks = getBookmarks();
                 const existing = bookmarks[entityId];
@@ -1830,9 +1851,15 @@
                 }
 
                 updateHeaderStatus(isPlaying ? 'PLAYING' : 'PAUSED', isPlaying ? 'Auto-Save aktiv' : 'Pausiert');
+            } else if (isCollectionContext) {
+                updateHeaderStatus(isPlaying ? 'PLAYING' : 'PAUSED', isPlaying ? 'Lieblingssongs aktiv' : 'Pausiert');
+                if (manual) showToast(`Läuft: ${track.name} (Lieblingssongs – kein Lesezeichen)`);
+            } else if (effectiveContext && effectiveContext.type === 'album') {
+                updateHeaderStatus(isPlaying ? 'PLAYING' : 'PAUSED', isPlaying ? 'Album aktiv' : 'Pausiert');
+                if (manual) showToast(`Läuft: ${track.name} (Album – kein Lesezeichen)`);
             } else {
                 updateHeaderStatus(isPlaying ? 'PLAYING' : 'PAUSED', isPlaying ? 'Einzeltitel aktiv' : 'Pausiert');
-                if (manual) showToast(`Läuft: ${track.name} (Keine Playlist/Album)`);
+                if (manual) showToast(`Läuft: ${track.name} (Keine Playlist)`);
             }
         } catch (e) {
             console.error('Check Error:', e);

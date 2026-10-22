@@ -71,8 +71,17 @@ class BookmarkRepository private constructor(context: Context) {
         }
         scope.launch {
             var toSave = bookmark
+            val existingAll = dbHelper.getAllBookmarks()
+
+            // 1. Schutz vor 0:00-Reset beim selben Track im selben Bookmark
+            val existingSelf = existingAll.firstOrNull { it.id == toSave.id }
+            if (existingSelf != null) {
+                if (existingSelf.trackUri == toSave.trackUri && toSave.positionMs <= 1000L && existingSelf.positionMs > 1000L) {
+                    toSave = toSave.copy(positionMs = existingSelf.positionMs)
+                }
+            }
+
             if (bookmark.isPlaylist) {
-                val existingAll = dbHelper.getAllBookmarks()
                 for (old in existingAll) {
                     if (old.id == bookmark.id) continue
                     val isGenericQueue = old.id.contains("warteschlange", ignoreCase = true) ||

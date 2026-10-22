@@ -50,6 +50,7 @@ object PlaybackTracker {
     @Volatile private var pendingResumeTimestampMs: Long = 0L
     @Volatile private var resumeStableHitCount: Int = 0
     @Volatile private var activeResumedTrackUri: String? = null
+    @Volatile private var activeResumedTrackTitle: String? = null
     @Volatile private var activeResumedContextUri: String? = null
     @Volatile private var activeResumedContextTitle: String? = null
     @Volatile private var activeResumedCoverUrl: String? = null
@@ -92,6 +93,27 @@ object PlaybackTracker {
         val pending = pendingResumeBookmark ?: return false
         val elapsed = now - pendingResumeTimestampMs
         return elapsed in 0..RESUME_GRACE_MS && pending.trackUri.isNotBlank()
+    }
+
+    /**
+     * Prüft ob ein eingehender Track (nach URI oder Titel) exakt dem wiederaufgenommenen
+     * Ziel-Lesezeichen entspricht.
+     */
+    fun matchesResumedTrack(trackUri: String?, trackTitle: String?): Boolean {
+        val resumed = pendingResumeBookmark ?: return false
+        return isSameTrack(trackUri, trackTitle, resumed.trackUri, resumed.trackTitle)
+    }
+
+    fun setPendingResumeForTesting(bookmark: Bookmark?, timestampMs: Long = System.currentTimeMillis()) {
+        pendingResumeBookmark = bookmark
+        pendingResumeTimestampMs = timestampMs
+        activeResumedTrackUri = bookmark?.trackUri
+        activeResumedTrackTitle = bookmark?.trackTitle
+        activeResumedContextUri = bookmark?.contextUri ?: bookmark?.id?.takeIf {
+            it.startsWith("spotify:playlist:") || it.startsWith("spotify:album:") || it.startsWith("spotify:show:")
+        }
+        activeResumedContextTitle = bookmark?.contextTitle
+        activeResumedCoverUrl = bookmark?.coverUrl
     }
 
     /**
@@ -139,7 +161,9 @@ object PlaybackTracker {
      * schützt das wiederaufgenommene Lesezeichen während des Ladevorgangs vor 0:00-Resets.
      */
     fun onResumeInitiated(context: Context, bookmark: Bookmark) {
-        if (lastTrackUri.isNotBlank() && lastTrackUri != bookmark.trackUri && lastPositionMs > 3000L) {
+        if (lastTrackUri.isNotBlank() && lastPositionMs > 3000L &&
+            !isSameTrack(lastTrackUri, lastTrackTitle, bookmark.trackUri, bookmark.trackTitle)
+        ) {
             flushBookmark(context, "PreResumeFlush")
         }
 
@@ -157,30 +181,10 @@ object PlaybackTracker {
             }
 
         activeResumedTrackUri = bookmark.trackUri
+        activeResumedTrackTitle = bookmark.trackTitle
         activeResumedContextUri = effectiveCtxUri
         activeResumedContextTitle = bookmark.contextTitle
         activeResumedCoverUrl = bookmark.coverUrl
-
-        lastTrackUri = bookmark.trackUri
-        lastTrackTitle = bookmark.trackTitle
-        lastArtist = bookmark.artist
-        lastContextUri = effectiveCtxUri
-        lastContextTitle = bookmark.contextTitle
-        lastContextTypeHint = when {
-            bookmark.isPlaylist -> "playlist"
-            bookmark.isAlbum -> "album"
-            else -> null
-        }
-        if (!bookmark.coverUrl.isNullOrBlank()) {
-            lastCoverUrl = bookmark.coverUrl
-        }
-        if (bookmark.positionMs > 0L) {
-            lastPositionMs = bookmark.positionMs
-        }
-        if (bookmark.durationMs > 0L) {
-            lastDurationMs = bookmark.durationMs
-        }
-        activeSessionHistoryId = "${bookmark.trackUri}_$now"
 
         if (!effectiveCtxUri.isNullOrBlank() && effectiveCtxUri.startsWith("spotify:playlist:")) {
             if (bookmark.contextTitle.isNotBlank() && bookmark.contextTitle != "Spotify" && bookmark.contextTitle != "Playlist") {
@@ -191,7 +195,25 @@ object PlaybackTracker {
             }
         }
 
-        updateRepositoryState(context, "ResumeInitiated")
+        // Optimistisches State-Update für Jetpack Compose HeroCard, OHNE interne Tracker-Variablen
+        // für ankommende Events vorzeitig zu korrumpieren:
+        try {
+            val repository = BookmarkRepository.initialize(context)
+            val model = PlaybackStateModel(
+                trackUri = bookmark.trackUri,
+                trackTitle = bookmark.trackTitle,
+                artist = bookmark.artist,
+                album = bookmark.contextTitle,
+                contextTitle = bookmark.contextTitle.takeIf { !SpotifyNotificationListenerService.isGenericQueueOrLabel(it) },
+                contextUri = effectiveCtxUri,
+                coverUrl = bookmark.coverUrl,
+                positionMs = bookmark.positionMs,
+                durationMs = bookmark.durationMs,
+                isPlaying = false,
+                source = "ResumeInitiated"
+            )
+            repository.updateActivePlayback(model)
+        } catch (_: Exception) {}
     }
 
     /**
@@ -343,12 +365,17 @@ object PlaybackTracker {
         val prevEventTimeMs = lastEventTimeMs
         lastEventTimeMs = now
 
+        val isPlaceholderUri = trackUri == "spotify:track:active" || trackUri == "spotify:track:notification"
+        val effectiveIncomingTrackUri = if (isPlaceholderUri && lastTrackUri.isNotBlank() && !lastTrackUri.endsWith(":active") && !lastTrackUri.endsWith(":notification")) {
+            if (!trackTitle.isNullOrBlank() && trackTitle == lastTrackTitle) lastTrackUri else trackUri
+        } else {
+            trackUri
+        }
+
         if (isWithinResumeGrace(now)) {
             val resumed = pendingResumeBookmark
-            if (resumed != null && !trackUri.isNullOrBlank() && trackUri != resumed.trackUri &&
-                trackUri != "spotify:track:active" && trackUri != "spotify:track:notification"
-            ) {
-                Log.d(TAG, "Ignoriere veraltetes Metadaten-Event für $trackUri während Resume-Schutzfenster")
+            if (resumed != null && !matchesResumedTrack(effectiveIncomingTrackUri, trackTitle)) {
+                Log.d(TAG, "Ignoriere Übergangs-Metadaten für '$trackTitle' ($effectiveIncomingTrackUri) während Resume-Schutzfenster für '${resumed.trackTitle}'")
                 return
             }
         }
@@ -360,13 +387,6 @@ object PlaybackTracker {
             contextUri = contextUri,
             contextTypeHint = contextTypeHint
         )
-
-        val isPlaceholderUri = trackUri == "spotify:track:active" || trackUri == "spotify:track:notification"
-        val effectiveIncomingTrackUri = if (isPlaceholderUri && lastTrackUri.isNotBlank() && !lastTrackUri.endsWith(":active") && !lastTrackUri.endsWith(":notification")) {
-            if (!trackTitle.isNullOrBlank() && trackTitle == lastTrackTitle) lastTrackUri else trackUri
-        } else {
-            trackUri
-        }
 
         val isNewTrack = lastTrackUri.isNotBlank() &&
             !effectiveIncomingTrackUri.isNullOrBlank() &&
@@ -381,7 +401,7 @@ object PlaybackTracker {
         // Bei Trackwechsel MUSS die Position für den neuen Track zurückgesetzt werden (verhindert Position-Bleed)
         if (isNewTrack) {
             val resumed = pendingResumeBookmark
-            if (isWithinResumeGrace(now) && resumed != null && resumed.trackUri == effectiveIncomingTrackUri) {
+            if (isWithinResumeGrace(now) && resumed != null && matchesResumedTrack(effectiveIncomingTrackUri, trackTitle)) {
                 lastPositionMs = resumed.positionMs
             } else {
                 lastPositionMs = 0L
@@ -398,6 +418,7 @@ object PlaybackTracker {
             if (isIncomingCollection) {
                 activeResumedContextUri = null
                 activeResumedTrackUri = null
+                activeResumedTrackTitle = null
                 lastContextUri = "spotify:collection:tracks"
                 lastContextTitle = "Lieblingssongs"
                 lastCoverUrl = coverUrl
@@ -405,16 +426,20 @@ object PlaybackTracker {
             } else if (!contextUri.isNullOrBlank()) {
                 activeResumedContextUri = null
                 activeResumedTrackUri = null
+                activeResumedTrackTitle = null
                 lastContextUri = contextUri
                 lastCoverUrl = coverUrl
                 lastContextTypeHint = if (contextUri.startsWith("spotify:playlist:")) "playlist" else if (contextUri.startsWith("spotify:album:")) "album" else contextTypeHint
-            } else if (activeResumedTrackUri == effectiveIncomingTrackUri && !activeResumedContextUri.isNullOrBlank()) {
+            } else if (!activeResumedContextUri.isNullOrBlank() &&
+                isSameTrack(effectiveIncomingTrackUri, trackTitle, activeResumedTrackUri, activeResumedTrackTitle)
+            ) {
                 lastContextUri = activeResumedContextUri
                 lastContextTitle = activeResumedContextTitle ?: lastContextTitle
                 lastCoverUrl = activeResumedCoverUrl ?: coverUrl
             } else if (contextTypeHint == "album") {
                 activeResumedContextUri = null
                 activeResumedTrackUri = null
+                activeResumedTrackTitle = null
                 lastContextUri = null
                 lastContextTitle = album?.takeIf { it.isNotBlank() && it != "Spotify" } ?: sanitizedContextTitle
                 lastCoverUrl = coverUrl
@@ -426,6 +451,7 @@ object PlaybackTracker {
                 } else {
                     activeResumedContextUri = null
                     activeResumedTrackUri = null
+                    activeResumedTrackTitle = null
                     val resolvedUri = resolveKnownPlaylistContextUri(context, effectiveIncomingTrackUri, sanitizedContextTitle)
                     if (!resolvedUri.isNullOrBlank()) {
                         lastContextUri = resolvedUri
@@ -447,7 +473,11 @@ object PlaybackTracker {
                     lastContextTypeHint = "playlist"
                 }
             } else {
-                // Kein expliziter neuer Kontext-Titel im Event
+                // Neuer Track ohne expliziten Kontext: vorherige Resumed-Kontexte strikt verwerfen!
+                activeResumedContextUri = null
+                activeResumedTrackUri = null
+                activeResumedTrackTitle = null
+
                 val resolvedByTrack = resolveKnownPlaylistContextUri(context, effectiveIncomingTrackUri, null)
                 val isCollectionSession = !lastContextUri.isNullOrBlank() &&
                     (lastContextUri!!.startsWith("spotify:collection") || lastContextUri!!.contains(":collection"))
@@ -590,11 +620,7 @@ object PlaybackTracker {
         if (isWithinResumeGrace(now)) {
             val resumed = pendingResumeBookmark
             if (resumed != null) {
-                val matchesResumedTrack = trackUri.isNullOrBlank() ||
-                    trackUri == resumed.trackUri ||
-                    trackUri == "spotify:track:active" ||
-                    trackUri == "spotify:track:notification" ||
-                    trackUri.startsWith("spotify:track:local_")
+                val matchesResumedTrack = matchesResumedTrack(trackUri, lastTrackTitle)
 
                 if (matchesResumedTrack) {
                     if (resumed.positionMs > 3000L && positionMs < resumed.positionMs - 3000L) {
@@ -745,7 +771,10 @@ object PlaybackTracker {
             if (!resolved.isNullOrBlank()) {
                 lastContextUri = resolved
                 lastContextTypeHint = "playlist"
-            } else if (!activeResumedContextUri.isNullOrBlank() && lastContextTypeHint != "album") {
+            } else if (!activeResumedContextUri.isNullOrBlank() &&
+                isSameTrack(lastTrackUri, lastTrackTitle, activeResumedTrackUri, activeResumedTrackTitle) &&
+                lastContextTypeHint != "album"
+            ) {
                 lastContextUri = activeResumedContextUri
                 if (lastContextTitle.isNullOrBlank() || lastContextTitle == "Spotify") {
                     lastContextTitle = activeResumedContextTitle ?: lastContextTitle
@@ -895,9 +924,8 @@ object PlaybackTracker {
 
             if (isWithinResumeGrace(now)) {
                 val resumed = pendingResumeBookmark
-                if (resumed != null && resumed.trackUri.isNotBlank() &&
-                    !isSameTrack(apiTrack.uri, apiTrack.name, resumed.trackUri, resumed.trackTitle)
-                ) {
+                if (resumed != null && !matchesResumedTrack(apiTrack.uri, apiTrack.name)) {
+                    Log.d(TAG, "syncFromAuthoritativeApi: Ignoriere Übergangs-Track '${apiTrack.name}' während Resume-Schutzfenster für '${resumed.trackTitle}'")
                     return@withContext isPlaying
                 }
             }
@@ -911,7 +939,7 @@ object PlaybackTracker {
 
             if (isNewTrack) {
                 val resumed = pendingResumeBookmark
-                if (isWithinResumeGrace(now) && resumed != null && isSameTrack(apiTrack.uri, apiTrack.name, resumed.trackUri, resumed.trackTitle)) {
+                if (isWithinResumeGrace(now) && resumed != null && matchesResumedTrack(apiTrack.uri, apiTrack.name)) {
                     lastPositionMs = resumed.positionMs
                 } else {
                     lastPositionMs = 0L
@@ -973,7 +1001,7 @@ object PlaybackTracker {
 
                 // 4. Kein expliziter Kontext (context == null) -> Mehrstufige Prüfung:
                 else -> {
-                    val notifTitle = SpotifyNotificationListenerService.lastNotificationContextTitle
+                    val notifTitle = SpotifyNotificationListenerService.getContextTitleForTrack(apiTrack.name)
                     val queueTitleMatch = if (!notifTitle.isNullOrBlank() && (notifTitle.equals("Lieblingssongs", ignoreCase = true) || notifTitle.equals("Liked Songs", ignoreCase = true))) {
                         notifTitle
                     } else null

@@ -45,7 +45,40 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             private set
 
         @Volatile
+        var lastNotificationTrackTitle: String? = null
+            private set
+
+        @Volatile
         private var lastNotificationContextType: String? = null
+
+        /**
+         * Liefert den Kontext-Titel der Benachrichtigung NUR DANN zurück, wenn der aktuell
+         * angefragte Songtitel mit dem Titel der Benachrichtigung übereinstimmt.
+         * Verhindert strikt, dass ein veralteter Playlist-Titel auf nachfolgende Tracks überschwappt!
+         */
+        fun getContextTitleForTrack(trackTitle: String?): String? {
+            val notifTitle = lastNotificationContextTitle?.trim()?.takeIf { it.isNotBlank() } ?: return null
+            val notifTrack = lastNotificationTrackTitle?.trim()?.takeIf { it.isNotBlank() } ?: return null
+            val cleanTrack = trackTitle?.trim()?.takeIf { it.isNotBlank() } ?: return null
+            return if (cleanTrack.equals(notifTrack, ignoreCase = true) ||
+                cleanTrack.contains(notifTrack, ignoreCase = true) ||
+                notifTrack.contains(cleanTrack, ignoreCase = true)
+            ) {
+                notifTitle
+            } else {
+                null
+            }
+        }
+
+        fun setNotificationContextForTesting(
+            contextTitle: String?,
+            trackTitle: String?,
+            contextType: String? = null
+        ) {
+            lastNotificationContextTitle = contextTitle
+            lastNotificationTrackTitle = trackTitle
+            lastNotificationContextType = contextType
+        }
 
         /**
          * Filtert generische Warteschlangen- und System-Bezeichnungen heraus.
@@ -242,8 +275,11 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             ?: detectContextTypeFromText(infoText)
             ?: detectContextTypeFromText(bigText)
 
+        val notifTrackTitle = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim()
+
         lastNotificationContextTitle = candidateTitle
         lastNotificationContextType = candidateType
+        lastNotificationTrackTitle = notifTrackTitle
 
         val notifContextUri = extras.getString("context_uri")
             ?: extras.getString("com.spotify.music.extra.CONTEXT_URI")
@@ -297,6 +333,9 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
         if (sbn?.packageName == SPOTIFY_PACKAGE_NAME) {
             Log.d(TAG, "Spotify Benachrichtigung entfernt -> Letzten Stand sichern")
             PlaybackTracker.flushBookmark(applicationContext, "NotificationRemoved")
+            lastNotificationContextTitle = null
+            lastNotificationContextType = null
+            lastNotificationTrackTitle = null
             releaseMediaController()
         }
     }
@@ -386,6 +425,9 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             !isGenericQueueOrLabel(it) && !it.equals("Spotify", ignoreCase = true)
         }
 
+        val matchingNotifContextTitle = getContextTitleForTrack(title)
+        val matchingNotifContextType = if (matchingNotifContextTitle != null) lastNotificationContextType else null
+
         val contextUri = controller.extras?.getString("context_uri")
             ?: controller.extras?.getString("com.spotify.music.extra.CONTEXT_URI")
             ?: controller.playbackState?.extras?.getString("context_uri")
@@ -395,14 +437,14 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             ?: controller.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
             ?: controller.extras?.getString("context_name")
             ?: controller.extras?.getString("playlist_name")
-            ?: lastNotificationContextTitle
+            ?: matchingNotifContextTitle
             ?: controller.playbackState?.extras?.getString("context_title")
             ?: controller.playbackState?.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
             ?: rawQueueTitle
 
         val contextTitle = extractContextTitleFromText(rawCandidateTitle)
 
-        val effectiveContextType = lastNotificationContextType
+        val effectiveContextType = matchingNotifContextType
             ?: if (!contextTitle.isNullOrBlank()) "playlist" else null
 
         val playbackState = controller.playbackState
@@ -457,6 +499,9 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             !isGenericQueueOrLabel(it) && !it.equals("Spotify", ignoreCase = true)
         }
 
+        val matchingNotifContextTitle = getContextTitleForTrack(title)
+        val matchingNotifContextType = if (matchingNotifContextTitle != null) lastNotificationContextType else null
+
         val contextUri = controller.extras?.getString("context_uri")
             ?: controller.extras?.getString("com.spotify.music.extra.CONTEXT_URI")
             ?: state.extras?.getString("context_uri")
@@ -466,14 +511,14 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             ?: controller.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
             ?: controller.extras?.getString("context_name")
             ?: controller.extras?.getString("playlist_name")
-            ?: lastNotificationContextTitle
+            ?: matchingNotifContextTitle
             ?: state.extras?.getString("context_title")
             ?: state.extras?.getString("com.spotify.music.extra.CONTEXT_TITLE")
             ?: rawQueueTitle
 
         val contextTitle = extractContextTitleFromText(rawCandidateTitle)
 
-        val effectiveContextType = lastNotificationContextType
+        val effectiveContextType = matchingNotifContextType
             ?: if (!contextTitle.isNullOrBlank()) "playlist" else null
 
         val position = computeCurrentPosition(state, duration)

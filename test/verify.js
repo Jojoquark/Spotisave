@@ -1769,6 +1769,142 @@ async function runTests() {
     assert(simulatedBookmarks['spotify:collection:tracks'].positionMs === 45000, 'Simulation: Lieblingssongs still intact at 45000ms');
     assert(simulatedBookmarks['spotify:playlist:beta456'].positionMs === 120000, 'Simulation: Playlist B still intact at 120000ms');
 
+    // ==========================================
+    // Test Group 26: Cross-Playlist Resume Isolation & Track Scoping
+    // ==========================================
+    console.log('\nTest Group 26: Cross-Playlist Resume Isolation & Track Scoping');
+
+    const notifServiceSrc26 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/service/SpotifyNotificationListenerService.kt'), 'utf8');
+    const trackerSrc26 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/service/PlaybackTracker.kt'), 'utf8');
+    const resumeHelperSrc26 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/util/ResumeHelper.kt'), 'utf8');
+    const repoSrc26 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/repository/BookmarkRepository.kt'), 'utf8');
+
+    // 1. Notification context title scoped to track title
+    assert(notifServiceSrc26.includes('var lastNotificationTrackTitle: String? = null'),
+           'SpotifyNotificationListenerService.kt tracks lastNotificationTrackTitle');
+    assert(notifServiceSrc26.includes('fun getContextTitleForTrack(trackTitle: String?): String?'),
+           'SpotifyNotificationListenerService.kt implements getContextTitleForTrack');
+    assert(notifServiceSrc26.includes('matchingNotifContextTitle = getContextTitleForTrack(title)'),
+           'SpotifyNotificationListenerService.kt scopes contextTitle to matching track in MediaSession update');
+    assert(notifServiceSrc26.includes('lastNotificationTrackTitle = null') &&
+           notifServiceSrc26.includes('lastNotificationContextTitle = null'),
+           'SpotifyNotificationListenerService.kt resets context and track titles when notification is removed');
+
+    // 2. PlaybackTracker resume protection and track matching
+    assert(trackerSrc26.includes('fun matchesResumedTrack(trackUri: String?, trackTitle: String?): Boolean'),
+           'PlaybackTracker.kt implements matchesResumedTrack helper');
+    assert(trackerSrc26.includes('if (resumed != null && !matchesResumedTrack(effectiveIncomingTrackUri, trackTitle))'),
+           'PlaybackTracker.kt suppresses transitional metadata events from other tracks during resume grace');
+    assert(trackerSrc26.includes('if (resumed != null && !matchesResumedTrack(apiTrack.uri, apiTrack.name))'),
+           'PlaybackTracker.kt syncFromAuthoritativeApi suppresses transitional tracks during resume grace');
+    assert(trackerSrc26.includes('isSameTrack(lastTrackUri, lastTrackTitle, activeResumedTrackUri, activeResumedTrackTitle)'),
+           'PlaybackTracker.kt flushBookmark verifies track identity before falling back to activeResumedContextUri');
+
+    // 3. ResumeHelper wake-up guard
+    assert(resumeHelperSrc26.includes('isCurrentMatching') &&
+           resumeHelperSrc26.includes('currentController?.transportControls?.play()'),
+           'ResumeHelper.kt only triggers play() during wake-up if controller matches target bookmark');
+
+    // 4. BookmarkRepository position reset guard
+    assert(repoSrc26.includes('existingSelf.trackUri == toSave.trackUri && toSave.positionMs <= 1000L && existingSelf.positionMs > 1000L'),
+           'BookmarkRepository.kt protects against sudden 0:00 resets when saving existing track');
+
+    // 5. JavaScript Simulation of Frankreich (0:39) vs Casual Drives (2:15)
+    const database = {
+        'spotify:playlist:frankreich': {
+            id: 'spotify:playlist:frankreich',
+            contextTitle: 'Frankreich 🇫🇷',
+            trackTitle: 'Ein Kompliment',
+            trackUri: 'spotify:track:kompliment',
+            positionMs: 39000
+        },
+        'spotify:playlist:casual_drives': {
+            id: 'spotify:playlist:casual_drives',
+            contextTitle: 'Casual Drives',
+            trackTitle: 'Drive Slow',
+            trackUri: 'spotify:track:drive_slow',
+            positionMs: 135000
+        }
+    };
+
+    let pendingResume = null;
+    let resumeTimestamp = 0;
+
+    function initiateResume(bookmark) {
+        pendingResume = bookmark;
+        resumeTimestamp = Date.now();
+    }
+
+    function isSame(uriA, titleA, uriB, titleB) {
+        if (uriA && uriB && uriA === uriB) return true;
+        if (titleA && titleB && titleA.toLowerCase() === titleB.toLowerCase()) return true;
+        return false;
+    }
+
+    function processIncomingEvent(trackUri, trackTitle, contextTitle, positionMs) {
+        const now = Date.now();
+        const inGrace = pendingResume && (now - resumeTimestamp < 7000);
+
+        // Strict resume grace suppression for mismatched outgoing tracks
+        if (inGrace && !isSame(trackUri, trackTitle, pendingResume.trackUri, pendingResume.trackTitle)) {
+            return { action: 'SUPPRESSED', reason: 'Mismatch during resume grace' };
+        }
+
+        // Context title lookup with track scoping (simulating getContextTitleForTrack)
+        const scopedContextTitle = (contextTitle && isSame(trackUri, trackTitle, null, 'Ein Kompliment'))
+            ? contextTitle
+            : null;
+
+        const targetId = inGrace
+            ? pendingResume.id
+            : (scopedContextTitle ? 'spotify:playlist:' + scopedContextTitle : 'spotify:playlist:default');
+
+        const existing = database[targetId];
+        let finalPos = positionMs;
+        if (existing && existing.trackUri === trackUri && positionMs <= 1000 && existing.positionMs > 1000) {
+            finalPos = existing.positionMs; // Prevent 0:00 reset
+        }
+
+        database[targetId] = {
+            id: targetId,
+            contextTitle: inGrace ? pendingResume.contextTitle : (scopedContextTitle || 'Playlist'),
+            trackTitle: trackTitle,
+            trackUri: trackUri,
+            positionMs: finalPos
+        };
+
+        if (inGrace && isSame(trackUri, trackTitle, pendingResume.trackUri, pendingResume.trackTitle)) {
+            pendingResume = null; // Resume achieved
+        }
+
+        return { action: 'SAVED', id: targetId };
+    }
+
+    // Step 1: User resumes 'Casual Drives'
+    initiateResume(database['spotify:playlist:casual_drives']);
+
+    // Step 2: Spotify sends transitional event for outgoing track 'Ein Kompliment' at 0ms
+    const r1 = processIncomingEvent('spotify:track:kompliment', 'Ein Kompliment', 'Frankreich 🇫🇷', 0);
+    assert(r1.action === 'SUPPRESSED', 'Simulation: Transitional event for outgoing track is strictly suppressed');
+
+    // Verify Casual Drives was NOT overwritten by Ein Kompliment
+    assert(database['spotify:playlist:casual_drives'].trackTitle === 'Drive Slow',
+           'Simulation: Casual Drives trackTitle preserved as Drive Slow (not Ein Kompliment)');
+    assert(database['spotify:playlist:casual_drives'].positionMs === 135000,
+           'Simulation: Casual Drives position preserved at 135000ms');
+
+    // Verify Frankreich was NOT reset to 0ms
+    assert(database['spotify:playlist:frankreich'].positionMs === 39000,
+           'Simulation: Frankreich position preserved at 39000ms (not reset to 0:00)');
+
+    // Step 3: Spotify finishes switching and sends event for 'Drive Slow'
+    const r2 = processIncomingEvent('spotify:track:drive_slow', 'Drive Slow', null, 136000);
+    assert(r2.action === 'SAVED', 'Simulation: Resumed track event successfully accepted');
+    assert(database['spotify:playlist:casual_drives'].positionMs === 136000,
+           'Simulation: Casual Drives successfully progresses to 136000ms');
+    assert(database['spotify:playlist:frankreich'].trackTitle === 'Ein Kompliment',
+           'Simulation: Frankreich remains completely independent and uncorrupted');
+
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);
     console.log('========================================\n');

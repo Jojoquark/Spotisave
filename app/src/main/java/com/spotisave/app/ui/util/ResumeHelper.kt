@@ -167,9 +167,19 @@ object ResumeHelper {
                         if (wakeIntent != null) {
                             try { context.startActivity(wakeIntent) } catch (_: Exception) {}
                         }
-                        try {
-                            SpotifyNotificationListenerService.currentMediaController?.transportControls?.play()
-                        } catch (_: Exception) {}
+                        val currentController = SpotifyNotificationListenerService.currentMediaController
+                        val currentTrack = currentController?.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+                        val currentUri = currentController?.metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_URI)
+                            ?: currentController?.metadata?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)
+                        val isCurrentMatching = currentController != null && (
+                            (bookmark.trackUri.isNotBlank() && currentUri == bookmark.trackUri) ||
+                            (!currentTrack.isNullOrBlank() && currentTrack.equals(bookmark.trackTitle, ignoreCase = true))
+                        )
+                        if (isCurrentMatching) {
+                            try {
+                                currentController?.transportControls?.play()
+                            } catch (_: Exception) {}
+                        }
 
                         // Polling-Schleife: Warte bis zu 5x alle 450ms auf das Erscheinen des aktiven Geräts
                         for (retry in 1..5) {

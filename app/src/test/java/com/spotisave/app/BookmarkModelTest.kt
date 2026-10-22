@@ -883,5 +883,117 @@ class BookmarkModelTest {
         assertTrue(idPlB != idCol)
         assertTrue(idPlA != idPlB)
     }
+
+    @Test
+    fun testNotificationContextScopingToTrack() {
+        // Notification sendet Context-Titel "Frankreich 🇫🇷" für Track "Ein Kompliment"
+        SpotifyNotificationListenerService.setNotificationContextForTesting(
+            contextTitle = "Frankreich 🇫🇷",
+            trackTitle = "Ein Kompliment",
+            contextType = "playlist"
+        )
+
+        // Abfrage für denselben Track liefert den Playlist-Titel
+        assertEquals("Frankreich 🇫🇷", SpotifyNotificationListenerService.getContextTitleForTrack("Ein Kompliment"))
+        assertEquals("Frankreich 🇫🇷", SpotifyNotificationListenerService.getContextTitleForTrack("ein kompliment"))
+        assertEquals("Frankreich 🇫🇷", SpotifyNotificationListenerService.getContextTitleForTrack("Ein Kompliment (Radio Edit)"))
+
+        // Abfrage für einen ANDEREN Track (z.B. von Playlist 'Casual Drives') liefert strikt null!
+        assertNull(SpotifyNotificationListenerService.getContextTitleForTrack("Drive Slow"))
+        assertNull(SpotifyNotificationListenerService.getContextTitleForTrack("Another Track"))
+        assertNull(SpotifyNotificationListenerService.getContextTitleForTrack(null))
+        assertNull(SpotifyNotificationListenerService.getContextTitleForTrack(""))
+
+        // Nach dem Bereinigen der Notification liefert auch der originale Track null
+        SpotifyNotificationListenerService.setNotificationContextForTesting(null, null, null)
+        assertNull(SpotifyNotificationListenerService.getContextTitleForTrack("Ein Kompliment"))
+    }
+
+    @Test
+    fun testPlaybackTrackerMatchesResumedTrackAndGraceWindow() {
+        val targetBookmark = Bookmark(
+            id = "spotify:playlist:casual_drives",
+            contextUri = "spotify:playlist:casual_drives",
+            contextTitle = "Casual Drives",
+            trackTitle = "Drive Slow",
+            artist = "Kanye West",
+            trackUri = "spotify:track:drive_slow_uri",
+            positionMs = 135_000L,
+            durationMs = 270_000L
+        )
+
+        val now = System.currentTimeMillis()
+        PlaybackTracker.setPendingResumeForTesting(targetBookmark, timestampMs = now)
+
+        assertTrue(PlaybackTracker.isWithinResumeGrace(now + 1000L))
+        assertTrue(PlaybackTracker.matchesResumedTrack("spotify:track:drive_slow_uri", "Drive Slow"))
+        assertTrue(PlaybackTracker.matchesResumedTrack(null, "drive slow"))
+        assertTrue(PlaybackTracker.matchesResumedTrack("spotify:track:drive_slow_uri", null))
+
+        // Altes Event von vorheriger Playlist (z.B. 'Ein Kompliment') darf dem resumed Track NICHT matchen
+        assertFalse(PlaybackTracker.matchesResumedTrack("spotify:track:frankreich_uri", "Ein Kompliment"))
+        assertFalse(PlaybackTracker.matchesResumedTrack("spotify:track:other", "Other Title"))
+
+        // Außerhalb des Grace-Windows (> 7000ms)
+        assertFalse(PlaybackTracker.isWithinResumeGrace(now + 10_000L))
+
+        // Zurücksetzen
+        PlaybackTracker.setPendingResumeForTesting(null)
+        assertFalse(PlaybackTracker.isWithinResumeGrace(now))
+        assertFalse(PlaybackTracker.matchesResumedTrack("spotify:track:drive_slow_uri", "Drive Slow"))
+    }
+
+    @Test
+    fun testCrossPlaylistResumeIsolationScenario() {
+        // Szenario: Nutzer hört 'Frankreich' (Ein Kompliment, 0:39).
+        // Jetzt klickt er auf 'Casual Drives' (Drive Slow, 2:15).
+        val frankreichBookmark = Bookmark(
+            id = "spotify:playlist:frankreich",
+            contextUri = "spotify:playlist:frankreich",
+            contextTitle = "Frankreich 🇫🇷",
+            trackTitle = "Ein Kompliment",
+            artist = "Sportfreunde Stiller",
+            trackUri = "spotify:track:kompliment_uri",
+            positionMs = 39_000L,
+            durationMs = 198_000L
+        )
+
+        val casualDrivesBookmark = Bookmark(
+            id = "spotify:playlist:casual_drives",
+            contextUri = "spotify:playlist:casual_drives",
+            contextTitle = "Casual Drives",
+            trackTitle = "Drive Slow",
+            artist = "Kanye West",
+            trackUri = "spotify:track:drive_uri",
+            positionMs = 135_000L,
+            durationMs = 270_000L
+        )
+
+        // 1. Notification ist noch auf dem alten Track
+        SpotifyNotificationListenerService.setNotificationContextForTesting(
+            contextTitle = frankreichBookmark.contextTitle,
+            trackTitle = frankreichBookmark.trackTitle,
+            contextType = "playlist"
+        )
+
+        // 2. Resume für Casual Drives wird gestartet
+        val resumeTime = System.currentTimeMillis()
+        PlaybackTracker.setPendingResumeForTesting(casualDrivesBookmark, timestampMs = resumeTime)
+
+        // 3. Eintreffendes Event von Spotify für den alten Track 'Ein Kompliment'
+        val isMatchForResumed = PlaybackTracker.matchesResumedTrack(
+            frankreichBookmark.trackUri,
+            frankreichBookmark.trackTitle
+        )
+        assertFalse("Alte Track-Events dürfen das wiederaufgenommene Lesezeichen nicht matchen", isMatchForResumed)
+
+        // 4. Notification-Kontext-Lookup für den neuen Track 'Drive Slow'
+        val leakedContext = SpotifyNotificationListenerService.getContextTitleForTrack(casualDrivesBookmark.trackTitle)
+        assertNull("Alter Notification-Kontext darf niemals für neuen Track herangezogen werden", leakedContext)
+
+        // Aufräumen
+        PlaybackTracker.setPendingResumeForTesting(null)
+        SpotifyNotificationListenerService.setNotificationContextForTesting(null, null, null)
+    }
 }
 

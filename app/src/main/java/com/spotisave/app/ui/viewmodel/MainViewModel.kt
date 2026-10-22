@@ -289,47 +289,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!authManager.isLoggedIn()) return
         viewModelScope.launch {
             try {
-                val stateResult = apiClient.getNowPlaying()
-                val state = stateResult.getOrNull()
-                if (state != null && state.track != null) {
-                    val track = state.track
-                    val app = getApplication<Application>()
-                    var resolvedContextTitle: String? = null
-                    var resolvedCoverUrl: String? = track.coverUrl
-
-                    if (!state.contextUri.isNullOrBlank() && state.contextUri.startsWith("spotify:playlist:")) {
-                        val plId = state.contextUri.removePrefix("spotify:playlist:")
-                        val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
-                        if (plInfo != null) {
-                            resolvedContextTitle = plInfo.name
-                            if (!plInfo.coverUrl.isNullOrBlank()) {
-                                resolvedCoverUrl = plInfo.coverUrl
-                            }
-                        }
-                    } else if (!state.contextUri.isNullOrBlank() && state.contextUri.startsWith("spotify:album:")) {
-                        resolvedContextTitle = track.albumName.takeIf { it.isNotBlank() }
-                    }
-
-                    PlaybackTracker.onMetadataChanged(
-                        context = app,
-                        trackUri = track.uri,
-                        trackTitle = track.name,
-                        artist = track.artistName,
-                        album = track.albumName,
-                        durationMs = track.durationMs,
-                        contextUri = state.contextUri,
-                        contextTitle = resolvedContextTitle,
-                        coverUrl = resolvedCoverUrl,
-                        source = "SpotifyWebApi"
-                    )
-                    PlaybackTracker.onPlaybackStateChanged(
-                        context = app,
-                        isPlaying = state.isPlaying,
-                        positionMs = state.progressMs,
-                        source = "SpotifyWebApi",
-                        trackUri = track.uri
-                    )
-                }
+                val app = getApplication<Application>()
+                PlaybackTracker.syncFromAuthoritativeApi(app)
             } catch (e: Exception) {
                 Log.d("MainViewModel", "API Fetch Now Playing Fehler: ${e.message}")
             }

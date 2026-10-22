@@ -48,6 +48,10 @@ class SpotifyForegroundService : Service() {
 
         const val ACTION_START = "com.spotisave.app.action.START"
         const val ACTION_STOP = "com.spotisave.app.action.STOP"
+        const val ACTION_TRIGGER_SYNC = "com.spotisave.app.action.TRIGGER_SYNC"
+
+        const val ACTIVE_POLL_INTERVAL_MS = 4_000L   // 4 Sekunden während aktiver Wiedergabe (3-5s Bereich)
+        const val IDLE_POLL_INTERVAL_MS = 300_000L   // 5 Minuten im Ruhezustand (300 Sekunden)
 
         private val _isRunning = MutableStateFlow(false)
         val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
@@ -65,6 +69,17 @@ class SpotifyForegroundService : Service() {
             }
             context.startService(intent)
         }
+
+        fun triggerSync(context: Context) {
+            val intent = Intent(context, SpotifyForegroundService::class.java).apply {
+                action = ACTION_TRIGGER_SYNC
+            }
+            try {
+                context.startService(intent)
+            } catch (e: Exception) {
+                Log.d(TAG, "Konnte triggerSync nicht starten: ${e.message}")
+            }
+        }
     }
 
     override fun onCreate() {
@@ -80,6 +95,13 @@ class SpotifyForegroundService : Service() {
         if (intent?.action == ACTION_STOP) {
             stopSelf()
             return START_NOT_STICKY
+        }
+
+        if (intent?.action == ACTION_TRIGGER_SYNC) {
+            serviceScope.launch {
+                PlaybackTracker.syncFromAuthoritativeApi(applicationContext)
+            }
+            return START_STICKY
         }
 
         try {
@@ -104,15 +126,30 @@ class SpotifyForegroundService : Service() {
     private fun startPeriodicPositionTicker() {
         tickerJob?.cancel()
         tickerJob = serviceScope.launch {
+            // Initial sofort einen Sync ausführen
+            try {
+                PlaybackTracker.syncFromAuthoritativeApi(applicationContext)
+            } catch (e: Exception) {
+                Log.d(TAG, "Initialer Sync Fehler: ${e.message}")
+            }
+
             while (isActive) {
-                delay(10_000L)
+                val isPlayingNow = PlaybackTracker.isCurrentlyPlaying()
+                val currentDelayMs = if (isPlayingNow) ACTIVE_POLL_INTERVAL_MS else IDLE_POLL_INTERVAL_MS
+                delay(currentDelayMs)
+
                 try {
-                    val currentPos = SpotifyNotificationListenerService.getActivePlaybackPosition()
-                    if (currentPos > 0L) {
-                        PlaybackTracker.syncPeriodicPosition(applicationContext, currentPos)
+                    val authManager = com.spotisave.app.data.api.SpotifyAuthManager.getInstance(applicationContext)
+                    if (authManager.isLoggedIn()) {
+                        PlaybackTracker.syncFromAuthoritativeApi(applicationContext)
+                    } else {
+                        val currentPos = SpotifyNotificationListenerService.getActivePlaybackPosition()
+                        if (currentPos > 0L) {
+                            PlaybackTracker.syncPeriodicPosition(applicationContext, currentPos)
+                        }
                     }
                 } catch (e: Exception) {
-                    Log.d(TAG, "Ticker Fehler: ${e.message}")
+                    Log.d(TAG, "Poller Fehler: ${e.message}")
                 }
             }
         }

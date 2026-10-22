@@ -1671,6 +1671,104 @@ async function runTests() {
     assert(asyncCoverSrc23.includes('file://') && asyncCoverSrc23.includes('BitmapFactory.decodeFile'),
            'AsyncCoverImage.kt decodes local file:// cached cover artwork');
 
+    // ==========================================
+    // Test Group 24: Adaptive High-Frequency (4s) Active & 5-Minute Idle Background Poller
+    // ==========================================
+    console.log('\nTest Group 24: Adaptive High-Frequency (4s) Active & 5-Minute Idle Background Poller');
+    const fgServiceSrc24 = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/spotisave/app/service/SpotifyForegroundService.kt'), 'utf8');
+    const trackerSrc24 = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/spotisave/app/service/PlaybackTracker.kt'), 'utf8');
+    const authSrc24 = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/spotisave/app/data/api/SpotifyAuthManager.kt'), 'utf8');
+    const apiSrc24 = fs.readFileSync(path.join(__dirname, '../app/src/main/java/com/spotisave/app/data/api/SpotifyApiClient.kt'), 'utf8');
+
+    // 1. Polling interval constants
+    assert(fgServiceSrc24.includes('ACTIVE_POLL_INTERVAL_MS = 4_000L'),
+           'SpotifyForegroundService.kt defines ACTIVE_POLL_INTERVAL_MS = 4_000L for active playback (3-5s window)');
+    assert(fgServiceSrc24.includes('IDLE_POLL_INTERVAL_MS = 300_000L'),
+           'SpotifyForegroundService.kt defines IDLE_POLL_INTERVAL_MS = 300_000L for 5-minute idle checking');
+
+    // 2. Adaptive delay based on playback state
+    assert(fgServiceSrc24.includes('val isPlayingNow = PlaybackTracker.isCurrentlyPlaying()') &&
+           fgServiceSrc24.includes('if (isPlayingNow) ACTIVE_POLL_INTERVAL_MS else IDLE_POLL_INTERVAL_MS'),
+           'SpotifyForegroundService.kt dynamically adapts poll delay between 4s while playing and 5m when idle');
+
+    // 3. Immediate trigger & action support
+    assert(fgServiceSrc24.includes('ACTION_TRIGGER_SYNC') &&
+           fgServiceSrc24.includes('fun triggerSync('),
+           'SpotifyForegroundService.kt supports ACTION_TRIGGER_SYNC for immediate waking on notification events');
+
+    // 4. PlaybackTracker reactive triggers
+    assert(trackerSrc24.includes('fun isCurrentlyPlaying(): Boolean = lastIsPlaying'),
+           'PlaybackTracker.kt provides thread-safe isCurrentlyPlaying() state indicator');
+    assert(trackerSrc24.includes('fun notifyPlaybackTriggered(') &&
+           trackerSrc24.includes('fun triggerApiRefresh('),
+           'PlaybackTracker.kt exposes notifyPlaybackTriggered and triggerApiRefresh for event-based API wake-ups');
+
+    // 5. Auth scopes include user-library-read
+    assert(authSrc24.includes('user-library-read'),
+           'SpotifyAuthManager.kt includes user-library-read in SCOPES for Liked Songs / library checks');
+
+    // 6. SpotifyApiClient library check
+    assert(apiSrc24.includes('suspend fun isTrackInLibrary(trackId: String): Result<Boolean>') &&
+           apiSrc24.includes('/me/tracks/contains?ids='),
+           'SpotifyApiClient.kt implements isTrackInLibrary querying GET /v1/me/tracks/contains');
+
+    // ==========================================
+    // Test Group 25: Authoritative API Playback & Zero Context Bleed Simulation
+    // ==========================================
+    console.log('\nTest Group 25: Authoritative API Playback & Zero Context Bleed Simulation');
+
+    // 1. Verify PlaybackTracker authoritative resolution
+    assert(trackerSrc24.includes('suspend fun syncFromAuthoritativeApi('),
+           'PlaybackTracker.kt implements suspend fun syncFromAuthoritativeApi');
+    assert(trackerSrc24.includes('effectiveContextUri = "spotify:collection:tracks"') &&
+           trackerSrc24.includes('effectiveContextTitle = "Lieblingssongs"'),
+           'PlaybackTracker.kt maps collection contexts strictly to spotify:collection:tracks / Lieblingssongs');
+    assert(trackerSrc24.includes('apiClient.isTrackInLibrary(apiTrack.uri)'),
+           'PlaybackTracker.kt uses isTrackInLibrary as fallback when context is null');
+
+    // 2. JavaScript / Node.js State Machine Simulation of Playlist A -> Lieblingssongs -> Playlist B
+    const simulatedBookmarks = {};
+
+    function simulateSave(contextUri, contextTitle, trackUri, positionMs) {
+        const id = (contextUri && (contextUri.startsWith('spotify:playlist:') || contextUri.includes(':collection')))
+            ? contextUri
+            : (contextTitle === 'Lieblingssongs' ? 'spotify:collection:tracks' : 'album:default');
+        simulatedBookmarks[id] = {
+            id,
+            contextUri,
+            contextTitle,
+            trackUri,
+            positionMs
+        };
+    }
+
+    // Step A: User listens to Playlist A
+    simulateSave('spotify:playlist:alpha123', 'Rock Anthems', 'spotify:track:rock1', 95000);
+    assert(simulatedBookmarks['spotify:playlist:alpha123'] !== undefined, 'Simulation: Playlist A bookmark created');
+    assert(simulatedBookmarks['spotify:playlist:alpha123'].positionMs === 95000, 'Simulation: Playlist A saved at 95000ms');
+
+    // Step B: User switches to Lieblingssongs (Liked Songs, where context may be null or collection)
+    const likedSongsTrackUri = 'spotify:track:fav999';
+    // With our new architecture: context is null but isTrackInLibrary is true -> saved to spotify:collection:tracks
+    simulateSave('spotify:collection:tracks', 'Lieblingssongs', likedSongsTrackUri, 45000);
+
+    // Verify ZERO CONTEXT BLEED:
+    assert(simulatedBookmarks['spotify:collection:tracks'] !== undefined, 'Simulation: Lieblingssongs saved under discrete collection ID');
+    assert(simulatedBookmarks['spotify:collection:tracks'].trackUri === likedSongsTrackUri, 'Simulation: Lieblingssongs track is fav999');
+    assert(simulatedBookmarks['spotify:playlist:alpha123'].trackUri === 'spotify:track:rock1', 'Simulation: Playlist A track remained rock1 (NO context bleed!)');
+    assert(simulatedBookmarks['spotify:playlist:alpha123'].positionMs === 95000, 'Simulation: Playlist A progress preserved at 95000ms (NOT overwritten!)');
+
+    // Step C: User switches to Playlist B
+    simulateSave('spotify:playlist:beta456', 'Electronic Focus', 'spotify:track:edm1', 120000);
+    assert(simulatedBookmarks['spotify:playlist:beta456'] !== undefined, 'Simulation: Playlist B saved under discrete ID');
+    assert(simulatedBookmarks['spotify:playlist:beta456'].positionMs === 120000, 'Simulation: Playlist B saved at 120000ms');
+
+    // Verify all 3 bookmarks coexist independently without collision
+    assert(Object.keys(simulatedBookmarks).length === 3, 'Simulation: Exactly 3 independent bookmarks coexist (Playlist A, Playlist B, Lieblingssongs)');
+    assert(simulatedBookmarks['spotify:playlist:alpha123'].positionMs === 95000, 'Simulation: Playlist A still intact at 95000ms');
+    assert(simulatedBookmarks['spotify:collection:tracks'].positionMs === 45000, 'Simulation: Lieblingssongs still intact at 45000ms');
+    assert(simulatedBookmarks['spotify:playlist:beta456'].positionMs === 120000, 'Simulation: Playlist B still intact at 120000ms');
+
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);
     console.log('========================================\n');

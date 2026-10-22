@@ -78,8 +78,16 @@ class SpotifyApiClient(private val context: Context) {
             val progressMs = json.optLong("progress_ms", 0L)
 
             val contextObj = json.optJSONObject("context")
-            val contextUri = contextObj?.optString("uri", null)
-            val contextType = contextObj?.optString("type", null)
+            val rawContextUri = contextObj?.optString("uri", null)?.takeIf { it.isNotBlank() }
+            val contextType = contextObj?.optString("type", null)?.takeIf { it.isNotBlank() }
+            val isCollection = contextType == "collection" ||
+                rawContextUri?.startsWith("spotify:collection") == true ||
+                rawContextUri?.contains(":collection") == true
+            val contextUri = if (isCollection) {
+                rawContextUri ?: "spotify:collection:tracks"
+            } else {
+                rawContextUri
+            }
 
             val itemObj = json.optJSONObject("item")
             val track = if (itemObj != null) {
@@ -358,6 +366,26 @@ class SpotifyApiClient(private val context: Context) {
                 Result.success(parsePlaylistInfo(json, playlistId))
             } else {
                 Result.failure(Exception("Playlist $playlistId konnte nicht geladen werden: HTTP ${resp.code}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Prüft, ob ein Track in den Lieblingssongs (Saved Tracks) des Nutzers liegt (/me/tracks/contains).
+     */
+    suspend fun isTrackInLibrary(trackId: String): Result<Boolean> {
+        val cleanId = trackId.removePrefix("spotify:track:").substringBefore("?").trim()
+        if (cleanId.isBlank()) return Result.success(false)
+        return try {
+            val resp = sendRequest("/me/tracks/contains?ids=$cleanId")
+            if (resp.code == 200) {
+                val array = JSONArray(resp.body)
+                val inLibrary = if (array.length() > 0) array.optBoolean(0, false) else false
+                Result.success(inLibrary)
+            } else {
+                Result.success(false)
             }
         } catch (e: Exception) {
             Result.failure(e)

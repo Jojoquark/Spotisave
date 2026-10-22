@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Zentraler Logik-Handler für die Spotify-Wiedergabeerfassung.
@@ -56,6 +57,27 @@ object PlaybackTracker {
     // In-Memory Cache für Playlist-Namen und Playlist-Cover (verhindert redundante API-Aufrufe)
     val playlistNameCache = java.util.concurrent.ConcurrentHashMap<String, String>()
     val playlistCoverCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    @Volatile private var lastApiTriggerTimeMs: Long = 0L
+
+    fun isCurrentlyPlaying(): Boolean = lastIsPlaying
+
+    fun notifyPlaybackTriggered(context: Context) {
+        val now = System.currentTimeMillis()
+        if (now - lastApiTriggerTimeMs < 1200L) return
+        lastApiTriggerTimeMs = now
+        trackerScope.launch {
+            try {
+                syncFromAuthoritativeApi(context)
+            } catch (e: Exception) {
+                Log.d(TAG, "Triggered sync error: ${e.message}")
+            }
+        }
+    }
+
+    fun triggerApiRefresh(context: Context) {
+        notifyPlaybackTriggered(context)
+    }
 
     fun cachePlaylistMetadata(uri: String, name: String?, coverUrl: String?) {
         if (!name.isNullOrBlank()) {
@@ -366,86 +388,87 @@ object PlaybackTracker {
             }
             activeSessionHistoryId = "${effectiveIncomingTrackUri}_${System.currentTimeMillis()}"
 
-            // Multi-Playlist-Isolierung & Sticky-Playlist-Kontext bei Trackwechsel:
-            // 1. Wechselt der Nutzer explizit in eine andere Playlist oder ein Album, wird der Kontext sauber getrennt.
-            // 2. Läuft hingegen eine aktive Playlist einfach zum nächsten Song weiter (wobei Androids
-            //    MediaSession/Broadcast meist keine contextUri mitschickt), darf lastContextUri NICHT
-            //    auf null gesetzt und zum Album herabgestuft werden!
-            if (contextUri.isNullOrBlank()) {
-                if (activeResumedTrackUri == effectiveIncomingTrackUri && !activeResumedContextUri.isNullOrBlank()) {
-                    lastContextUri = activeResumedContextUri
-                    lastContextTitle = activeResumedContextTitle ?: lastContextTitle
-                    lastCoverUrl = activeResumedCoverUrl ?: coverUrl
-                } else if (contextTypeHint == "album") {
+            // Multi-Playlist-Isolierung & Strikte Kontext-Trennung bei Trackwechsel:
+            val isIncomingCollection = contextUri?.startsWith("spotify:collection") == true ||
+                contextUri?.contains(":collection") == true ||
+                sanitizedContextTitle?.equals("Lieblingssongs", ignoreCase = true) == true ||
+                sanitizedContextTitle?.equals("Liked Songs", ignoreCase = true) == true ||
+                contextTypeHint == "collection"
+
+            if (isIncomingCollection) {
+                activeResumedContextUri = null
+                activeResumedTrackUri = null
+                lastContextUri = "spotify:collection:tracks"
+                lastContextTitle = "Lieblingssongs"
+                lastCoverUrl = coverUrl
+                lastContextTypeHint = "playlist"
+            } else if (!contextUri.isNullOrBlank()) {
+                activeResumedContextUri = null
+                activeResumedTrackUri = null
+                lastContextUri = contextUri
+                lastCoverUrl = coverUrl
+                lastContextTypeHint = if (contextUri.startsWith("spotify:playlist:")) "playlist" else if (contextUri.startsWith("spotify:album:")) "album" else contextTypeHint
+            } else if (activeResumedTrackUri == effectiveIncomingTrackUri && !activeResumedContextUri.isNullOrBlank()) {
+                lastContextUri = activeResumedContextUri
+                lastContextTitle = activeResumedContextTitle ?: lastContextTitle
+                lastCoverUrl = activeResumedCoverUrl ?: coverUrl
+            } else if (contextTypeHint == "album") {
+                activeResumedContextUri = null
+                activeResumedTrackUri = null
+                lastContextUri = null
+                lastContextTitle = album?.takeIf { it.isNotBlank() && it != "Spotify" } ?: sanitizedContextTitle
+                lastCoverUrl = coverUrl
+                lastContextTypeHint = "album"
+            } else if (!sanitizedContextTitle.isNullOrBlank()) {
+                val sameExplicitContextTitle = sanitizedContextTitle.equals(lastContextTitle, ignoreCase = true)
+                if (sameExplicitContextTitle && !lastContextUri.isNullOrBlank()) {
+                    // Gleiche Playlist laut Notification/MediaSession bestätigt -> lastContextUri beibehalten
+                } else {
                     activeResumedContextUri = null
                     activeResumedTrackUri = null
-                    lastContextUri = null
-                    lastContextTitle = album?.takeIf { it.isNotBlank() && it != "Spotify" } ?: sanitizedContextTitle
-                    lastCoverUrl = coverUrl
-                    lastContextTypeHint = "album"
-                } else if (!sanitizedContextTitle.isNullOrBlank()) {
-                    val sameExplicitContextTitle = sanitizedContextTitle.equals(lastContextTitle, ignoreCase = true)
-                    if (sameExplicitContextTitle && !lastContextUri.isNullOrBlank()) {
-                        // Gleiche Playlist laut Notification/MediaSession bestätigt -> lastContextUri beibehalten
+                    val resolvedUri = resolveKnownPlaylistContextUri(context, effectiveIncomingTrackUri, sanitizedContextTitle)
+                    if (!resolvedUri.isNullOrBlank()) {
+                        lastContextUri = resolvedUri
+                        lastContextTitle = playlistNameCache[resolvedUri] ?: sanitizedContextTitle
+                        lastCoverUrl = playlistCoverCache[resolvedUri] ?: coverUrl
                     } else {
-                        // Explizit abweichender Playlist-Name erkannt -> auf neue Playlist umschalten
-                        activeResumedContextUri = null
-                        activeResumedTrackUri = null
-                        val resolvedUri = resolveKnownPlaylistContextUri(context, effectiveIncomingTrackUri, sanitizedContextTitle)
-                        if (!resolvedUri.isNullOrBlank()) {
-                            lastContextUri = resolvedUri
-                            lastContextTitle = playlistNameCache[resolvedUri] ?: sanitizedContextTitle
-                            lastCoverUrl = playlistCoverCache[resolvedUri] ?: coverUrl
-                        } else {
-                            val (_, localPlUri) = computeBookmarkIdentity(
-                                contextUri = null,
-                                contextTitle = sanitizedContextTitle,
-                                album = album,
-                                trackTitle = trackTitle,
-                                trackUri = effectiveIncomingTrackUri ?: lastTrackUri.ifEmpty { "spotify:track:active" },
-                                contextTypeHint = "playlist"
-                            )
-                            lastContextUri = localPlUri
-                            lastContextTitle = sanitizedContextTitle
-                            lastCoverUrl = coverUrl
-                        }
-                        lastContextTypeHint = "playlist"
-                    }
-                } else {
-                    // Kein expliziter neuer Kontext-Titel im Event (Standardfall bei lokalem Trackwechsel in einer Playlist)
-                    val resolvedByTrack = resolveKnownPlaylistContextUri(context, effectiveIncomingTrackUri, null)
-                    val isWithinActivePlaylistSession = (!lastContextUri.isNullOrBlank() &&
-                        (lastContextUri!!.startsWith("spotify:playlist:") ||
-                            lastContextUri!!.startsWith("spotify:collection") ||
-                            lastContextUri!!.contains(":collection")) &&
-                        (lastIsPlaying || (prevEventTimeMs > 0L && (now - prevEventTimeMs) in 0..ACTIVE_PLAYLIST_SESSION_TTL_MS))) ||
-                        (!activeResumedContextUri.isNullOrBlank() &&
-                            (activeResumedContextUri!!.startsWith("spotify:playlist:") ||
-                                activeResumedContextUri!!.startsWith("spotify:collection") ||
-                                activeResumedContextUri!!.contains(":collection")))
-
-                    if (!resolvedByTrack.isNullOrBlank()) {
-                        lastContextUri = resolvedByTrack
-                        lastContextTitle = playlistNameCache[resolvedByTrack] ?: lastContextTitle
-                        lastCoverUrl = playlistCoverCache[resolvedByTrack] ?: lastCoverUrl ?: coverUrl
-                        lastContextTypeHint = "playlist"
-                    } else if (isWithinActivePlaylistSession) {
-                        // Aktive Playlist-Session beibehalten, damit Song 2..N derselben Playlist nicht als Album gespeichert werden!
-                        if (lastContextUri.isNullOrBlank() && !activeResumedContextUri.isNullOrBlank()) {
-                            lastContextUri = activeResumedContextUri
-                            lastContextTitle = activeResumedContextTitle ?: lastContextTitle
-                            lastCoverUrl = activeResumedCoverUrl ?: lastCoverUrl ?: coverUrl
-                        }
-                        lastContextTypeHint = "playlist"
-                        if (!activeResumedContextUri.isNullOrBlank() && activeResumedContextUri == lastContextUri) {
-                            activeResumedTrackUri = effectiveIncomingTrackUri
-                        }
-                    } else {
-                        lastContextUri = null
-                        lastContextTitle = null
+                        val (_, localPlUri) = computeBookmarkIdentity(
+                            contextUri = null,
+                            contextTitle = sanitizedContextTitle,
+                            album = album,
+                            trackTitle = trackTitle,
+                            trackUri = effectiveIncomingTrackUri ?: lastTrackUri.ifEmpty { "spotify:track:active" },
+                            contextTypeHint = "playlist"
+                        )
+                        lastContextUri = localPlUri
+                        lastContextTitle = sanitizedContextTitle
                         lastCoverUrl = coverUrl
-                        lastContextTypeHint = contextTypeHint
                     }
+                    lastContextTypeHint = "playlist"
+                }
+            } else {
+                // Kein expliziter neuer Kontext-Titel im Event
+                val resolvedByTrack = resolveKnownPlaylistContextUri(context, effectiveIncomingTrackUri, null)
+                val isCollectionSession = !lastContextUri.isNullOrBlank() &&
+                    (lastContextUri!!.startsWith("spotify:collection") || lastContextUri!!.contains(":collection"))
+
+                if (isCollectionSession) {
+                    lastContextUri = "spotify:collection:tracks"
+                    lastContextTitle = "Lieblingssongs"
+                    lastCoverUrl = coverUrl ?: lastCoverUrl
+                    lastContextTypeHint = "playlist"
+                } else if (!resolvedByTrack.isNullOrBlank()) {
+                    lastContextUri = resolvedByTrack
+                    lastContextTitle = playlistNameCache[resolvedByTrack] ?: lastContextTitle
+                    lastCoverUrl = playlistCoverCache[resolvedByTrack] ?: lastCoverUrl ?: coverUrl
+                    lastContextTypeHint = "playlist"
+                } else {
+                    // ANTI-BLEED: Wenn der neue Track nicht nachweislich zur bisherigen Playlist gehört,
+                    // NIEMALS den alten Playlist-Kontext weiterführen!
+                    lastContextUri = null
+                    lastContextTitle = null
+                    lastCoverUrl = coverUrl
+                    lastContextTypeHint = contextTypeHint
                 }
             }
         }
@@ -836,139 +859,193 @@ object PlaybackTracker {
         return false
     }
 
+    /**
+     * Authoritative Abfrage des Spotify-Wiedergabestatus (/me/player).
+     * Löst Kontext (Playlist, Lieblingssongs, Album) strikt auf und verhindert
+     * jeglichen Context-Bleed zwischen Playlists und der privaten Musikbibliothek.
+     * Gibt true zurück, wenn Spotify aktiv Musik abspielt, sonst false.
+     */
+    suspend fun syncFromAuthoritativeApi(context: Context): Boolean = withContext(Dispatchers.IO) {
+        val authManager = SpotifyAuthManager.getInstance(context)
+        if (!authManager.isLoggedIn()) {
+            return@withContext lastIsPlaying
+        }
+
+        try {
+            val apiClient = SpotifyApiClient.getInstance(context)
+            val stateResult = apiClient.getNowPlaying()
+            val state = stateResult.getOrNull()
+
+            if (state == null || state.track == null) {
+                val wasPlaying = lastIsPlaying
+                if (wasPlaying) {
+                    lastIsPlaying = false
+                    updateRepositoryState(context, "WebApiIdle")
+                    if (lastPositionMs > 2000L) {
+                        flushBookmark(context, "WebApiPause")
+                    }
+                }
+                return@withContext false
+            }
+
+            val apiTrack = state.track
+            val isPlaying = state.isPlaying
+            val progressMs = state.progressMs
+            val now = System.currentTimeMillis()
+
+            if (isWithinResumeGrace(now)) {
+                val resumed = pendingResumeBookmark
+                if (resumed != null && resumed.trackUri.isNotBlank() &&
+                    !isSameTrack(apiTrack.uri, apiTrack.name, resumed.trackUri, resumed.trackTitle)
+                ) {
+                    return@withContext isPlaying
+                }
+            }
+
+            val isNewTrack = lastTrackUri.isNotBlank() &&
+                !isSameTrack(apiTrack.uri, apiTrack.name, lastTrackUri, lastTrackTitle)
+
+            if (isNewTrack && lastPositionMs > 3000L) {
+                flushBookmark(context, "WebApiTrackSwitch")
+            }
+
+            if (isNewTrack) {
+                val resumed = pendingResumeBookmark
+                if (isWithinResumeGrace(now) && resumed != null && isSameTrack(apiTrack.uri, apiTrack.name, resumed.trackUri, resumed.trackTitle)) {
+                    lastPositionMs = resumed.positionMs
+                } else {
+                    lastPositionMs = 0L
+                }
+                activeSessionHistoryId = "${apiTrack.uri}_$now"
+            }
+
+            // Authoritative Kontext-Auflösung
+            val rawContextUri = state.contextUri
+            val rawContextType = state.contextType
+            val isExplicitCollection = rawContextType == "collection" ||
+                rawContextUri?.startsWith("spotify:collection") == true ||
+                rawContextUri?.contains(":collection") == true
+
+            var effectiveContextUri: String? = null
+            var effectiveContextTitle = "Spotify"
+            var effectiveContextTypeHint: String? = null
+
+            when {
+                // 1. Echte Playlist
+                !rawContextUri.isNullOrBlank() && rawContextUri.startsWith("spotify:playlist:") -> {
+                    val curContextUri = rawContextUri
+                    effectiveContextUri = curContextUri
+                    effectiveContextTypeHint = "playlist"
+                    val plId = curContextUri.removePrefix("spotify:playlist:")
+                    val cached = playlistNameCache[curContextUri]
+                    val cachedCover = playlistCoverCache[curContextUri]
+                    if (!cached.isNullOrBlank()) {
+                        effectiveContextTitle = cached
+                        if (!cachedCover.isNullOrBlank()) lastCoverUrl = cachedCover
+                    } else {
+                        val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
+                        if (plInfo != null) {
+                            playlistNameCache[curContextUri] = plInfo.name
+                            effectiveContextTitle = plInfo.name
+                            if (!plInfo.coverUrl.isNullOrBlank()) {
+                                playlistCoverCache[curContextUri] = plInfo.coverUrl
+                                lastCoverUrl = plInfo.coverUrl
+                            }
+                        } else {
+                            effectiveContextTitle = "Playlist"
+                        }
+                    }
+                }
+
+                // 2. Explizite Lieblingssongs / Collection
+                isExplicitCollection -> {
+                    effectiveContextUri = "spotify:collection:tracks"
+                    effectiveContextTitle = "Lieblingssongs"
+                    effectiveContextTypeHint = "playlist"
+                }
+
+                // 3. Explizites Album
+                !rawContextUri.isNullOrBlank() && rawContextUri.startsWith("spotify:album:") -> {
+                    effectiveContextUri = null
+                    effectiveContextTitle = apiTrack.albumName.takeIf { it.isNotBlank() } ?: "Album"
+                    effectiveContextTypeHint = "album"
+                }
+
+                // 4. Kein expliziter Kontext (context == null) -> Mehrstufige Prüfung:
+                else -> {
+                    val queueTitleMatch = lastNotificationContextTitle?.trim()?.takeIf {
+                        it.equals("Lieblingssongs", ignoreCase = true) || it.equals("Liked Songs", ignoreCase = true)
+                    }
+
+                    val isInLibrary = if (queueTitleMatch != null) {
+                        true
+                    } else {
+                        apiClient.isTrackInLibrary(apiTrack.uri).getOrDefault(false)
+                    }
+
+                    if (isInLibrary) {
+                        effectiveContextUri = "spotify:collection:tracks"
+                        effectiveContextTitle = "Lieblingssongs"
+                        effectiveContextTypeHint = "playlist"
+                    } else {
+                        effectiveContextUri = null
+                        effectiveContextTitle = apiTrack.albumName.takeIf { it.isNotBlank() } ?: "Album"
+                        effectiveContextTypeHint = "album"
+                    }
+                }
+            }
+
+            lastTrackUri = apiTrack.uri
+            lastTrackTitle = apiTrack.name
+            lastArtist = apiTrack.artistName
+            lastAlbum = apiTrack.albumName
+            lastContextUri = effectiveContextUri
+            lastContextTitle = effectiveContextTitle
+            lastContextTypeHint = effectiveContextTypeHint
+
+            if (!apiTrack.coverUrl.isNullOrBlank()) {
+                val hasCustomPlCover = effectiveContextUri?.startsWith("spotify:playlist:") == true && playlistCoverCache.containsKey(effectiveContextUri)
+                if (!hasCustomPlCover || lastCoverUrl.isNullOrBlank()) {
+                    lastCoverUrl = apiTrack.coverUrl
+                }
+            }
+            if (apiTrack.durationMs > 0L) {
+                lastDurationMs = apiTrack.durationMs
+            }
+
+            val wasPlaying = lastIsPlaying
+            lastIsPlaying = isPlaying
+
+            if (progressMs >= 0L) {
+                val isSuddenZeroOnPause = !isPlaying && progressMs <= 1000L && lastPositionMs > 3000L
+                if (!isSuddenZeroOnPause) {
+                    lastPositionMs = progressMs
+                }
+            }
+
+            updateRepositoryState(context, "WebApiEnrich")
+
+            if (wasPlaying && !isPlaying) {
+                flushBookmark(context, "WebApiPause")
+            } else if (isPlaying && (now - lastSaveTimeMs >= 10_000L) && lastPositionMs > 2000L) {
+                flushBookmark(context, "WebApiEnrich")
+            }
+
+            return@withContext isPlaying
+        } catch (e: Exception) {
+            Log.d(TAG, "syncFromAuthoritativeApi Fehler: ${e.message}")
+            return@withContext lastIsPlaying
+        }
+    }
+
     fun enrichFromSpotifyApi(context: Context) {
         val authManager = SpotifyAuthManager.getInstance(context)
         if (!authManager.isLoggedIn()) return
         trackerScope.launch {
             try {
-                val apiClient = SpotifyApiClient.getInstance(context)
-
-                // 1. Wenn lastContextUri bereits bekannt ist und eine echte Spotify-Playlist ist:
-                val curContextUri = lastContextUri
-                if (!curContextUri.isNullOrBlank() &&
-                    curContextUri.startsWith("spotify:playlist:") &&
-                    !curContextUri.startsWith("spotify:playlist:local_")
-                ) {
-                    val plId = curContextUri.removePrefix("spotify:playlist:")
-                    val cached = playlistNameCache[curContextUri]
-                    val cachedCover = playlistCoverCache[curContextUri]
-                    if (!cached.isNullOrBlank() && !cachedCover.isNullOrBlank()) {
-                        lastContextTitle = cached
-                        lastCoverUrl = cachedCover
-                    } else {
-                        val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
-                        if (plInfo != null) {
-                            playlistNameCache[curContextUri] = plInfo.name
-                            lastContextTitle = plInfo.name
-                            if (!plInfo.coverUrl.isNullOrBlank()) {
-                                playlistCoverCache[curContextUri] = plInfo.coverUrl
-                                lastCoverUrl = plInfo.coverUrl
-                            }
-                            val repository = BookmarkRepository.initialize(context)
-                            repository.updateBookmarkContextTitle(curContextUri, plInfo.name, plInfo.coverUrl)
-                            repository.cleanupSupersededBookmarks(
-                                canonicalId = curContextUri,
-                                trackUri = lastTrackUri,
-                                album = lastAlbum,
-                                contextTitle = plInfo.name
-                            )
-                            updateRepositoryState(context, "WebApiEnrich")
-                            flushBookmark(context, "WebApiEnrich")
-                        }
-                    }
-                }
-
-                // 2. Nun Live-Status von /me/player abfragen (erfasst contextUri falls im Broadcast gefehlt)
-                val stateResult = apiClient.getNowPlaying()
-                val state = stateResult.getOrNull()
-                if (state != null && state.track != null) {
-                    val apiTrack = state.track
-                    val nowMs = System.currentTimeMillis()
-                    if (isWithinResumeGrace(nowMs)) {
-                        val resumed = pendingResumeBookmark
-                        if (resumed != null && resumed.trackUri.isNotBlank() &&
-                            resumed.trackUri != "spotify:track:active" &&
-                            resumed.trackUri != "spotify:track:notification" &&
-                            !isSameTrack(apiTrack.uri, apiTrack.name, resumed.trackUri, resumed.trackTitle)
-                        ) {
-                            return@launch
-                        }
-                    }
-
-                    // Nur anwenden, wenn /me/player auch zum aktuell verfolgten Track passt
-                    if (lastTrackUri.isNotBlank() &&
-                        lastTrackUri != "spotify:track:active" &&
-                        lastTrackUri != "spotify:track:notification" &&
-                        !isSameTrack(apiTrack.uri, apiTrack.name, lastTrackUri, lastTrackTitle)
-                    ) {
-                        return@launch
-                    }
-
-                    lastTrackUri = apiTrack.uri
-                    val apiContextUri = state.contextUri
-                        ?: if (activeResumedTrackUri == apiTrack.uri) activeResumedContextUri else null
-
-                    if (!apiContextUri.isNullOrBlank()) {
-                        val previousContextUri = lastContextUri
-                        lastContextUri = apiContextUri
-                        if (activeResumedContextUri != null && activeResumedContextUri != apiContextUri) {
-                            activeResumedContextUri = null
-                            activeResumedTrackUri = null
-                        }
-                        if (apiContextUri.startsWith("spotify:playlist:")) {
-                            lastContextTypeHint = "playlist"
-                        } else if (apiContextUri.startsWith("spotify:collection") || apiContextUri.contains(":collection")) {
-                            lastContextTypeHint = "playlist"
-                            if (lastContextTitle.isNullOrBlank() || lastContextTitle == "Spotify") {
-                                lastContextTitle = "Lieblingssongs"
-                            }
-                        } else if (apiContextUri.startsWith("spotify:album:")) {
-                            lastContextTypeHint = "album"
-                            if (previousContextUri != apiContextUri || lastContextTitle.isNullOrBlank()) {
-                                lastContextTitle = apiTrack.albumName.takeIf { it.isNotBlank() } ?: lastAlbum
-                            }
-                        }
-                    }
-                    if (!apiTrack.coverUrl.isNullOrBlank() && lastCoverUrl.isNullOrBlank()) {
-                        lastCoverUrl = apiTrack.coverUrl
-                    }
-                    if (!apiContextUri.isNullOrBlank() &&
-                        apiContextUri.startsWith("spotify:playlist:") &&
-                        !apiContextUri.startsWith("spotify:playlist:local_")
-                    ) {
-                        val plId = apiContextUri.removePrefix("spotify:playlist:")
-                        val cached = playlistNameCache[apiContextUri]
-                        val cachedCover = playlistCoverCache[apiContextUri]
-                        if (!cached.isNullOrBlank() && !cachedCover.isNullOrBlank()) {
-                            lastContextTitle = cached
-                            lastCoverUrl = cachedCover
-                        } else {
-                            val plInfo = apiClient.getPlaylistInfo(plId).getOrNull()
-                            if (plInfo != null) {
-                                playlistNameCache[apiContextUri] = plInfo.name
-                                lastContextTitle = plInfo.name
-                                if (!plInfo.coverUrl.isNullOrBlank()) {
-                                    playlistCoverCache[apiContextUri] = plInfo.coverUrl
-                                    lastCoverUrl = plInfo.coverUrl
-                                }
-                                val repository = BookmarkRepository.initialize(context)
-                                repository.updateBookmarkContextTitle(apiContextUri, plInfo.name, plInfo.coverUrl)
-                                repository.cleanupSupersededBookmarks(
-                                    canonicalId = apiContextUri,
-                                    trackUri = lastTrackUri,
-                                    album = lastAlbum,
-                                    contextTitle = plInfo.name
-                                )
-                            }
-                        }
-                    }
-                    updateRepositoryState(context, "WebApiEnrich")
-                    if (lastPositionMs > 1000L || lastIsPlaying) {
-                        flushBookmark(context, "WebApiEnrich")
-                    }
-                }
+                syncFromAuthoritativeApi(context)
             } catch (e: Exception) {
-                Log.d(TAG, "API-Enrichment übersprungen: ${e.message}")
+                Log.d(TAG, "API-Enrichment Fehler: ${e.message}")
             }
         }
     }

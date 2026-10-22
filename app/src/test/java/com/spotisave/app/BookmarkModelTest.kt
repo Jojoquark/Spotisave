@@ -810,5 +810,72 @@ class BookmarkModelTest {
             )
         )
     }
+
+    @Test
+    fun testLieblingssongsCollectionIdentity() {
+        val (idCol, uriCol) = PlaybackTracker.computeBookmarkIdentity(
+            contextUri = "spotify:collection:tracks",
+            contextTitle = "Lieblingssongs",
+            album = "My Album",
+            trackTitle = "Favorite Song",
+            trackUri = "spotify:track:fav123"
+        )
+        assertEquals("spotify:collection:tracks", idCol)
+        assertEquals("spotify:collection:tracks", uriCol)
+
+        val bm = Bookmark(
+            id = idCol,
+            contextUri = uriCol,
+            contextTitle = "Lieblingssongs",
+            trackTitle = "Favorite Song",
+            artist = "Fav Artist",
+            trackUri = "spotify:track:fav123",
+            positionMs = 45000L,
+            durationMs = 180000L
+        )
+        assertTrue(bm.isCollection)
+        assertTrue(bm.isPlaylist)
+        assertFalse(bm.isAlbum)
+        assertEquals("Lieblingssongs", bm.displayContextTitle)
+    }
+
+    @Test
+    fun testContextIsolationZeroBleed() {
+        // Playlist A
+        val (idPlA, uriPlA) = PlaybackTracker.computeBookmarkIdentity(
+            contextUri = "spotify:playlist:alpha",
+            contextTitle = "Rock Playlist",
+            album = "Rock Album",
+            trackTitle = "Song A",
+            trackUri = "spotify:track:songA"
+        )
+        assertEquals("spotify:playlist:alpha", idPlA)
+
+        // Lieblingssongs
+        val (idCol, uriCol) = PlaybackTracker.computeBookmarkIdentity(
+            contextUri = null,
+            contextTitle = "Lieblingssongs",
+            album = "Random Album",
+            trackTitle = "Fav Song",
+            trackUri = "spotify:track:fav"
+        )
+        assertEquals("spotify:collection:tracks", idCol)
+        assertEquals("spotify:collection:tracks", uriCol)
+
+        // Playlist B
+        val (idPlB, uriPlB) = PlaybackTracker.computeBookmarkIdentity(
+            contextUri = "spotify:playlist:beta",
+            contextTitle = "Jazz Playlist",
+            album = "Jazz Album",
+            trackTitle = "Song B",
+            trackUri = "spotify:track:songB"
+        )
+        assertEquals("spotify:playlist:beta", idPlB)
+
+        // Alle drei IDs sind vollständig verschieden und kollidieren niemals
+        assertTrue(idPlA != idCol)
+        assertTrue(idPlB != idCol)
+        assertTrue(idPlA != idPlB)
+    }
 }
 

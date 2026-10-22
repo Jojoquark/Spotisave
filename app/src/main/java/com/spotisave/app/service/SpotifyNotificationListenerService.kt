@@ -289,6 +289,7 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
                 )
             }
         }
+        PlaybackTracker.notifyPlaybackTriggered(applicationContext)
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
@@ -421,6 +422,7 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             coverUrl = coverUrl,
             contextTypeHint = effectiveContextType
         )
+        PlaybackTracker.notifyPlaybackTriggered(applicationContext)
     }
 
     private fun handlePlaybackState(controller: MediaController, state: PlaybackState?) {
@@ -489,6 +491,7 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             coverUrl = coverUrl,
             contextTypeHint = effectiveContextType
         )
+        PlaybackTracker.notifyPlaybackTriggered(applicationContext)
     }
 
     private fun releaseMediaController() {

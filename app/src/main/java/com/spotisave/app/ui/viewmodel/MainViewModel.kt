@@ -324,7 +324,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         var recoveredPlTitle: String? = null
 
                         if (nowPlayingResult?.track != null && PlaybackTracker.isSameTrack(nowPlayingResult.track.uri, nowPlayingResult.track.name, bm.trackUri, bm.trackTitle)) {
-                            if (nowPlayingResult.contextUri?.startsWith("spotify:playlist:") == true && !nowPlayingResult.contextUri.startsWith("spotify:playlist:local_")) {
+                            if (nowPlayingResult.contextUri?.startsWith("spotify:playlist:") == true && nowPlayingResult.contextUri?.startsWith("spotify:playlist:local_") == false) {
                                 recoveredPlUri = nowPlayingResult.contextUri
                             }
                         }
@@ -391,8 +391,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                         val matchingPlHistory = history.firstOrNull {
                             it.contextUri?.startsWith("spotify:playlist:") == true &&
-                                !it.contextUri.startsWith("spotify:playlist:local_") &&
-                                !it.contextUri.contains("collection") &&
+                                it.contextUri?.startsWith("spotify:playlist:local_") == false &&
+                                it.contextUri?.contains("collection") == false &&
                                 (bm.contextTitle.isNotBlank() &&
                                     bm.contextTitle != "Spotify" &&
                                     bm.contextTitle != "Playlist" &&

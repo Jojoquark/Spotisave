@@ -1994,7 +1994,7 @@ async function runTests() {
     assert(repoSrc27.includes('if (bookmark.isCollection ||') &&
            repoSrc27.includes('!bookmark.isPlaylist ||') &&
            repoSrc27.includes('bookmark.contextUri?.startsWith("spotify:playlist:") != true ||') &&
-           repoSrc27.includes('bookmark.contextUri.startsWith("spotify:playlist:local_")'),
+           repoSrc27.includes('startsWith("spotify:playlist:local_")'),
            'BookmarkRepository.kt saveBookmark strictly guards against non-playlist and collection entries');
 
     // 4. index.html strict playlist-only persistence

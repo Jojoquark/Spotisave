@@ -54,7 +54,7 @@ class BookmarkRepository private constructor(context: Context) {
                     bm.contextTitle.equals("Lieblingssongs", ignoreCase = true) ||
                     bm.contextTitle.equals("Liked Songs", ignoreCase = true) ||
                     bm.contextUri?.startsWith("spotify:playlist:") != true ||
-                    bm.contextUri.startsWith("spotify:playlist:local_")
+                    bm.contextUri?.startsWith("spotify:playlist:local_") == true
                 if (isBad) {
                     dbHelper.deleteBookmark(bm.id)
                 }
@@ -75,7 +75,7 @@ class BookmarkRepository private constructor(context: Context) {
         if (bookmark.isCollection ||
             !bookmark.isPlaylist ||
             bookmark.contextUri?.startsWith("spotify:playlist:") != true ||
-            bookmark.contextUri.startsWith("spotify:playlist:local_") ||
+            bookmark.contextUri?.startsWith("spotify:playlist:local_") == true ||
             bookmark.id.contains("warteschlange", ignoreCase = true) ||
             bookmark.id.contains("queue", ignoreCase = true) ||
             bookmark.contextTitle.equals("Warteschlange", ignoreCase = true) ||

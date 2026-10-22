@@ -1156,18 +1156,21 @@ class BookmarkModelTest {
         )
 
         // 4. Strikter Playlist-Only Guard: Lieblingssongs werden NIEMALS persistiert
+        val uri = likedSongBookmark.contextUri
         val isRealCanonicalPlaylist = likedSongBookmark.isPlaylist &&
             !likedSongBookmark.isCollection &&
-            likedSongBookmark.contextUri?.startsWith("spotify:playlist:") == true &&
-            !likedSongBookmark.contextUri.startsWith("spotify:playlist:local_")
+            uri != null &&
+            uri.startsWith("spotify:playlist:") &&
+            !uri.startsWith("spotify:playlist:local_")
 
         assertFalse("Lieblingssong darf nicht als kanonische Playlist gelten", isRealCanonicalPlaylist)
 
         // Falls trotzdem saveBookmark aufgerufen würde:
         val guardPasses = !likedSongBookmark.isCollection &&
             likedSongBookmark.isPlaylist &&
-            likedSongBookmark.contextUri?.startsWith("spotify:playlist:") == true &&
-            !likedSongBookmark.contextUri.startsWith("spotify:playlist:local_") &&
+            uri != null &&
+            uri.startsWith("spotify:playlist:") &&
+            !uri.startsWith("spotify:playlist:local_") &&
             !likedSongBookmark.contextTitle.equals("Lieblingssongs", ignoreCase = true)
 
         assertFalse("BookmarkRepository.saveBookmark muss Lieblingssongs strikt blockieren", guardPasses)
@@ -1175,9 +1178,11 @@ class BookmarkModelTest {
         // 5. Simulation resolveMissingPlaylistTitles Heuristik:
         // Prüfen, dass kein History-Match über trackUri stattfindet!
         val matchingPlHistory = history.firstOrNull {
-            it.contextUri?.startsWith("spotify:playlist:") == true &&
-                !it.contextUri.startsWith("spotify:playlist:local_") &&
-                !it.contextUri.contains("collection") &&
+            val hUri = it.contextUri
+            hUri != null &&
+                hUri.startsWith("spotify:playlist:") &&
+                !hUri.startsWith("spotify:playlist:local_") &&
+                !hUri.contains("collection") &&
                 (likedSongBookmark.contextTitle.isNotBlank() &&
                     likedSongBookmark.contextTitle != "Spotify" &&
                     likedSongBookmark.contextTitle != "Playlist" &&
@@ -1240,10 +1245,12 @@ class BookmarkModelTest {
         )
 
         fun canPersist(bm: Bookmark): Boolean {
+            val bUri = bm.contextUri
             return bm.isPlaylist &&
                 !bm.isCollection &&
-                bm.contextUri?.startsWith("spotify:playlist:") == true &&
-                !bm.contextUri.startsWith("spotify:playlist:local_") &&
+                bUri != null &&
+                bUri.startsWith("spotify:playlist:") &&
+                !bUri.startsWith("spotify:playlist:local_") &&
                 !bm.contextTitle.equals("Lieblingssongs", ignoreCase = true) &&
                 !bm.contextTitle.equals("Liked Songs", ignoreCase = true)
         }

@@ -1358,8 +1358,8 @@ class BookmarkModelTest {
             )
         }
 
-        assertNotEquals("Target bookmark ID darf niemals Casual Drives sein", casualDrives.id, targetBookmark.id)
-        assertNotEquals("Target bookmark cover darf niemals Casual Drives sein", casualDrives.coverUrl, targetBookmark.coverUrl)
+        assertTrue("Target bookmark ID darf niemals Casual Drives sein", casualDrives.id != targetBookmark.id)
+        assertTrue("Target bookmark cover darf niemals Casual Drives sein", casualDrives.coverUrl != targetBookmark.coverUrl)
         assertEquals("spotify:track:schau_dir_zu", targetBookmark.id)
         assertFalse("Target bookmark für Lieblingssongs darf nicht als Playlist gelten", targetBookmark.isPlaylist && !targetBookmark.isCollection)
 

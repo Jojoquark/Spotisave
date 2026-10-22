@@ -934,8 +934,8 @@ class BookmarkModelTest {
         assertFalse(PlaybackTracker.matchesResumedTrack("spotify:track:frankreich_uri", "Ein Kompliment"))
         assertFalse(PlaybackTracker.matchesResumedTrack("spotify:track:other", "Other Title"))
 
-        // Außerhalb des Grace-Windows (> 7000ms)
-        assertFalse(PlaybackTracker.isWithinResumeGrace(now + 10_000L))
+        // Außerhalb des Grace-Windows (> 12_000ms)
+        assertFalse(PlaybackTracker.isWithinResumeGrace(now + 15_000L))
 
         // Zurücksetzen
         PlaybackTracker.setPendingResumeForTesting(null)

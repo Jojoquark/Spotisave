@@ -74,7 +74,7 @@ object UpdateChecker {
                 val asset = assets.optJSONObject(i) ?: continue
                 val name = asset.optString("name", "")
                 if (name.endsWith(".apk", ignoreCase = true)) {
-                    apkUrl = asset.optString("browser_download_url", null)
+                    apkUrl = asset.optString("browser_download_url").takeIf { it.isNotBlank() }
                     break
                 }
             }

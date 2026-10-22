@@ -343,7 +343,7 @@ class BookmarkModelTest {
     }
 
     @Test
-    fun testResolveNativeTargetUriPrefersSpecificTrackForPlaylistResume() {
+    fun testResolveNativeTargetUriPrefersPlaylistContextForPlaylistResume() {
         val playlistBookmark = Bookmark(
             id = "spotify:playlist:pl_a",
             contextUri = "spotify:playlist:pl_a",
@@ -354,8 +354,8 @@ class BookmarkModelTest {
             positionMs = 84_000L,
             durationMs = 210_000L
         )
-        // Native ACTION_VIEW must use trackUri so Spotify starts playing Track 7 instead of opening Playlist A overview
-        assertEquals("spotify:track:track_7_real_uri", ResumeHelper.resolveNativeTargetUri(playlistBookmark))
+        // Native ACTION_VIEW must prioritize playlist URI so Spotify opens inside the playlist context (not the album)
+        assertEquals("spotify:playlist:pl_a", ResumeHelper.resolveNativeTargetUri(playlistBookmark))
 
         // If trackUri is a local placeholder, fall back to contextUri
         val placeholderTrackBookmark = playlistBookmark.copy(trackUri = "spotify:track:local_12345")

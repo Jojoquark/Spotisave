@@ -96,7 +96,7 @@ fun StatusBottomSheet(
     onCheckUpdate: () -> Unit = {},
     isCheckingUpdate: Boolean = false,
     updateStatusMessage: String? = null,
-    currentVersionName: String = "1.1.0",
+    currentVersionName: String = "1.2.0",
     onDismissRequest: () -> Unit
 ) {
     val context = LocalContext.current

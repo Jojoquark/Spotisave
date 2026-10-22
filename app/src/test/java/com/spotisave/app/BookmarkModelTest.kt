@@ -663,6 +663,12 @@ class BookmarkModelTest {
         assertFalse(UpdateChecker.isNewerVersion("v1.0.9", "1.1.0"))
         assertFalse(UpdateChecker.isNewerVersion("1.0.0", "1.1.0"))
         assertFalse(UpdateChecker.isNewerVersion("", "1.1.0"))
+
+        // Checks for version 1.2.0
+        assertTrue(UpdateChecker.isNewerVersion("v1.2.1", "1.2.0"))
+        assertTrue(UpdateChecker.isNewerVersion("v1.3.0", "1.2.0"))
+        assertFalse(UpdateChecker.isNewerVersion("v1.2.0", "1.2.0"))
+        assertFalse(UpdateChecker.isNewerVersion("1.1.0", "1.2.0"))
     }
 
     @Test

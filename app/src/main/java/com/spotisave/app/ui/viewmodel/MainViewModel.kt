@@ -136,9 +136,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun checkForUpdates(manual: Boolean = false) {
         val currentVersion = try {
             val pInfo = getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0)
-            pInfo.versionName ?: "1.1.0"
+            pInfo.versionName ?: "1.2.0"
         } catch (_: Exception) {
-            "1.1.0"
+            "1.2.0"
         }
 
         viewModelScope.launch {

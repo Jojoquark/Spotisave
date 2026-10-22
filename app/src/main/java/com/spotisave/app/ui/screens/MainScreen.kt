@@ -574,8 +574,8 @@ fun MainScreen(
                 isCheckingUpdate = isCheckingUpdate,
                 updateStatusMessage = updateStatusMessage,
                 currentVersionName = try {
-                    context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.1.0"
-                } catch (_: Exception) { "1.1.0" },
+                    context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.2.0"
+                } catch (_: Exception) { "1.2.0" },
                 onDismissRequest = {
                     showStatusSheet = false
                     viewModel.checkPermissions()

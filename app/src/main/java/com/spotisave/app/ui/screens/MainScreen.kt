@@ -265,9 +265,6 @@ fun MainScreen(
                             bookmarks.find {
                                 !active.contextUri.isNullOrBlank() &&
                                     (it.contextUri == active.contextUri || it.id == active.contextUri)
-                            } ?: bookmarks.find {
-                                it.trackUri == active.trackUri &&
-                                    (active.contextUri.isNullOrBlank() || it.contextUri == active.contextUri)
                             }
                         } else null
                         val latest = if (active != null && active.trackTitle.isNotBlank()) {

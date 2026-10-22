@@ -95,13 +95,13 @@ fun HeroCard(
     val isPlaying = activePlayback?.isPlaying == true
     val trackUri = if (isLive) activePlayback!!.trackUri else latestBookmark?.trackUri ?: ""
 
-    val contextUri = if (isLive) activePlayback?.contextUri ?: latestBookmark?.contextUri else latestBookmark?.contextUri
-    val rawContextTitle = if (isLive) activePlayback?.contextTitle ?: latestBookmark?.contextTitle else latestBookmark?.contextTitle
+    val contextUri = if (isLive) activePlayback?.contextUri else latestBookmark?.contextUri
+    val rawContextTitle = if (isLive) activePlayback?.contextTitle else latestBookmark?.contextTitle
     val album = if (isLive) activePlayback!!.album else latestBookmark?.contextTitle ?: "Spotify"
 
     val isCollection = contextUri?.startsWith("spotify:collection") == true ||
         contextUri?.contains(":collection") == true ||
-        latestBookmark?.isCollection == true ||
+        (!isLive && latestBookmark?.isCollection == true) ||
         rawContextTitle?.equals("Lieblingssongs", ignoreCase = true) == true ||
         rawContextTitle?.equals("Liked Songs", ignoreCase = true) == true
 
@@ -109,19 +109,20 @@ fun HeroCard(
         rawContextTitle != "Spotify" &&
         !rawContextTitle.equals(album, ignoreCase = true)
 
-    val isPlaylist = contextUri?.startsWith("spotify:playlist:") == true ||
-        latestBookmark?.isPlaylist == true ||
-        isCollection ||
+    val isPlaylist = !isCollection && (
+        contextUri?.startsWith("spotify:playlist:") == true ||
+        (!isLive && latestBookmark?.isPlaylist == true) ||
         (isLive && hasPlaylistTitle)
-    val isAlbum = !isPlaylist && (
+    )
+    val isAlbum = !isPlaylist && !isCollection && (
         contextUri?.startsWith("spotify:album:") == true ||
-            latestBookmark?.isAlbum == true
-        )
+        (!isLive && latestBookmark?.isAlbum == true)
+    )
 
     val displayContextTitle = when {
         isCollection -> if (!rawContextTitle.isNullOrBlank() && rawContextTitle != "Spotify") rawContextTitle else "Lieblingssongs"
         !rawContextTitle.isNullOrBlank() && rawContextTitle != "Spotify" -> rawContextTitle
-        latestBookmark != null && latestBookmark.displayContextTitle.isNotBlank() -> latestBookmark.displayContextTitle
+        !isLive && latestBookmark != null && latestBookmark.displayContextTitle.isNotBlank() -> latestBookmark.displayContextTitle
         isPlaylist -> "Playlist"
         album.isNotBlank() && album != "Spotify" -> album
         else -> ""
@@ -289,7 +290,7 @@ fun HeroCard(
             ) {
                 // Artwork / Cover Image squircle (Apple HIG Liquid Glass Style)
                 AsyncCoverImage(
-                    coverUrl = activePlayback?.coverUrl ?: latestBookmark?.coverUrl,
+                    coverUrl = if (isLive) activePlayback?.coverUrl else latestBookmark?.coverUrl,
                     fallbackIcon = when {
                         isCollection -> Icons.Default.Favorite
                         isPlaylist -> Icons.Default.QueueMusic
@@ -434,25 +435,34 @@ fun HeroCard(
                             "album:${album.trim().lowercase().replace(Regex("[^a-z0-9_]"), "_")}"
                         else -> trackUri
                     }
+                    val isMatchingLatest = latestBookmark != null && (
+                        latestBookmark.id == fallbackId ||
+                            (!fallbackContextUri.isNullOrBlank() && latestBookmark.contextUri == fallbackContextUri)
+                    )
                     val targetBookmark = if (isLive && trackUri.isNotBlank()) {
-                        latestBookmark?.copy(
-                            trackTitle = trackTitle,
-                            artist = artist,
-                            trackUri = trackUri,
-                            contextUri = fallbackContextUri ?: latestBookmark.contextUri,
-                            contextTitle = if (displayContextTitle.isNotBlank()) displayContextTitle else latestBookmark.contextTitle,
-                            positionMs = positionMs,
-                            durationMs = if (durationMs > 0) durationMs else latestBookmark.durationMs
-                        ) ?: Bookmark(
-                            id = fallbackId,
-                            contextUri = fallbackContextUri,
-                            contextTitle = if (displayContextTitle.isNotBlank()) displayContextTitle else "Spotify",
-                            trackTitle = trackTitle,
-                            artist = artist,
-                            trackUri = trackUri,
-                            positionMs = positionMs,
-                            durationMs = durationMs
-                        )
+                        if (isMatchingLatest && latestBookmark != null) {
+                            latestBookmark?.copy(
+                                trackTitle = trackTitle,
+                                artist = artist,
+                                trackUri = trackUri,
+                                contextUri = fallbackContextUri ?: latestBookmark.contextUri,
+                                contextTitle = if (displayContextTitle.isNotBlank()) displayContextTitle else latestBookmark.contextTitle,
+                                positionMs = positionMs,
+                                durationMs = if (durationMs > 0) durationMs else latestBookmark.durationMs
+                            )
+                        } else {
+                            Bookmark(
+                                id = fallbackId,
+                                contextUri = fallbackContextUri,
+                                contextTitle = if (displayContextTitle.isNotBlank()) displayContextTitle else "Spotify",
+                                trackTitle = trackTitle,
+                                artist = artist,
+                                trackUri = trackUri,
+                                coverUrl = activePlayback?.coverUrl,
+                                positionMs = positionMs,
+                                durationMs = durationMs
+                            )
+                        }
                     } else {
                         latestBookmark ?: Bookmark(
                             id = fallbackId,
@@ -461,6 +471,7 @@ fun HeroCard(
                             trackTitle = trackTitle,
                             artist = artist,
                             trackUri = trackUri,
+                            coverUrl = activePlayback?.coverUrl,
                             positionMs = positionMs,
                             durationMs = durationMs
                         )

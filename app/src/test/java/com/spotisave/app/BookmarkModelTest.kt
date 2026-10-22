@@ -1297,5 +1297,147 @@ class BookmarkModelTest {
         assertFalse("Echte Playlist ist keine Collection", livePlaylist.isCollection)
         assertEquals("Casual Drives", livePlaylist.displayContextTitle)
     }
+
+    @Test
+    fun testHeroCardTargetBookmarkDoesNotHijackCasualDrivesOnLikedSong() {
+        val casualDrives = Bookmark(
+            id = "spotify:playlist:casual_drives",
+            contextUri = "spotify:playlist:casual_drives",
+            contextTitle = "Casual Drives",
+            trackTitle = "Drive Slow",
+            artist = "Kanye West",
+            trackUri = "spotify:track:drive_slow",
+            coverUrl = "https://i.scdn.co/image/casual_drives_cover.jpg",
+            positionMs = 135_000L,
+            durationMs = 240_000L
+        )
+        val bookmarks = listOf(casualDrives)
+
+        // Live playback plays a Liked Song "Schau dir zu"
+        val active = PlaybackStateModel(
+            trackUri = "spotify:track:schau_dir_zu",
+            trackTitle = "Schau dir zu",
+            artist = "Edwin Rosen",
+            album = "Schau dir zu EP",
+            contextTitle = "Lieblingssongs",
+            contextUri = "spotify:collection:tracks",
+            coverUrl = "https://i.scdn.co/image/schau_dir_zu_cover.jpg",
+            isPlaying = true,
+            positionMs = 45_000L,
+            durationMs = 190_000L
+        )
+
+        // 1. In MainScreen: matchingBookmark must strictly match contextUri, NOT trackUri!
+        val matchingBookmark = bookmarks.find {
+            !active.contextUri.isNullOrBlank() &&
+                (it.contextUri == active.contextUri || it.id == active.contextUri)
+        }
+        assertNull("Lieblingssong darf niemals Casual Drives Bookmark matchen!", matchingBookmark)
+
+        // 2. In HeroCard: When isLive is true and latestBookmark is null or from another context:
+        val fallbackContextUri: String? = null
+        val fallbackId = active.trackUri
+        val isMatchingLatest = matchingBookmark != null && (
+            matchingBookmark.id == fallbackId ||
+                (!fallbackContextUri.isNullOrBlank() && matchingBookmark.contextUri == fallbackContextUri)
+        )
+
+        val targetBookmark = if (isMatchingLatest && matchingBookmark != null) {
+            matchingBookmark.copy(trackTitle = active.trackTitle)
+        } else {
+            Bookmark(
+                id = fallbackId,
+                contextUri = fallbackContextUri,
+                contextTitle = "Lieblingssongs",
+                trackTitle = active.trackTitle,
+                artist = active.artist,
+                trackUri = active.trackUri,
+                coverUrl = active.coverUrl,
+                positionMs = active.positionMs,
+                durationMs = active.durationMs
+            )
+        }
+
+        assertNotEquals("Target bookmark ID darf niemals Casual Drives sein", casualDrives.id, targetBookmark.id)
+        assertNotEquals("Target bookmark cover darf niemals Casual Drives sein", casualDrives.coverUrl, targetBookmark.coverUrl)
+        assertEquals("spotify:track:schau_dir_zu", targetBookmark.id)
+        assertFalse("Target bookmark für Lieblingssongs darf nicht als Playlist gelten", targetBookmark.isPlaylist && !targetBookmark.isCollection)
+
+        // Original Casual Drives remains pristine
+        assertEquals("Casual Drives", casualDrives.contextTitle)
+        assertEquals("Drive Slow", casualDrives.trackTitle)
+        assertEquals("spotify:track:drive_slow", casualDrives.trackUri)
+    }
+
+    @Test
+    fun testImportBookmarksJsonFiltersNonPlaylists() {
+        val jsonBackup = """
+            [
+                {
+                    "id": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
+                    "contextUri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
+                    "contextTitle": "Today's Top Hits",
+                    "trackTitle": "Espresso",
+                    "artist": "Sabrina Carpenter",
+                    "trackUri": "spotify:track:espresso",
+                    "positionMs": 50000,
+                    "durationMs": 180000
+                },
+                {
+                    "id": "spotify:collection:tracks",
+                    "contextUri": "spotify:collection:tracks",
+                    "contextTitle": "Lieblingssongs",
+                    "trackTitle": "Schau dir zu",
+                    "artist": "Edwin Rosen",
+                    "trackUri": "spotify:track:schau_dir_zu",
+                    "positionMs": 45000,
+                    "durationMs": 190000
+                },
+                {
+                    "id": "album:dark_side",
+                    "contextUri": "spotify:album:dark_side",
+                    "contextTitle": "The Dark Side",
+                    "trackTitle": "Money",
+                    "artist": "Pink Floyd",
+                    "trackUri": "spotify:track:money",
+                    "positionMs": 30000,
+                    "durationMs": 200000
+                },
+                {
+                    "id": "spotify:playlist:local_roadtrip",
+                    "contextUri": "spotify:playlist:local_roadtrip",
+                    "contextTitle": "Roadtrip",
+                    "trackTitle": "Song B",
+                    "artist": "Artist B",
+                    "trackUri": "spotify:track:b",
+                    "positionMs": 15000,
+                    "durationMs": 120000
+                }
+            ]
+        """.trimIndent()
+
+        val parsed = Bookmark.importBookmarksFromJson(jsonBackup)
+        assertEquals("Alle 4 Einträge im JSON geparst", 4, parsed.size)
+
+        val validPlaylistsOnly = parsed.filter { bm ->
+            val eff = bm.contextUri?.takeIf { it.isNotBlank() } ?: bm.id.takeIf { it.startsWith("spotify:playlist:") }
+            eff != null &&
+                eff.startsWith("spotify:playlist:") &&
+                !eff.startsWith("spotify:playlist:local_") &&
+                !bm.id.startsWith("spotify:playlist:local_") &&
+                !bm.id.startsWith("album:") &&
+                !bm.isCollection &&
+                !bm.id.contains("warteschlange", ignoreCase = true) &&
+                !bm.id.contains("queue", ignoreCase = true) &&
+                !bm.contextTitle.equals("Warteschlange", ignoreCase = true) &&
+                !bm.contextTitle.equals("Queue", ignoreCase = true) &&
+                !bm.contextTitle.equals("Lieblingssongs", ignoreCase = true) &&
+                !bm.contextTitle.equals("Liked Songs", ignoreCase = true)
+        }
+
+        assertEquals("Nur die echte Spotify-Playlist darf importiert werden", 1, validPlaylistsOnly.size)
+        assertEquals("spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", validPlaylistsOnly[0].id)
+        assertEquals("Today's Top Hits", validPlaylistsOnly[0].contextTitle)
+    }
 }
 

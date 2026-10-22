@@ -1993,11 +1993,14 @@ async function runTests() {
            'BookmarkRepository.kt reloadBookmarks purges collection and album bookmarks from SQLite');
     assert(repoSrc27.includes('if (bookmark.isCollection ||') &&
            repoSrc27.includes('!bookmark.isPlaylist ||') &&
-           repoSrc27.includes('bookmark.contextUri?.startsWith("spotify:playlist:") != true ||') &&
            repoSrc27.includes('startsWith("spotify:playlist:local_")'),
            'BookmarkRepository.kt saveBookmark strictly guards against non-playlist and collection entries');
+    assert(repoSrc27.includes('val validPlaylistsOnly = parsed.filter') &&
+           repoSrc27.includes('!bm.isCollection') &&
+           repoSrc27.includes('dbHelper.importBookmarks(validPlaylistsOnly)'),
+           'BookmarkRepository.kt importBookmarksJson strictly filters out collections, albums, and local placeholders');
 
-    // 4. index.html strict playlist-only persistence
+    // 4. index.html strict playlist-only persistence & zero track-bleed
     assert(indexHtmlSrc27.includes('const isRealPlaylist = Boolean(') &&
            indexHtmlSrc27.includes('effectiveContext.type === \'playlist\' &&') &&
            indexHtmlSrc27.includes('!isCollectionContext &&') &&
@@ -2005,8 +2008,28 @@ async function runTests() {
            'index.html checkNowPlaying only saves genuine Spotify playlists as bookmarks');
     assert(indexHtmlSrc27.includes('rContext.type === \'playlist\' && rContext.uri && rContext.uri.startsWith(\'spotify:playlist:\') && !rContext.uri.includes(\':collection\')'),
            'index.html recentPlayed only saves genuine Spotify playlists as bookmarks');
+    assert(!indexHtmlSrc27.includes('Object.values(savedMap).find(item => item && item.track_uri === track.uri && item.context_uri)'),
+           'index.html completely removed dangerous track-only savedMap fallback search when context is null');
 
-    // 5. Deep Simulation of the exact user bug: Casual Drives cannot be hijacked by Edwin Rosen - Schau dir zu (Liked Song)
+    // 5. MainScreen.kt & HeroCard.kt UI context isolation
+    const mainScreenSrc27 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/MainScreen.kt'), 'utf8');
+    const heroCardSrc27 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/HeroCard.kt'), 'utf8');
+
+    assert(!mainScreenSrc27.includes('it.trackUri == active.trackUri') &&
+           mainScreenSrc27.includes('!active.contextUri.isNullOrBlank() &&') &&
+           mainScreenSrc27.includes('(it.contextUri == active.contextUri || it.id == active.contextUri)'),
+           'MainScreen.kt strictly limits matchingBookmark to contextUri and deleted track-based fallback matching');
+
+    assert(heroCardSrc27.includes('val contextUri = if (isLive) activePlayback?.contextUri else latestBookmark?.contextUri') &&
+           heroCardSrc27.includes('coverUrl = if (isLive) activePlayback?.coverUrl else latestBookmark?.coverUrl'),
+           'HeroCard.kt isolates live playback context and artwork from unrelated latestBookmark');
+
+    assert(heroCardSrc27.includes('val isMatchingLatest = latestBookmark != null &&') &&
+           heroCardSrc27.includes('if (isMatchingLatest && latestBookmark != null) {') &&
+           heroCardSrc27.includes('latestBookmark?.copy('),
+           'HeroCard.kt only copies latestBookmark if it matches the current playback context');
+
+    // 6. Deep Simulation of the exact user bug: Casual Drives cannot be hijacked by Edwin Rosen - Schau dir zu (Liked Song)
     {
         const userSavedBookmarks = {
             'spotify:playlist:casual_drives': {
@@ -2049,6 +2072,34 @@ async function runTests() {
         assert(casualDrives.contextTitle === 'Casual Drives', 'Simulation: Casual Drives title is still "Casual Drives" (NOT "Lieblingssongs"!)');
         assert(casualDrives.coverUrl === 'https://i.scdn.co/image/casual_drives_cover.jpg', 'Simulation: Casual Drives coverUrl is preserved');
         assert(casualDrives.positionMs === 135000, 'Simulation: Casual Drives position is preserved at 135000ms');
+
+        // Simulation: HeroCard click on "Fortfahren" while playing liked song
+        const isLive = true;
+        const activeTrackUri = incomingLikedSong.trackUri;
+        const latestBookmark = casualDrives; // Was first in DB
+        const isMatchingLatest = latestBookmark != null && (
+            latestBookmark.id === incomingLikedSong.contextUri ||
+            latestBookmark.contextUri === incomingLikedSong.contextUri
+        );
+        assert(!isMatchingLatest, 'Simulation: Liked song does not match Casual Drives context');
+
+        const heroTargetBookmark = (isLive && activeTrackUri)
+            ? ((isMatchingLatest && latestBookmark)
+                ? Object.assign({}, latestBookmark, { trackTitle: incomingLikedSong.trackTitle })
+                : {
+                    id: incomingLikedSong.trackUri,
+                    contextUri: null,
+                    contextTitle: incomingLikedSong.contextTitle,
+                    trackTitle: incomingLikedSong.trackTitle,
+                    artist: incomingLikedSong.artist,
+                    trackUri: incomingLikedSong.trackUri,
+                    coverUrl: 'https://i.scdn.co/image/schau_dir_zu_cover.jpg'
+                })
+            : latestBookmark;
+
+        assert(heroTargetBookmark.id !== casualDrives.id, 'Simulation: HeroCard target bookmark ID is not Casual Drives');
+        assert(heroTargetBookmark.coverUrl !== casualDrives.coverUrl, 'Simulation: HeroCard target bookmark does not steal Casual Drives cover');
+        assert(casualDrives.trackTitle === 'Drive Slow', 'Simulation: Casual Drives trackTitle still Drive Slow after HeroCard action');
     }
 
     console.log('\n========================================');

@@ -1728,7 +1728,7 @@
                 const savedMap = getBookmarks();
                 const resumedMatch = (engineState.pendingResume && engineState.pendingResume.track_uri === track.uri)
                     ? engineState.pendingResume
-                    : Object.values(savedMap).find(item => item && item.track_uri === track.uri && item.context_uri);
+                    : null;
                 if (resumedMatch && resumedMatch.context_uri) {
                     const inferredType = resumedMatch.context_type || (resumedMatch.context_uri.includes(':album:') ? 'album' : 'playlist');
                     effectiveContext = { type: inferredType, uri: resumedMatch.context_uri };

@@ -41,6 +41,7 @@ class BookmarkRepository private constructor(context: Context) {
         scope.launch {
             val list = dbHelper.getAllBookmarks()
             val cleanList = list.filterNot { bm ->
+                val effContextUri = bm.contextUri?.takeIf { it.isNotBlank() } ?: bm.id.takeIf { it.startsWith("spotify:playlist:") }
                 val isBad = bm.id.contains("warteschlange", ignoreCase = true) ||
                     bm.id.contains("queue", ignoreCase = true) ||
                     bm.contextTitle.equals("Warteschlange", ignoreCase = true) ||
@@ -49,12 +50,13 @@ class BookmarkRepository private constructor(context: Context) {
                     !bm.isPlaylist ||
                     bm.id.startsWith("album:") ||
                     bm.id == "spotify:collection:tracks" ||
+                    bm.id.startsWith("spotify:playlist:local_") ||
                     bm.contextUri?.startsWith("spotify:collection") == true ||
                     bm.contextUri?.contains(":collection") == true ||
                     bm.contextTitle.equals("Lieblingssongs", ignoreCase = true) ||
                     bm.contextTitle.equals("Liked Songs", ignoreCase = true) ||
-                    bm.contextUri?.startsWith("spotify:playlist:") != true ||
-                    bm.contextUri?.startsWith("spotify:playlist:local_") == true
+                    effContextUri?.startsWith("spotify:playlist:") != true ||
+                    effContextUri.startsWith("spotify:playlist:local_")
                 if (isBad) {
                     dbHelper.deleteBookmark(bm.id)
                 }
@@ -72,10 +74,13 @@ class BookmarkRepository private constructor(context: Context) {
     }
 
     fun saveBookmark(bookmark: Bookmark) {
+        val effContextUri = bookmark.contextUri?.takeIf { it.isNotBlank() } ?: bookmark.id.takeIf { it.startsWith("spotify:playlist:") }
         if (bookmark.isCollection ||
             !bookmark.isPlaylist ||
-            bookmark.contextUri?.startsWith("spotify:playlist:") != true ||
-            bookmark.contextUri?.startsWith("spotify:playlist:local_") == true ||
+            effContextUri?.startsWith("spotify:playlist:") != true ||
+            effContextUri.startsWith("spotify:playlist:local_") ||
+            bookmark.id.startsWith("album:") ||
+            bookmark.id.startsWith("spotify:playlist:local_") ||
             bookmark.id.contains("warteschlange", ignoreCase = true) ||
             bookmark.id.contains("queue", ignoreCase = true) ||
             bookmark.contextTitle.equals("Warteschlange", ignoreCase = true) ||
@@ -254,12 +259,27 @@ class BookmarkRepository private constructor(context: Context) {
 
     fun importBookmarksJson(jsonString: String, onResult: (Int) -> Unit = {}) {
         val parsed = Bookmark.importBookmarksFromJson(jsonString)
-        if (parsed.isEmpty()) {
+        val validPlaylistsOnly = parsed.filter { bm ->
+            val eff = bm.contextUri?.takeIf { it.isNotBlank() } ?: bm.id.takeIf { it.startsWith("spotify:playlist:") }
+            eff != null &&
+                eff.startsWith("spotify:playlist:") &&
+                !eff.startsWith("spotify:playlist:local_") &&
+                !bm.id.startsWith("spotify:playlist:local_") &&
+                !bm.id.startsWith("album:") &&
+                !bm.isCollection &&
+                !bm.id.contains("warteschlange", ignoreCase = true) &&
+                !bm.id.contains("queue", ignoreCase = true) &&
+                !bm.contextTitle.equals("Warteschlange", ignoreCase = true) &&
+                !bm.contextTitle.equals("Queue", ignoreCase = true) &&
+                !bm.contextTitle.equals("Lieblingssongs", ignoreCase = true) &&
+                !bm.contextTitle.equals("Liked Songs", ignoreCase = true)
+        }
+        if (validPlaylistsOnly.isEmpty()) {
             onResult(0)
             return
         }
         scope.launch {
-            val importedCount = dbHelper.importBookmarks(parsed)
+            val importedCount = dbHelper.importBookmarks(validPlaylistsOnly)
             _bookmarks.value = dbHelper.getAllBookmarks()
             kotlinx.coroutines.withContext(Dispatchers.Main) {
                 onResult(importedCount)

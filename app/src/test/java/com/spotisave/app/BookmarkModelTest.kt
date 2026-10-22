@@ -995,5 +995,111 @@ class BookmarkModelTest {
         PlaybackTracker.setPendingResumeForTesting(null)
         SpotifyNotificationListenerService.setNotificationContextForTesting(null, null, null)
     }
+
+    @Test
+    fun testIsSameTrackWithPlaceholdersAndCanonicalIds() {
+        // Placeholder-URIs (active, notification) dürfen NIEMALS zu fälschlichen Matches führen, wenn Titel verschieden sind
+        assertFalse(
+            "Placeholder active URIs mit verschiedenen Titeln dürfen niemals matchen",
+            PlaybackTracker.isSameTrack("spotify:track:active", "Ein Kompliment", "spotify:track:active", "Drive Slow")
+        )
+        assertFalse(
+            "Placeholder notification URIs mit verschiedenen Titeln dürfen niemals matchen",
+            PlaybackTracker.isSameTrack("spotify:track:notification", "Song A", "spotify:track:notification", "Song B")
+        )
+        assertTrue(
+            "Placeholder active URIs mit identischem Titel müssen matchen",
+            PlaybackTracker.isSameTrack("spotify:track:active", "Ein Kompliment", "spotify:track:active", "ein kompliment")
+        )
+
+        // Unterschiedliche kanonische URIs dürfen selbst bei gleichem Titel (z.B. 'Intro') NIEMALS matchen
+        assertFalse(
+            "Verschiedene kanonische Spotify Track IDs dürfen niemals matchen, auch wenn der Titel identisch ist",
+            PlaybackTracker.isSameTrack("spotify:track:canonical_1", "Intro", "spotify:track:canonical_2", "Intro")
+        )
+        assertTrue(
+            "Identische kanonische Spotify Track IDs müssen matchen",
+            PlaybackTracker.isSameTrack("spotify:track:canonical_1", "Intro", "spotify:track:canonical_1", "Intro")
+        )
+
+        // Null-URI Fallback auf Titel-Matching
+        assertTrue(
+            "Ohne URIs muss Titel-Matching greifen",
+            PlaybackTracker.isSameTrack(null, "Midnight City", null, "midnight city")
+        )
+        assertFalse(
+            "Ohne URIs müssen unterschiedliche Titel false liefern",
+            PlaybackTracker.isSameTrack(null, "Midnight City", null, "Outro")
+        )
+    }
+
+    @Test
+    fun testNotificationContextScopingStrictBoundary() {
+        SpotifyNotificationListenerService.setNotificationContextForTesting(
+            contextTitle = "Casual Drives",
+            trackTitle = "In",
+            contextType = "playlist"
+        )
+        // Kurzer String "In" darf NIEMALS "Ein Kompliment" matchen!
+        assertNull(
+            "Kurzer Substring darf nicht fälschlich für fremde Tracks greifen",
+            SpotifyNotificationListenerService.getContextTitleForTrack("Ein Kompliment")
+        )
+        assertNull(
+            "Drive darf nicht fälschlich Night Drive matchen",
+            SpotifyNotificationListenerService.getContextTitleForTrack("Night Drive")
+        )
+        // Aber exakt "In" matcht
+        assertEquals("Casual Drives", SpotifyNotificationListenerService.getContextTitleForTrack("In"))
+
+        SpotifyNotificationListenerService.setNotificationContextForTesting(null, null, null)
+    }
+
+    @Test
+    fun testRapidSuccessivePlaylistResume() {
+        val plA = Bookmark(
+            id = "spotify:playlist:pl_a",
+            contextUri = "spotify:playlist:pl_a",
+            contextTitle = "Playlist A",
+            trackTitle = "Track A",
+            artist = "Artist A",
+            trackUri = "spotify:track:uri_a",
+            positionMs = 10_000L
+        )
+        val plB = Bookmark(
+            id = "spotify:playlist:pl_b",
+            contextUri = "spotify:playlist:pl_b",
+            contextTitle = "Playlist B",
+            trackTitle = "Track B",
+            artist = "Artist B",
+            trackUri = "spotify:track:uri_b",
+            positionMs = 20_000L
+        )
+        val plC = Bookmark(
+            id = "spotify:playlist:pl_c",
+            contextUri = "spotify:playlist:pl_c",
+            contextTitle = "Playlist C",
+            trackTitle = "Track C",
+            artist = "Artist C",
+            trackUri = "spotify:track:uri_c",
+            positionMs = 30_000L
+        )
+
+        val t0 = System.currentTimeMillis()
+        PlaybackTracker.setPendingResumeForTesting(plA, t0)
+        assertTrue(PlaybackTracker.matchesResumedTrack("spotify:track:uri_a", "Track A"))
+
+        val t1 = t0 + 200L
+        PlaybackTracker.setPendingResumeForTesting(plB, t1)
+        assertFalse(PlaybackTracker.matchesResumedTrack("spotify:track:uri_a", "Track A"))
+        assertTrue(PlaybackTracker.matchesResumedTrack("spotify:track:uri_b", "Track B"))
+
+        val t2 = t1 + 300L
+        PlaybackTracker.setPendingResumeForTesting(plC, t2)
+        assertFalse(PlaybackTracker.matchesResumedTrack("spotify:track:uri_b", "Track B"))
+        assertTrue(PlaybackTracker.matchesResumedTrack("spotify:track:uri_c", "Track C"))
+
+        PlaybackTracker.setPendingResumeForTesting(null)
+    }
 }
 

@@ -321,7 +321,12 @@ object PlaybackTracker {
                 if (histByTitle?.contextUri != null) return histByTitle.contextUri
             }
 
-            if (!trackUri.isNullOrBlank()) {
+            val isPlaceholderTrack = trackUri.isNullOrBlank() ||
+                trackUri == "spotify:track:active" ||
+                trackUri == "spotify:track:notification" ||
+                trackUri.startsWith("spotify:track:local_")
+
+            if (!isPlaceholderTrack) {
                 val bmByTrack = savedBookmarks.firstOrNull {
                     it.isPlaylist &&
                         it.trackUri == trackUri &&
@@ -683,6 +688,15 @@ object PlaybackTracker {
         coverUrl: String? = null,
         contextTypeHint: String? = null
     ) {
+        val now = System.currentTimeMillis()
+        if (isWithinResumeGrace(now)) {
+            val resumed = pendingResumeBookmark
+            if (resumed != null && !matchesResumedTrack(trackUri, trackTitle)) {
+                Log.d(TAG, "onMediaSessionUpdate: Ignoriere Übergangs-Event für '$trackTitle' ($trackUri) während Resume-Schutzfenster für '${resumed.trackTitle}'")
+                return
+            }
+        }
+
         val prevTrackUri = lastTrackUri
         val prevPositionMs = lastPositionMs
         val isTrackSwitch = prevTrackUri.isNotBlank() &&
@@ -729,6 +743,9 @@ object PlaybackTracker {
         if (!lastIsPlaying || positionMs <= 0L) return
         if (isWithinResumeGrace()) {
             val resumed = pendingResumeBookmark
+            if (resumed != null && !matchesResumedTrack(lastTrackUri, lastTrackTitle)) {
+                return
+            }
             if (resumed != null && resumed.positionMs > 3000L && positionMs < resumed.positionMs - 3000L) {
                 return
             }
@@ -765,6 +782,14 @@ object PlaybackTracker {
 
     fun flushBookmark(context: Context, source: String) {
         if (lastTrackTitle.isBlank() || lastTrackUri.isBlank()) return
+
+        if (isWithinResumeGrace()) {
+            val resumed = pendingResumeBookmark
+            if (resumed != null && !matchesResumedTrack(lastTrackUri, lastTrackTitle)) {
+                Log.d(TAG, "flushBookmark: Unterdrücke Speichern für abweichenden Track '$lastTrackTitle' ($lastTrackUri) während Resume-Schutzfenster für '${resumed.trackTitle}'")
+                return
+            }
+        }
 
         if (lastContextUri.isNullOrBlank()) {
             val resolved = resolveKnownPlaylistContextUri(context, lastTrackUri, lastContextTitle)
@@ -871,19 +896,31 @@ object PlaybackTracker {
     }
 
     fun isSameTrack(uriA: String?, titleA: String?, uriB: String?, titleB: String?): Boolean {
-        if (uriA.isNullOrBlank() || uriB.isNullOrBlank()) {
-            if (!titleA.isNullOrBlank() && !titleB.isNullOrBlank()) {
-                return titleA.trim().equals(titleB.trim(), ignoreCase = true)
+        val cleanTitleA = titleA?.trim()?.takeIf { it.isNotBlank() }
+        val cleanTitleB = titleB?.trim()?.takeIf { it.isNotBlank() }
+
+        val isPlaceholderA = uriA.isNullOrBlank() ||
+            uriA == "spotify:track:active" ||
+            uriA == "spotify:track:notification" ||
+            uriA.startsWith("spotify:track:local_")
+        val isPlaceholderB = uriB.isNullOrBlank() ||
+            uriB == "spotify:track:active" ||
+            uriB == "spotify:track:notification" ||
+            uriB.startsWith("spotify:track:local_")
+
+        // Wenn beide echte, kanonische Spotify Track-URIs besitzen:
+        if (!isPlaceholderA && !isPlaceholderB) {
+            val idA = uriA!!.substringAfterLast(":").substringBefore("?").trim()
+            val idB = uriB!!.substringAfterLast(":").substringBefore("?").trim()
+            if (idA.isNotBlank() && idB.isNotBlank()) {
+                return idA.equals(idB, ignoreCase = true)
             }
-            return false
         }
-        val idA = uriA.substringAfterLast(":").substringBefore("?").trim()
-        val idB = uriB.substringAfterLast(":").substringBefore("?").trim()
-        if (idA.isNotBlank() && idB.isNotBlank() && idA.equals(idB, ignoreCase = true)) {
-            return true
-        }
-        if (!titleA.isNullOrBlank() && !titleB.isNullOrBlank() && titleA.trim().equals(titleB.trim(), ignoreCase = true)) {
-            return true
+
+        // Falls mindestens ein Track eine Placeholder-URI hat:
+        // Matching MUSS über den Songtitel erfolgen (niemals über placeholder "active" == "active"!)
+        if (cleanTitleA != null && cleanTitleB != null) {
+            return cleanTitleA.equals(cleanTitleB, ignoreCase = true)
         }
         return false
     }

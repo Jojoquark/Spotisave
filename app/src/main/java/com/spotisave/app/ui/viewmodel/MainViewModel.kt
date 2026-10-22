@@ -331,11 +331,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                         if (recoveredPlUri == null) {
                             val recentResult = apiClient.getRecentlyPlayedTracks(50).getOrNull().orEmpty()
-                            val matchRecent = recentResult.firstOrNull {
-                                it.trackUri == bm.trackUri &&
-                                    it.contextUri?.startsWith("spotify:playlist:") == true &&
-                                    !it.contextUri.startsWith("spotify:playlist:local_")
-                            }
+                            val isPlaceholderBm = bm.trackUri.endsWith(":active") || bm.trackUri.endsWith(":notification") || bm.trackUri.startsWith("spotify:track:local_")
+                            val matchRecent = if (!isPlaceholderBm) {
+                                recentResult.firstOrNull {
+                                    it.trackUri == bm.trackUri &&
+                                        it.contextUri?.startsWith("spotify:playlist:") == true &&
+                                        !it.contextUri.startsWith("spotify:playlist:local_")
+                                }
+                            } else null
                             if (matchRecent != null) {
                                 recoveredPlUri = matchRecent.contextUri
                                 recoveredPlTitle = matchRecent.contextTitle
@@ -396,12 +399,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             continue
                         }
 
+                        val isPlaceholderBm = bm.trackUri.endsWith(":active") || bm.trackUri.endsWith(":notification") || bm.trackUri.startsWith("spotify:track:local_")
                         val matchingPlHistory = history.firstOrNull {
                             it.contextUri?.startsWith("spotify:playlist:") == true &&
                                 !it.contextUri.startsWith("spotify:playlist:local_") &&
-                                (it.trackUri == bm.trackUri ||
+                                ((!isPlaceholderBm && it.trackUri == bm.trackUri) ||
                                     (bm.contextTitle.isNotBlank() &&
                                         bm.contextTitle != "Spotify" &&
+                                        bm.contextTitle != "Playlist" &&
+                                        !com.spotisave.app.service.SpotifyNotificationListenerService.isGenericQueueOrLabel(bm.contextTitle) &&
                                         it.contextTitle.equals(bm.contextTitle, ignoreCase = true)))
                         }
                         if (matchingPlHistory?.contextUri != null) {

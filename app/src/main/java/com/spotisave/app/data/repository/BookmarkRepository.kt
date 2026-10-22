@@ -79,9 +79,25 @@ class BookmarkRepository private constructor(context: Context) {
                 if (existingSelf.trackUri == toSave.trackUri && toSave.positionMs <= 1000L && existingSelf.positionMs > 1000L) {
                     toSave = toSave.copy(positionMs = existingSelf.positionMs)
                 }
+
+                // 2. Schutz vor Verfälschung durch abweichende Tracks bei 0:00:
+                // Ein abweichender Track bei <= 1000ms (0:00) darf niemals ein existierendes Playlist-Lesezeichen
+                // mit etablierter Hörposition (> 3000ms) überschreiben.
+                val isSameTrack = com.spotisave.app.service.PlaybackTracker.isSameTrack(
+                    existingSelf.trackUri, existingSelf.trackTitle,
+                    toSave.trackUri, toSave.trackTitle
+                )
+                if (existingSelf.isPlaylist && !isSameTrack && toSave.positionMs <= 1000L && existingSelf.positionMs > 3000L) {
+                    return@launch
+                }
             }
 
             if (bookmark.isPlaylist) {
+                val isPlaceholderTrack = bookmark.trackUri.isNullOrBlank() ||
+                    bookmark.trackUri.endsWith(":active") ||
+                    bookmark.trackUri.endsWith(":notification") ||
+                    bookmark.trackUri.startsWith("spotify:track:local_")
+
                 for (old in existingAll) {
                     if (old.id == bookmark.id) continue
                     val isGenericQueue = old.id.contains("warteschlange", ignoreCase = true) ||
@@ -89,7 +105,7 @@ class BookmarkRepository private constructor(context: Context) {
                         old.contextTitle.equals("Warteschlange", ignoreCase = true) ||
                         old.contextTitle.equals("Queue", ignoreCase = true)
                     val isSameTrackSingle = old.id == bookmark.trackUri && !old.isPlaylist
-                    val isMisclassifiedAlbumForSameTrack = old.id.startsWith("album:") && old.trackUri == bookmark.trackUri
+                    val isMisclassifiedAlbumForSameTrack = !isPlaceholderTrack && old.id.startsWith("album:") && old.trackUri == bookmark.trackUri
                     val isLocalPlaylistPlaceholder = old.id.startsWith("spotify:playlist:local_") &&
                         !bookmark.id.startsWith("spotify:playlist:local_") &&
                         (bookmark.contextTitle.isNotBlank() &&
@@ -98,7 +114,7 @@ class BookmarkRepository private constructor(context: Context) {
                             old.contextTitle.equals(bookmark.contextTitle, ignoreCase = true))
 
                     if (isGenericQueue || isSameTrackSingle || isMisclassifiedAlbumForSameTrack || isLocalPlaylistPlaceholder) {
-                        if (old.trackUri == toSave.trackUri && toSave.positionMs <= 1000L && old.positionMs > toSave.positionMs) {
+                        if (!isPlaceholderTrack && old.trackUri == toSave.trackUri && toSave.positionMs <= 1000L && old.positionMs > toSave.positionMs) {
                             toSave = toSave.copy(positionMs = old.positionMs)
                         }
                         dbHelper.deleteBookmark(old.id)
@@ -129,7 +145,12 @@ class BookmarkRepository private constructor(context: Context) {
                     old.id.contains("queue", ignoreCase = true) ||
                     old.contextTitle.equals("Warteschlange", ignoreCase = true) ||
                     old.contextTitle.equals("Queue", ignoreCase = true)
-                val matchesAlbumId = normalizedAlbumId != null && old.id == normalizedAlbumId && old.trackUri == trackUri
+                val isPlaceholderParam = trackUri.isNullOrBlank() ||
+                    trackUri.endsWith(":active") ||
+                    trackUri.endsWith(":notification") ||
+                    trackUri.startsWith("spotify:track:local_")
+                val matchesAlbumId = normalizedAlbumId != null && old.id == normalizedAlbumId &&
+                    !isPlaceholderParam && old.trackUri == trackUri
                 val matchesLocalPl = old.id.startsWith("spotify:playlist:local_") &&
                     (!contextTitle.isNullOrBlank() &&
                         contextTitle != "Spotify" &&
@@ -181,11 +202,16 @@ class BookmarkRepository private constructor(context: Context) {
                 dbHelper.insertOrUpdate(updated)
                 if (updated.isPlaylist) {
                     for (old in all) {
+                        val isPlaceholderUpdated = updated.trackUri.isNullOrBlank() ||
+                            updated.trackUri.endsWith(":active") ||
+                            updated.trackUri.endsWith(":notification") ||
+                            updated.trackUri.startsWith("spotify:track:local_")
+                        val isSameTrackUpdated = !isPlaceholderUpdated && old.trackUri == updated.trackUri
                         if (old.id != updated.id &&
                             (old.id.startsWith("album:") || old.id.startsWith("spotify:playlist:local_") ||
                                 old.id.contains("warteschlange", ignoreCase = true) ||
                                 old.contextTitle.equals("Warteschlange", ignoreCase = true)) &&
-                            (old.trackUri == updated.trackUri || old.contextTitle.equals(contextTitle, ignoreCase = true) || old.id.contains("warteschlange", ignoreCase = true))
+                            (isSameTrackUpdated || old.contextTitle.equals(contextTitle, ignoreCase = true) || old.id.contains("warteschlange", ignoreCase = true))
                         ) {
                             dbHelper.deleteBookmark(old.id)
                         }

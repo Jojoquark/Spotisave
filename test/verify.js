@@ -1789,27 +1789,43 @@ async function runTests() {
     assert(notifServiceSrc26.includes('lastNotificationTrackTitle = null') &&
            notifServiceSrc26.includes('lastNotificationContextTitle = null'),
            'SpotifyNotificationListenerService.kt resets context and track titles when notification is removed');
+    assert(notifServiceSrc26.includes('if (!PlaybackTracker.isWithinResumeGrace())'),
+           'SpotifyNotificationListenerService.kt skips flushBookmark on notification removed during resume grace');
 
     // 2. PlaybackTracker resume protection and track matching
     assert(trackerSrc26.includes('fun matchesResumedTrack(trackUri: String?, trackTitle: String?): Boolean'),
            'PlaybackTracker.kt implements matchesResumedTrack helper');
-    assert(trackerSrc26.includes('if (resumed != null && !matchesResumedTrack(effectiveIncomingTrackUri, trackTitle))'),
-           'PlaybackTracker.kt suppresses transitional metadata events from other tracks during resume grace');
+    assert(trackerSrc26.includes('onMediaSessionUpdate: Ignoriere Übergangs-Event'),
+           'PlaybackTracker.kt onMediaSessionUpdate suppresses transitional events at the front door during resume grace');
     assert(trackerSrc26.includes('if (resumed != null && !matchesResumedTrack(apiTrack.uri, apiTrack.name))'),
            'PlaybackTracker.kt syncFromAuthoritativeApi suppresses transitional tracks during resume grace');
     assert(trackerSrc26.includes('isSameTrack(lastTrackUri, lastTrackTitle, activeResumedTrackUri, activeResumedTrackTitle)'),
            'PlaybackTracker.kt flushBookmark verifies track identity before falling back to activeResumedContextUri');
+    assert(trackerSrc26.includes('flushBookmark: Unterdrücke Speichern für abweichenden Track'),
+           'PlaybackTracker.kt flushBookmark suppresses saving during resume grace for non-matching tracks');
+    assert(trackerSrc26.includes('isPlaceholderA') && trackerSrc26.includes('isPlaceholderB'),
+           'PlaybackTracker.kt isSameTrack protects against false placeholder URI (active, notification) matches');
 
     // 3. ResumeHelper wake-up guard
     assert(resumeHelperSrc26.includes('isCurrentMatching') &&
            resumeHelperSrc26.includes('currentController?.transportControls?.play()'),
            'ResumeHelper.kt only triggers play() during wake-up if controller matches target bookmark');
 
-    // 4. BookmarkRepository position reset guard
+    // 4. BookmarkRepository position reset & cross-track overwrite guard
     assert(repoSrc26.includes('existingSelf.trackUri == toSave.trackUri && toSave.positionMs <= 1000L && existingSelf.positionMs > 1000L'),
            'BookmarkRepository.kt protects against sudden 0:00 resets when saving existing track');
+    assert(repoSrc26.includes('existingSelf.isPlaylist && !isSameTrack && toSave.positionMs <= 1000L && existingSelf.positionMs > 3000L'),
+           'BookmarkRepository.kt protects established playlist bookmarks against 0:00 overwrites by different tracks');
 
-    // 5. JavaScript Simulation of Frankreich (0:39) vs Casual Drives (2:15)
+    // 5. index.html web fallback isolation
+    const indexHtmlSrc26 = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+    assert(indexHtmlSrc26.includes('inResumeGrace && engineState.pendingResume.playlist_id === entityId') &&
+           indexHtmlSrc26.includes('if (!isSameTrack)'),
+           'index.html suppresses non-matching track saving into resumed bookmark during resume grace');
+    assert(indexHtmlSrc26.includes('existing && existing.track_uri !== track.uri && safeProgress <= 1000 && (existing.progress_ms || 0) > 3000'),
+           'index.html protects existing bookmark against 0ms wipe by different track');
+
+    // 6. JavaScript Simulation of Frankreich (0:39) vs Casual Drives (2:15) with Placeholders
     const database = {
         'spotify:playlist:frankreich': {
             id: 'spotify:playlist:frankreich',
@@ -1836,38 +1852,43 @@ async function runTests() {
     }
 
     function isSame(uriA, titleA, uriB, titleB) {
-        if (uriA && uriB && uriA === uriB) return true;
+        const isPlaceholder = u => !u || u === 'spotify:track:active' || u === 'spotify:track:notification';
+        if (!isPlaceholder(uriA) && !isPlaceholder(uriB) && uriA === uriB) return true;
         if (titleA && titleB && titleA.toLowerCase() === titleB.toLowerCase()) return true;
         return false;
     }
 
     function processIncomingEvent(trackUri, trackTitle, contextTitle, positionMs) {
         const now = Date.now();
-        const inGrace = pendingResume && (now - resumeTimestamp < 7000);
+        const inGrace = pendingResume && (now - resumeTimestamp < 12000);
 
         // Strict resume grace suppression for mismatched outgoing tracks
         if (inGrace && !isSame(trackUri, trackTitle, pendingResume.trackUri, pendingResume.trackTitle)) {
             return { action: 'SUPPRESSED', reason: 'Mismatch during resume grace' };
         }
 
-        // Context title lookup with track scoping (simulating getContextTitleForTrack)
-        const scopedContextTitle = (contextTitle && isSame(trackUri, trackTitle, null, 'Ein Kompliment'))
-            ? contextTitle
-            : null;
-
-        const targetId = inGrace
-            ? pendingResume.id
-            : (scopedContextTitle ? 'spotify:playlist:' + scopedContextTitle : 'spotify:playlist:default');
+        let targetId = 'spotify:playlist:default';
+        if (inGrace) {
+            targetId = pendingResume.id;
+        } else if (contextTitle) {
+            const foundKey = Object.keys(database).find(k =>
+                database[k].contextTitle && database[k].contextTitle.toLowerCase() === contextTitle.toLowerCase()
+            );
+            targetId = foundKey || ('spotify:playlist:' + contextTitle.toLowerCase().replace(/[^a-z0-9_]/g, '_'));
+        }
 
         const existing = database[targetId];
         let finalPos = positionMs;
         if (existing && existing.trackUri === trackUri && positionMs <= 1000 && existing.positionMs > 1000) {
             finalPos = existing.positionMs; // Prevent 0:00 reset
         }
+        if (existing && !isSame(existing.trackUri, existing.trackTitle, trackUri, trackTitle) && positionMs <= 1000 && existing.positionMs > 3000) {
+            return { action: 'BLOCKED', reason: 'Reject 0:00 overwrite of established bookmark by different track' };
+        }
 
         database[targetId] = {
             id: targetId,
-            contextTitle: inGrace ? pendingResume.contextTitle : (scopedContextTitle || 'Playlist'),
+            contextTitle: inGrace ? pendingResume.contextTitle : (contextTitle || 'Playlist'),
             trackTitle: trackTitle,
             trackUri: trackUri,
             positionMs: finalPos
@@ -1904,6 +1925,20 @@ async function runTests() {
            'Simulation: Casual Drives successfully progresses to 136000ms');
     assert(database['spotify:playlist:frankreich'].trackTitle === 'Ein Kompliment',
            'Simulation: Frankreich remains completely independent and uncorrupted');
+
+    // Step 4: Placeholder URI safety check (both have 'spotify:track:active' but different titles)
+    initiateResume(database['spotify:playlist:casual_drives']);
+    const r3 = processIncomingEvent('spotify:track:active', 'Ein Kompliment', 'Frankreich 🇫🇷', 0);
+    assert(r3.action === 'SUPPRESSED', 'Simulation: Placeholder active URIs with different titles are strictly suppressed');
+
+    // Step 5: Outside grace window, reject 0:00 overwrite of established bookmark by different track
+    pendingResume = null;
+    const r4 = processIncomingEvent('spotify:track:active', 'Random Track', 'Casual Drives', 0);
+    assert(r4.action === 'BLOCKED', 'Simulation: 0:00 wipe of established playlist bookmark by different track is blocked');
+    assert(database['spotify:playlist:casual_drives'].trackTitle === 'Drive Slow',
+           'Simulation: Casual Drives trackTitle still Drive Slow after rejected 0:00 overwrite');
+    assert(database['spotify:playlist:casual_drives'].positionMs === 136000,
+           'Simulation: Casual Drives position preserved at 136000ms');
 
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);

@@ -1769,6 +1769,18 @@
                     (nowMs - engineState.pendingResumeAt < 10000)
                 );
 
+                // Anti-Cross-Contamination: Während Resume-Grace dürfen Events eines abweichenden Titels
+                // NIEMALS in das Ziel-Bookmark gespeichert werden!
+                if (inResumeGrace && engineState.pendingResume.playlist_id === entityId) {
+                    const isSameTrack = Boolean(
+                        (engineState.pendingResume.track_uri && track.uri && engineState.pendingResume.track_uri === track.uri) ||
+                        (engineState.pendingResume.track_name && track.name && engineState.pendingResume.track_name.toLowerCase() === track.name.toLowerCase())
+                    );
+                    if (!isSameTrack) {
+                        return;
+                    }
+                }
+
                 let safeProgress = progress;
                 if (inResumeGrace && engineState.pendingResume.playlist_id === entityId) {
                     const targetPos = Number(engineState.pendingResume.progress_ms) || 0;
@@ -1779,6 +1791,12 @@
                     }
                 } else if (!isPlaying && progress <= 1000 && existing && existing.track_uri === track.uri && (existing.progress_ms || 0) > 3000) {
                     safeProgress = existing.progress_ms;
+                }
+
+                // Schutz vor Verfälschung durch fremde Tracks bei 0:00:
+                // Ein abweichender Track bei <= 1000ms darf niemals ein Lesezeichen mit signifikantem Hörstand (> 3000ms) überschreiben.
+                if (existing && existing.track_uri !== track.uri && safeProgress <= 1000 && (existing.progress_ms || 0) > 3000) {
+                    return;
                 }
 
                 // Bookmark if track changed, progress changed by >= 2s, or manual trigger

@@ -60,10 +60,11 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
             val notifTitle = lastNotificationContextTitle?.trim()?.takeIf { it.isNotBlank() } ?: return null
             val notifTrack = lastNotificationTrackTitle?.trim()?.takeIf { it.isNotBlank() } ?: return null
             val cleanTrack = trackTitle?.trim()?.takeIf { it.isNotBlank() } ?: return null
-            return if (cleanTrack.equals(notifTrack, ignoreCase = true) ||
-                cleanTrack.contains(notifTrack, ignoreCase = true) ||
-                notifTrack.contains(cleanTrack, ignoreCase = true)
-            ) {
+            val isExact = cleanTrack.equals(notifTrack, ignoreCase = true)
+            val isPrefixOrSuffix = if (!isExact && cleanTrack.length >= 4 && notifTrack.length >= 4) {
+                cleanTrack.startsWith(notifTrack, ignoreCase = true) || notifTrack.startsWith(cleanTrack, ignoreCase = true)
+            } else false
+            return if (isExact || isPrefixOrSuffix) {
                 notifTitle
             } else {
                 null
@@ -332,7 +333,9 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         if (sbn?.packageName == SPOTIFY_PACKAGE_NAME) {
             Log.d(TAG, "Spotify Benachrichtigung entfernt -> Letzten Stand sichern")
-            PlaybackTracker.flushBookmark(applicationContext, "NotificationRemoved")
+            if (!PlaybackTracker.isWithinResumeGrace()) {
+                PlaybackTracker.flushBookmark(applicationContext, "NotificationRemoved")
+            }
             lastNotificationContextTitle = null
             lastNotificationContextType = null
             lastNotificationTrackTitle = null

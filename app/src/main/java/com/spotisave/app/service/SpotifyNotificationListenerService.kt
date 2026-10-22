@@ -52,7 +52,7 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
          * Dieser darf NIEMALS als Playlist-Name interpretiert werden!
          */
         fun isGenericQueueOrLabel(raw: String?): Boolean {
-            if (raw.isNullOrBlank()) return true
+            if (raw.isNullOrBlank()) return false
             val lower = raw.trim().lowercase()
             return lower in listOf(
                 "warteschlange", "queue", "play queue", "wiedergabeschlange",
@@ -62,7 +62,9 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
                 "next in queue", "wiedergabe aus playlist", "playing from playlist",
                 "wiedergabe aus album", "playing from album", "aus playlist",
                 "aus album", "from playlist", "from album"
-            )
+            ) || lower.startsWith("wiedergabeschlange") ||
+                lower.startsWith("in der warteschlange") ||
+                lower.startsWith("titel in der warteschlange")
         }
 
         /**
@@ -71,19 +73,27 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
         fun detectContextTypeFromText(raw: String?): String? {
             if (raw.isNullOrBlank()) return null
             val lower = raw.trim().lowercase()
-            if (lower.startsWith("wiedergabe aus playlist") ||
-                lower.startsWith("playing from playlist") ||
-                lower.startsWith("aus playlist") ||
-                lower.startsWith("from playlist") ||
-                lower.startsWith("playlist") ||
-                lower.startsWith("wiedergabeliste")
+            val playlistPrefixes = listOf(
+                "playlist • ", "playlist: ", "playlist - ", "aus playlist ",
+                "from playlist ", "playing from playlist ", "wiedergabe aus playlist ",
+                "wiedergabeliste • ", "wiedergabeliste: ", "wiedergabe aus playlist\n",
+                "playing from playlist\n", "aus playlist\n", "from playlist\n"
+            )
+            if (playlistPrefixes.any { lower.startsWith(it) } ||
+                lower == "wiedergabe aus playlist" || lower == "playing from playlist" ||
+                lower == "aus playlist" || lower == "from playlist" ||
+                lower == "playlist" || lower == "wiedergabeliste"
             ) return "playlist"
 
-            if (lower.startsWith("wiedergabe aus album") ||
-                lower.startsWith("playing from album") ||
-                lower.startsWith("aus album") ||
-                lower.startsWith("from album") ||
-                lower.startsWith("album")
+            val albumPrefixes = listOf(
+                "album • ", "album: ", "album - ", "aus album ",
+                "from album ", "playing from album ", "wiedergabe aus album ",
+                "wiedergabe aus album\n", "playing from album\n", "aus album\n", "from album\n"
+            )
+            if (albumPrefixes.any { lower.startsWith(it) } ||
+                lower == "wiedergabe aus album" || lower == "playing from album" ||
+                lower == "aus album" || lower == "from album" ||
+                lower == "album"
             ) return "album"
             return null
         }
@@ -103,9 +113,12 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
                     val candidate = extractContextTitleFromText(line)
                     if (!candidate.isNullOrBlank()) return candidate
                 }
+                return null
             }
 
             val lower = cleaned.lowercase()
+            if (lower == "spotify" || lower == "musik" || lower == "music") return null
+
             val prefixes = listOf(
                 "wiedergabe aus playlist: ", "wiedergabe aus playlist • ", "wiedergabe aus playlist - ", "wiedergabe aus playlist ",
                 "playing from playlist: ", "playing from playlist • ", "playing from playlist ",
@@ -144,7 +157,7 @@ class SpotifyNotificationListenerService : NotificationListenerService() {
                     }
                 }
                 "file://${file.absolutePath}"
-            } catch (_: Exception) {
+            } catch (e: Exception) {
                 null
             }
         }

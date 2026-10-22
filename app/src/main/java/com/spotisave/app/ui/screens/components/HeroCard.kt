@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
@@ -98,12 +99,19 @@ fun HeroCard(
     val rawContextTitle = if (isLive) activePlayback?.contextTitle ?: latestBookmark?.contextTitle else latestBookmark?.contextTitle
     val album = if (isLive) activePlayback!!.album else latestBookmark?.contextTitle ?: "Spotify"
 
+    val isCollection = contextUri?.startsWith("spotify:collection") == true ||
+        contextUri?.contains(":collection") == true ||
+        latestBookmark?.isCollection == true ||
+        rawContextTitle?.equals("Lieblingssongs", ignoreCase = true) == true ||
+        rawContextTitle?.equals("Liked Songs", ignoreCase = true) == true
+
     val hasPlaylistTitle = !rawContextTitle.isNullOrBlank() &&
         rawContextTitle != "Spotify" &&
         !rawContextTitle.equals(album, ignoreCase = true)
 
     val isPlaylist = contextUri?.startsWith("spotify:playlist:") == true ||
         latestBookmark?.isPlaylist == true ||
+        isCollection ||
         (isLive && hasPlaylistTitle)
     val isAlbum = !isPlaylist && (
         contextUri?.startsWith("spotify:album:") == true ||
@@ -111,6 +119,7 @@ fun HeroCard(
         )
 
     val displayContextTitle = when {
+        isCollection -> if (!rawContextTitle.isNullOrBlank() && rawContextTitle != "Spotify") rawContextTitle else "Lieblingssongs"
         !rawContextTitle.isNullOrBlank() && rawContextTitle != "Spotify" -> rawContextTitle
         latestBookmark != null && latestBookmark.displayContextTitle.isNotBlank() -> latestBookmark.displayContextTitle
         isPlaylist -> "Playlist"
@@ -192,8 +201,33 @@ fun HeroCard(
                     )
                 }
 
-                // Playlist / Album Badge
-                if (isPlaylist) {
+                // Playlist / Album / Lieblingssongs Badge
+                if (isCollection) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SpotifyGreen.copy(alpha = 0.15f))
+                            .border(1.dp, SpotifyGreen.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Favorite,
+                            contentDescription = null,
+                            tint = SpotifyGreen,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "LIEBLINGSSONGS",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SpotifyGreen,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                } else if (isPlaylist) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
@@ -257,12 +291,13 @@ fun HeroCard(
                 AsyncCoverImage(
                     coverUrl = activePlayback?.coverUrl ?: latestBookmark?.coverUrl,
                     fallbackIcon = when {
+                        isCollection -> Icons.Default.Favorite
                         isPlaylist -> Icons.Default.QueueMusic
                         isAlbum -> Icons.Default.Album
                         else -> Icons.Default.MusicNote
                     },
                     iconTint = when {
-                        isPlaylist -> SpotifyGreen
+                        isCollection || isPlaylist -> SpotifyGreen
                         isAlbum -> Color(0xFF64D2FF)
                         isPlaying -> StatusLivePlaying
                         else -> textSecondaryCol

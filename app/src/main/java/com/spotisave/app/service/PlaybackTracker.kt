@@ -183,13 +183,23 @@ object PlaybackTracker {
         trackUri: String? = null,
         contextTypeHint: String? = null
     ): Pair<String, String?> {
-        if (!contextUri.isNullOrBlank()) {
-            return Pair(contextUri, contextUri)
-        }
-
         val cleanCtxTitle = contextTitle?.trim()?.takeIf { it.isNotBlank() && it != "Spotify" && it != "Album" }
         val cleanAlbum = album?.trim()?.takeIf { it.isNotBlank() && it != "Spotify" }
         val cleanTrack = trackTitle?.trim()
+
+        val isCollection = contextUri?.startsWith("spotify:collection") == true ||
+            contextUri?.contains(":collection") == true ||
+            cleanCtxTitle?.equals("Lieblingssongs", ignoreCase = true) == true ||
+            cleanCtxTitle?.equals("Liked Songs", ignoreCase = true) == true
+
+        if (isCollection) {
+            val effectiveCollection = contextUri?.takeIf { it.isNotBlank() } ?: "spotify:collection:tracks"
+            return Pair(effectiveCollection, effectiveCollection)
+        }
+
+        if (!contextUri.isNullOrBlank()) {
+            return Pair(contextUri, contextUri)
+        }
 
         val hasDistinctPlaylistTitle = cleanCtxTitle != null &&
             !cleanCtxTitle.equals(cleanAlbum, ignoreCase = true) &&
@@ -212,7 +222,7 @@ object PlaybackTracker {
         return Pair(fallbackTrackUri, null)
     }
 
-    private fun resolveKnownPlaylistContextUri(
+    fun resolveKnownPlaylistContextUri(
         context: Context,
         trackUri: String?,
         contextTitle: String?
@@ -848,6 +858,11 @@ object PlaybackTracker {
                         }
                         if (apiContextUri.startsWith("spotify:playlist:")) {
                             lastContextTypeHint = "playlist"
+                        } else if (apiContextUri.startsWith("spotify:collection") || apiContextUri.contains(":collection")) {
+                            lastContextTypeHint = "playlist"
+                            if (lastContextTitle.isNullOrBlank() || lastContextTitle == "Spotify") {
+                                lastContextTitle = "Lieblingssongs"
+                            }
                         } else if (apiContextUri.startsWith("spotify:album:")) {
                             lastContextTypeHint = "album"
                             if (previousContextUri != apiContextUri || lastContextTitle.isNullOrBlank()) {

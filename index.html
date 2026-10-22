@@ -1692,8 +1692,17 @@
                 }
             }
 
-            // Bookmark saving logic: handles Playlists AND Albums (plus fallback-resumed playlists where context is omitted by Spotify)
-            let effectiveContext = (context && (context.type === 'playlist' || context.type === 'album')) ? context : null;
+            // Bookmark saving logic: handles Playlists, Albums and Lieblingssongs (Collection)
+            const isCollectionContext = Boolean(
+                context && (
+                    context.type === 'collection' ||
+                    context.type === 'user' ||
+                    (context.uri && (context.uri.includes(':collection') || context.uri.startsWith('spotify:collection')))
+                )
+            );
+            let effectiveContext = (context && (context.type === 'playlist' || context.type === 'album' || isCollectionContext))
+                ? (isCollectionContext ? { type: 'collection', uri: context.uri || 'spotify:collection:tracks' } : context)
+                : null;
             if (effectiveContext) {
                 engineState.activeResumedContext = effectiveContext;
             } else if (track && track.uri) {
@@ -1710,12 +1719,16 @@
                 }
             }
 
-            if (effectiveContext && (effectiveContext.type === 'playlist' || effectiveContext.type === 'album')) {
+            if (effectiveContext && (effectiveContext.type === 'playlist' || effectiveContext.type === 'album' || effectiveContext.type === 'collection')) {
                 let entityId = effectiveContext.uri.split(':').pop();
                 let entityName = '';
                 let entityImage = trackImg;
 
-                if (effectiveContext.type === 'playlist') {
+                if (effectiveContext.type === 'collection') {
+                    entityId = 'collection_tracks';
+                    entityName = 'Lieblingssongs';
+                    entityImage = trackImg;
+                } else if (effectiveContext.type === 'playlist') {
                     const plInfo = await fetchPlaylistInfo(effectiveContext.uri);
                     entityId = plInfo.id;
                     entityName = plInfo.name;
@@ -1837,14 +1850,28 @@
 
         try {
             const ctxStr = b.context_uri ? String(b.context_uri) : '';
+            const isCollectionBookmark = Boolean(
+                b.playlist_name === 'Lieblingssongs' ||
+                b.playlist_name === 'Liked Songs' ||
+                b.context_type === 'collection' ||
+                b.is_collection ||
+                (ctxStr && (ctxStr.includes(':collection') || ctxStr.startsWith('spotify:collection')))
+            );
+            const effectiveCtxStr = isCollectionBookmark
+                ? (ctxStr && ctxStr.includes(':collection') ? ctxStr : 'spotify:collection:tracks')
+                : ctxStr;
             const hasContextUri = Boolean(
-                ctxStr &&
-                !ctxStr.startsWith('spotify:playlist:local_') &&
-                (ctxStr.startsWith('spotify:playlist:') || ctxStr.startsWith('spotify:album:') || ctxStr.startsWith('spotify:show:'))
+                effectiveCtxStr &&
+                !effectiveCtxStr.startsWith('spotify:playlist:local_') &&
+                (effectiveCtxStr.startsWith('spotify:playlist:') ||
+                 effectiveCtxStr.startsWith('spotify:album:') ||
+                 effectiveCtxStr.startsWith('spotify:show:') ||
+                 effectiveCtxStr.includes(':collection') ||
+                 effectiveCtxStr.startsWith('spotify:collection'))
             );
             const body = hasContextUri
                 ? JSON.stringify({
-                    context_uri: ctxStr,
+                    context_uri: effectiveCtxStr,
                     offset: b.track_uri ? { uri: b.track_uri } : undefined,
                     position_ms: Number(b.progress_ms) || 0
                 })

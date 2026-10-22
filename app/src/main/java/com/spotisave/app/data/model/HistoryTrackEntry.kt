@@ -22,21 +22,29 @@ data class HistoryTrackEntry(
     val timestamp: Long = System.currentTimeMillis(), // Zeitpunkt des Hörens
     val source: String = "Spotify"          // "Broadcast" | "MediaSession" | "WebApi"
 ) {
+    val isCollection: Boolean
+        get() = contextUri?.startsWith("spotify:collection") == true ||
+                contextUri?.contains(":collection") == true ||
+                contextTitle.equals("Lieblingssongs", ignoreCase = true) ||
+                contextTitle.equals("Liked Songs", ignoreCase = true)
+
     val isPlaylist: Boolean
-        get() = contextUri?.startsWith("spotify:playlist:") == true
+        get() = contextUri?.startsWith("spotify:playlist:") == true || isCollection
 
     val isAlbum: Boolean
-        get() = contextUri?.startsWith("spotify:album:") == true
+        get() = !isCollection && (contextUri?.startsWith("spotify:album:") == true)
 
     /**
      * Konvertiert den Verlaufseintrag in ein startbares Bookmark für 1-Click Resume.
      */
     fun toBookmark(): Bookmark {
+        val isCollectionEntry = isCollection
         val hasDistinctPlaylistTitle = contextTitle.isNotBlank() &&
             contextTitle != "Spotify" &&
             !contextTitle.equals(album, ignoreCase = true) &&
             !contextTitle.equals(trackTitle, ignoreCase = true)
         val effectiveContextUri = when {
+            isCollectionEntry -> contextUri ?: "spotify:collection:tracks"
             !contextUri.isNullOrBlank() -> contextUri
             hasDistinctPlaylistTitle -> {
                 val slug = contextTitle.trim().lowercase().replace(Regex("[^a-z0-9_]"), "_")
@@ -45,6 +53,7 @@ data class HistoryTrackEntry(
             else -> null
         }
         val bmId = when {
+            isCollectionEntry -> effectiveContextUri ?: "spotify:collection:tracks"
             !effectiveContextUri.isNullOrBlank() -> effectiveContextUri
             album.isNotBlank() && album != "Spotify" && contextTitle.equals(album, ignoreCase = true) -> {
                 val normalized = album.trim().lowercase().replace(Regex("[^a-z0-9_]"), "_")

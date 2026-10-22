@@ -17,14 +17,21 @@ data class PlaybackStateModel(
     val timestamp: Long = System.currentTimeMillis(),
     val source: String = "Broadcast" // "Broadcast" oder "MediaSession"
 ) {
+    val isCollection: Boolean
+        get() = contextUri?.startsWith("spotify:collection") == true ||
+                contextUri?.contains(":collection") == true ||
+                contextTitle?.equals("Lieblingssongs", ignoreCase = true) == true ||
+                contextTitle?.equals("Liked Songs", ignoreCase = true) == true
+
     val isPlaylist: Boolean
-        get() = contextUri?.startsWith("spotify:playlist:") == true
+        get() = contextUri?.startsWith("spotify:playlist:") == true || isCollection
 
     val isAlbum: Boolean
-        get() = contextUri?.startsWith("spotify:album:") == true
+        get() = !isCollection && (contextUri?.startsWith("spotify:album:") == true)
 
     val displayContextTitle: String
         get() = when {
+            isCollection -> if (!contextTitle.isNullOrBlank() && contextTitle != "Spotify") contextTitle else "Lieblingssongs"
             !contextTitle.isNullOrBlank() && contextTitle != "Spotify" -> contextTitle
             isPlaylist -> "Playlist"
             album.isNotBlank() && album != "Spotify" -> album

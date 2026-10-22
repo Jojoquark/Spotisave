@@ -187,16 +187,26 @@ class SpotifyApiClient(private val context: Context) {
         }
 
         /**
+         * Prüft, ob eine URI ein gültiger kanonischer Spotify-Wiedergabekontext ist
+         * (Playlist, Album, Show/Podcast, Artist oder Lieblingssongs/Collection).
+         */
+        fun isCanonicalContextUri(uri: String?): Boolean {
+            if (uri.isNullOrBlank() || uri.startsWith("spotify:playlist:local_")) return false
+            return uri.startsWith("spotify:playlist:") ||
+                uri.startsWith("spotify:album:") ||
+                uri.startsWith("spotify:show:") ||
+                uri.startsWith("spotify:artist:") ||
+                uri.startsWith("spotify:collection") ||
+                uri.contains(":collection") ||
+                uri.startsWith("spotify:user:")
+        }
+
+        /**
          * Baut das JSON-Payload für PUT /me/player/play.
          */
         fun buildPlayPayload(contextUri: String?, trackUri: String, positionMs: Long): String {
             val json = JSONObject()
-            val hasCanonicalContext = !contextUri.isNullOrBlank() &&
-                !contextUri.startsWith("spotify:playlist:local_") &&
-                (contextUri.startsWith("spotify:playlist:") ||
-                    contextUri.startsWith("spotify:album:") ||
-                    contextUri.startsWith("spotify:show:") ||
-                    contextUri.startsWith("spotify:artist:"))
+            val hasCanonicalContext = isCanonicalContextUri(contextUri)
             val hasCanonicalTrack = trackUri.isNotBlank() &&
                 trackUri != "spotify:track:active" &&
                 trackUri != "spotify:track:notification" &&
@@ -371,6 +381,29 @@ class SpotifyApiClient(private val context: Context) {
         }
     }
 
+    @Volatile
+    private var cachedUserId: String? = null
+
+    /**
+     * Ruft die User-ID des angemeldeten Spotify-Nutzers ab (/me).
+     */
+    suspend fun getCurrentUserId(): String? = withContext(Dispatchers.IO) {
+        cachedUserId?.let { return@withContext it }
+        try {
+            val resp = sendRequest("/me")
+            if (resp.code == 200) {
+                val json = JSONObject(resp.body)
+                val uid = json.optString("id", null)?.takeIf { it.isNotBlank() }
+                if (uid != null) {
+                    cachedUserId = uid
+                    uid
+                } else null
+            } else null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /**
      * 1-Click Wiederaufnahme über Spotify Web API (PUT /me/player/play).
      * Unterstützt automatischen Fallback bei 404 (Geräte-Suche) und 400 (Track-Direktaufruf).
@@ -381,7 +414,16 @@ class SpotifyApiClient(private val context: Context) {
         positionMs: Long
     ): Result<Boolean> {
         return try {
-            val payload = buildPlayPayload(contextUri, trackUri, positionMs)
+            var effectiveContext = contextUri
+            // Falls es sich um eine Lieblingssongs-Collection handelt und noch kein User-Prefix vorhanden ist:
+            if (effectiveContext == "spotify:collection:tracks" || effectiveContext == "spotify:collection") {
+                val uid = getCurrentUserId()
+                if (!uid.isNullOrBlank()) {
+                    effectiveContext = "spotify:user:$uid:collection"
+                }
+            }
+
+            val payload = buildPlayPayload(effectiveContext, trackUri, positionMs)
             var resp = sendRequest("/me/player/play", method = "PUT", payload = payload)
 
             var targetDeviceId: String? = null
@@ -402,8 +444,18 @@ class SpotifyApiClient(private val context: Context) {
                 }
             }
 
-            // 2. Fallback: 400 / 403 / 404 bei Offset in Playlist -> Fallback auf direkte Track-URI
-            if ((resp.code == 400 || resp.code == 403 || (resp.code == 404 && targetDeviceId != null)) &&
+            // 1b. Fallback für Collection: falls spotify:user:<id>:collection 400 ergab, mit spotify:collection:tracks versuchen
+            if (resp.code == 400 && effectiveContext != null && effectiveContext.contains(":collection") && effectiveContext != "spotify:collection:tracks") {
+                val altPayload = buildPlayPayload("spotify:collection:tracks", trackUri, positionMs)
+                val endpoint = if (targetDeviceId != null) "/me/player/play?device_id=$targetDeviceId" else "/me/player/play"
+                val retryResp = sendRequest(endpoint, method = "PUT", payload = altPayload)
+                if (retryResp.code in 200..204) {
+                    resp = retryResp
+                }
+            }
+
+            // 2. Fallback: 400 / 404 bei Offset in Playlist -> Fallback auf direkte Track-URI
+            if ((resp.code == 400 || (resp.code == 404 && targetDeviceId != null)) &&
                 trackUri.isNotBlank() &&
                 trackUri != "spotify:track:active" &&
                 trackUri != "spotify:track:notification"

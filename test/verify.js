@@ -1480,6 +1480,85 @@ async function runTests() {
         assert(Object.keys(bms).length === 2, 'Multi-Playlist Context Preservation: Track-URI fallback without context re-associates with pl_alpha instead of creating a duplicate album bookmark');
     }
 
+    // ----------------------------------------------------
+    // TEST 20: Lieblingssongs (Liked Songs) & Playlist Context Resilience
+    // ----------------------------------------------------
+    console.log('\nTest Group 20: Lieblingssongs (Liked Songs) & Playlist Context Resilience');
+
+    const bookmarkModelSrc20 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/model/Bookmark.kt'), 'utf8');
+    const playbackStateSrc20 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/model/PlaybackStateModel.kt'), 'utf8');
+    const historyEntrySrc20 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/model/HistoryTrackEntry.kt'), 'utf8');
+    const bookmarkCardSrc20 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/BookmarkCard.kt'), 'utf8');
+    const heroCardSrc20 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/components/HeroCard.kt'), 'utf8');
+
+    // 1. Model Support for Collections
+    assert(bookmarkModelSrc20.includes('val isCollection: Boolean') && bookmarkModelSrc20.includes('Lieblingssongs'), 'Bookmark.kt defines isCollection and recognizes Lieblingssongs');
+    assert(bookmarkModelSrc20.includes('isCollection') && bookmarkModelSrc20.includes('!isCollection && (id.startsWith("album:")'), 'Bookmark.kt ensures Lieblingssongs is categorized as playlist and never as album');
+    assert(playbackStateSrc20.includes('val isCollection: Boolean') && playbackStateSrc20.includes('contextUri?.startsWith("spotify:collection")'), 'PlaybackStateModel.kt defines isCollection property');
+    assert(historyEntrySrc20.includes('val isCollection: Boolean') && historyEntrySrc20.includes('spotify:collection:tracks'), 'HistoryTrackEntry.kt preserves collection context when converted to bookmark');
+
+    // 2. SpotifyApiClient & ResumeHelper Canonical Context Verification
+    assert(apiClientSrc19.includes('fun isCanonicalContextUri(') && apiClientSrc19.includes('spotify:collection'), 'SpotifyApiClient.kt verifies canonical context for playlists and collections');
+    assert(apiClientSrc19.includes('suspend fun getCurrentUserId(') && apiClientSrc19.includes('/me'), 'SpotifyApiClient.kt supports user ID resolution for personal collection URIs');
+    assert(resumeHelperSrc19.includes('if (bookmark.isCollection)') && resumeHelperSrc19.includes('spotify:collection:tracks'), 'ResumeHelper.kt resolves collection context URIs without stripping them');
+    assert(resumeHelperSrc19.includes('apiClient.getUserPlaylists(50)') && resumeHelperSrc19.includes('PlaybackTracker.cachePlaylistMetadata('), 'ResumeHelper.kt dynamically resolves local playlist names to canonical Spotify playlist IDs');
+
+    // 3. UI Badge & Icon Polish
+    assert(bookmarkCardSrc20.includes('bookmark.isCollection') && bookmarkCardSrc20.includes('Icons.Default.Favorite'), 'BookmarkCard.kt renders dedicated Favorite heart icon and Lieblingssongs badge');
+    assert(heroCardSrc20.includes('isCollection') && heroCardSrc20.includes('LIEBLINGSSONGS'), 'HeroCard.kt renders dedicated LIEBLINGSSONGS badge and Favorite icon');
+
+    // 4. Web PWA Collection Bookmark & Resume Verification
+    assert(indexHtml.includes('isCollectionContext') && indexHtml.includes('collection_tracks'), 'index.html supports saving Lieblingssongs collection bookmarks');
+    assert(indexHtml.includes('isCollectionBookmark') && indexHtml.includes('spotify:collection:tracks'), 'index.html resumes Lieblingssongs within collection context rather than album');
+
+    // 5. Interactive VM Test: Saving and Resuming from Lieblingssongs (Collection)
+    {
+        let playRequests = [];
+        const { sandbox } = setupSandbox(async (url, opts) => {
+            if (url.includes('/me/player/play')) {
+                const body = opts && opts.body ? JSON.parse(opts.body) : {};
+                playRequests.push({ url, body });
+                return { ok: true, status: 204, json: async () => ({}) };
+            }
+            if (url.includes('/me/player')) {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({
+                        is_playing: true,
+                        progress_ms: 64000,
+                        item: {
+                            name: 'Starboy',
+                            duration_ms: 230000,
+                            uri: 'spotify:track:starboy123',
+                            artists: [{ name: 'The Weeknd' }],
+                            album: { name: 'Starboy Album', images: [{ url: 'https://example.com/starboy.jpg' }] }
+                        },
+                        context: { type: 'collection', uri: 'spotify:user:mock_user:collection' }
+                    })
+                };
+            }
+            return { ok: true, status: 200, json: async () => ({}) };
+        });
+        sandbox.localStorage.setItem('sp_access_token', 'mock_token');
+
+        // Check Now Playing to trigger bookmark save for collection
+        await sandbox.checkNowPlaying(false);
+
+        const bms = JSON.parse(sandbox.localStorage.getItem('sp_bookmarks') || '{}');
+        assert(bms['collection_tracks'], 'Interactive VM: Lieblingssongs bookmark is saved with key collection_tracks');
+        assert(bms['collection_tracks'].playlist_name === 'Lieblingssongs', 'Interactive VM: Bookmark name is Lieblingssongs');
+        assert(bms['collection_tracks'].progress_ms === 64000, 'Interactive VM: Bookmark progress is 64000ms');
+
+        // Resume collection bookmark
+        await sandbox.resumeBookmark('collection_tracks');
+        assert(playRequests.length > 0, 'Interactive VM: Resume call was dispatched');
+        const lastPlay = playRequests[playRequests.length - 1];
+        assert(lastPlay.body.context_uri && lastPlay.body.context_uri.includes(':collection'), 'Interactive VM: Resume payload contains collection context_uri (not plain track array)');
+        assert(lastPlay.body.offset && lastPlay.body.offset.uri === 'spotify:track:starboy123', 'Interactive VM: Resume payload specifies track offset within the collection');
+        assert(lastPlay.body.position_ms === 64000, 'Interactive VM: Resume payload specifies position_ms 64000');
+    }
+
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);
     console.log('========================================\n');

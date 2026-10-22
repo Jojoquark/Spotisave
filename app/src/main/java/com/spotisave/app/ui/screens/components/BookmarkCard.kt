@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
@@ -103,12 +104,13 @@ fun BookmarkCard(
                 AsyncCoverImage(
                     coverUrl = bookmark.coverUrl,
                     fallbackIcon = when {
+                        bookmark.isCollection -> Icons.Default.Favorite
                         bookmark.isPlaylist -> Icons.Default.QueueMusic
                         bookmark.isAlbum -> Icons.Default.Album
                         else -> Icons.Default.MusicNote
                     },
-                    iconTint = if (bookmark.isPlaylist) SpotifyGreen else if (bookmark.isAlbum) androidx.compose.ui.graphics.Color(0xFF64D2FF) else textSecondaryCol,
-                    contentDescription = if (bookmark.isPlaylist) "Playlist Cover" else "Album Cover",
+                    iconTint = if (bookmark.isCollection || bookmark.isPlaylist) SpotifyGreen else if (bookmark.isAlbum) androidx.compose.ui.graphics.Color(0xFF64D2FF) else textSecondaryCol,
+                    contentDescription = if (bookmark.isCollection) "Lieblingssongs" else if (bookmark.isPlaylist) "Playlist Cover" else "Album Cover",
                     modifier = Modifier.size(48.dp),
                     shape = RoundedCornerShape(12.dp)
                 )
@@ -118,7 +120,28 @@ fun BookmarkCard(
                 // Linker Bereich: Titel, Interpret, Playlist
                 Column(modifier = Modifier.weight(1f)) {
                     // Expliziter Playlist- / Album-Header
-                    if (bookmark.isPlaylist) {
+                    if (bookmark.isCollection) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(bottom = 3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Favorite,
+                                contentDescription = null,
+                                tint = SpotifyGreen,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Lieblingssongs",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SpotifyGreen,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    } else if (bookmark.isPlaylist) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(bottom = 3.dp)

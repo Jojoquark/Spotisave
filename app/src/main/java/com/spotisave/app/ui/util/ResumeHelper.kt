@@ -24,22 +24,47 @@ object ResumeHelper {
 
     /**
      * Ermittelt die kanonische Context-URI eines Bookmarks (inkl. Fallback auf bookmark.id
-     * für importierte Lesezeichen ohne explizites contextUri-Feld).
+     * für importierte Lesezeichen ohne explizites contextUri-Feld und Lieblingssongs).
      */
     fun resolveEffectiveContextUri(bookmark: Bookmark): String? {
+        if (bookmark.isCollection) {
+            val rawCol = bookmark.contextUri?.takeIf { it.contains(":collection") || it.startsWith("spotify:collection") }
+                ?: bookmark.id.takeIf { it.contains(":collection") || it.startsWith("spotify:collection") }
+            return rawCol ?: "spotify:collection:tracks"
+        }
+
         val raw = bookmark.contextUri?.takeIf { it.isNotBlank() }
             ?: bookmark.id.takeIf {
                 it.startsWith("spotify:playlist:") ||
                     it.startsWith("spotify:album:") ||
-                    it.startsWith("spotify:show:")
+                    it.startsWith("spotify:show:") ||
+                    it.startsWith("spotify:artist:")
             }
-        return raw?.takeIf {
+        val direct = raw?.takeIf {
             !it.startsWith("spotify:playlist:local_") &&
                 (it.startsWith("spotify:playlist:") ||
                     it.startsWith("spotify:album:") ||
                     it.startsWith("spotify:show:") ||
-                    it.startsWith("spotify:artist:"))
+                    it.startsWith("spotify:artist:") ||
+                    it.contains(":collection") ||
+                    it.startsWith("spotify:collection") ||
+                    it.startsWith("spotify:user:"))
         }
+        if (direct != null) return direct
+
+        // Fallback: Ist der Playlist-Name im Cache von PlaybackTracker bekannt?
+        val cleanTitle = bookmark.contextTitle.trim().takeIf {
+            it.isNotBlank() && it != "Spotify" && it != "Playlist" && it != "Album"
+        }
+        if (cleanTitle != null) {
+            val cachedMatch = PlaybackTracker.playlistNameCache.entries.firstOrNull { (_, name) ->
+                name.equals(cleanTitle, ignoreCase = true)
+            }?.key
+            if (!cachedMatch.isNullOrBlank() && !cachedMatch.startsWith("spotify:playlist:local_")) {
+                return cachedMatch
+            }
+        }
+        return null
     }
 
     /**
@@ -79,13 +104,48 @@ object ResumeHelper {
 
         // 0. Aktuellen Stand einer evtl. laufenden anderen Playlist sichern & Schutzfenster aktivieren
         PlaybackTracker.onResumeInitiated(context, bookmark)
-        val effectiveContextUri = resolveEffectiveContextUri(bookmark)
+        val initialEffectiveContextUri = resolveEffectiveContextUri(bookmark)
 
         val authManager = SpotifyAuthManager.getInstance(context)
         if (authManager.isLoggedIn()) {
             CoroutineScope(Dispatchers.Main).launch {
                 try {
                     val apiClient = SpotifyApiClient.getInstance(context)
+                    var effectiveContextUri = initialEffectiveContextUri
+
+                    // Falls contextUri noch fehlt oder local_ war, aber der Nutzer eigene Playlists hat:
+                    if (effectiveContextUri == null && bookmark.isPlaylist && !bookmark.isCollection) {
+                        withContext(Dispatchers.IO) {
+                            try {
+                                val userPlaylists = apiClient.getUserPlaylists(50).getOrNull().orEmpty()
+                                for (pl in userPlaylists) {
+                                    val plUri = "spotify:playlist:${pl.id}"
+                                    PlaybackTracker.cachePlaylistMetadata(plUri, pl.name, pl.coverUrl)
+                                }
+                                val match = userPlaylists.firstOrNull {
+                                    bookmark.contextTitle.isNotBlank() &&
+                                        bookmark.contextTitle != "Spotify" &&
+                                        bookmark.contextTitle != "Playlist" &&
+                                        it.name.equals(bookmark.contextTitle, ignoreCase = true)
+                                }
+                                if (match != null) {
+                                    val resolvedUri = "spotify:playlist:${match.id}"
+                                    effectiveContextUri = resolvedUri
+                                    PlaybackTracker.cachePlaylistMetadata(resolvedUri, match.name, match.coverUrl)
+                                } else {
+                                    val resolvedFromHistory = PlaybackTracker.resolveKnownPlaylistContextUri(
+                                        context,
+                                        bookmark.trackUri,
+                                        bookmark.contextTitle
+                                    )
+                                    if (resolvedFromHistory != null && !resolvedFromHistory.startsWith("spotify:playlist:local_")) {
+                                        effectiveContextUri = resolvedFromHistory
+                                    }
+                                }
+                            } catch (_: Exception) {}
+                        }
+                    }
+
                     var result = withContext(Dispatchers.IO) {
                         apiClient.resumePlayback(
                             contextUri = effectiveContextUri,

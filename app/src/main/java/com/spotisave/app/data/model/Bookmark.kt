@@ -21,14 +21,25 @@ data class Bookmark(
     val timestamp: Long = System.currentTimeMillis(), // Zeitstempel der letzten Erfassung
     val source: String = "Spotify"          // "Broadcast" | "MediaSession" | "Manuell"
 ) {
+    val isCollection: Boolean
+        get() = id.startsWith("spotify:collection") ||
+                id.contains(":collection") ||
+                contextUri?.startsWith("spotify:collection") == true ||
+                contextUri?.contains(":collection") == true ||
+                contextTitle.equals("Lieblingssongs", ignoreCase = true) ||
+                contextTitle.equals("Liked Songs", ignoreCase = true)
+
     val isPlaylist: Boolean
-        get() = id.startsWith("spotify:playlist:") || contextUri?.startsWith("spotify:playlist:") == true
+        get() = id.startsWith("spotify:playlist:") ||
+                contextUri?.startsWith("spotify:playlist:") == true ||
+                isCollection
 
     val isAlbum: Boolean
-        get() = id.startsWith("album:") || contextUri?.startsWith("spotify:album:") == true
+        get() = !isCollection && (id.startsWith("album:") || contextUri?.startsWith("spotify:album:") == true)
 
     val displayContextTitle: String
         get() = when {
+            isCollection -> if (contextTitle.isNotBlank() && contextTitle != "Spotify") contextTitle else "Lieblingssongs"
             contextTitle.isNotBlank() && contextTitle != "Spotify" -> contextTitle
             isPlaylist -> "Playlist"
             isAlbum -> "Album"

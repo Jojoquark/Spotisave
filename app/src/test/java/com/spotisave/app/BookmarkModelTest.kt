@@ -498,5 +498,118 @@ class BookmarkModelTest {
         assertEquals("Test Playlist", PlaybackTracker.playlistNameCache["spotify:playlist:test_123"])
         assertEquals("https://example.com/cover.jpg", PlaybackTracker.playlistCoverCache["spotify:playlist:test_123"])
     }
+
+    @Test
+    fun testCollectionBookmarkModel() {
+        val bmCollection = Bookmark(
+            id = "spotify:collection:tracks",
+            contextUri = "spotify:collection:tracks",
+            contextTitle = "Lieblingssongs",
+            trackTitle = "Favorite Song",
+            artist = "Great Artist",
+            trackUri = "spotify:track:fav123",
+            positionMs = 45_000L,
+            durationMs = 210_000L
+        )
+        assertTrue(bmCollection.isCollection)
+        assertTrue(bmCollection.isPlaylist)
+        assertFalse(bmCollection.isAlbum)
+        assertEquals("Lieblingssongs", bmCollection.displayContextTitle)
+
+        val bmUserCollection = Bookmark(
+            id = "spotify:user:12345:collection",
+            contextUri = "spotify:user:12345:collection",
+            contextTitle = "Liked Songs",
+            trackTitle = "Song Two",
+            artist = "Band",
+            trackUri = "spotify:track:fav456",
+            positionMs = 15_000L,
+            durationMs = 180_000L
+        )
+        assertTrue(bmUserCollection.isCollection)
+        assertTrue(bmUserCollection.isPlaylist)
+        assertFalse(bmUserCollection.isAlbum)
+
+        val bmTitleOnlyCollection = Bookmark(
+            id = "spotify:track:fav789",
+            contextUri = null,
+            contextTitle = "Lieblingssongs",
+            trackTitle = "Song Three",
+            artist = "Singer",
+            trackUri = "spotify:track:fav789",
+            positionMs = 10_000L,
+            durationMs = 120_000L
+        )
+        assertTrue(bmTitleOnlyCollection.isCollection)
+        assertTrue(bmTitleOnlyCollection.isPlaylist)
+        assertEquals("Lieblingssongs", bmTitleOnlyCollection.displayContextTitle)
+    }
+
+    @Test
+    fun testSpotifyApiClientCanonicalContextUri() {
+        assertTrue(SpotifyApiClient.isCanonicalContextUri("spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"))
+        assertTrue(SpotifyApiClient.isCanonicalContextUri("spotify:album:4aawyAB9vmqN3uQ7FjRGTy"))
+        assertTrue(SpotifyApiClient.isCanonicalContextUri("spotify:show:4rOoJ6Egrf8K2IrywzwOMk"))
+        assertTrue(SpotifyApiClient.isCanonicalContextUri("spotify:artist:06HL4z0CvFAxyc27GXpf02"))
+        assertTrue(SpotifyApiClient.isCanonicalContextUri("spotify:collection:tracks"))
+        assertTrue(SpotifyApiClient.isCanonicalContextUri("spotify:user:12345678:collection"))
+        assertFalse(SpotifyApiClient.isCanonicalContextUri("spotify:playlist:local_rock_classics"))
+        assertFalse(SpotifyApiClient.isCanonicalContextUri(null))
+        assertFalse(SpotifyApiClient.isCanonicalContextUri(""))
+    }
+
+    @Test
+    fun testSpotifyApiClientBuildPlayPayloadWithCollection() {
+        val payload = SpotifyApiClient.buildPlayPayload(
+            contextUri = "spotify:collection:tracks",
+            trackUri = "spotify:track:fav123",
+            positionMs = 45_000L
+        )
+        val json = org.json.JSONObject(payload)
+        assertEquals("spotify:collection:tracks", json.getString("context_uri"))
+        assertEquals("spotify:track:fav123", json.getJSONObject("offset").getString("uri"))
+        assertEquals(45_000L, json.getLong("position_ms"))
+        assertFalse(json.has("uris"))
+    }
+
+    @Test
+    fun testResolveEffectiveContextUriForCollectionAndLocal() {
+        val colBm = Bookmark(
+            id = "spotify:collection:tracks",
+            contextUri = "spotify:collection:tracks",
+            contextTitle = "Lieblingssongs",
+            trackTitle = "Track",
+            artist = "Artist",
+            trackUri = "spotify:track:123",
+            positionMs = 10_000L
+        )
+        assertEquals("spotify:collection:tracks", ResumeHelper.resolveEffectiveContextUri(colBm))
+
+        PlaybackTracker.cachePlaylistMetadata("spotify:playlist:canonical_workout", "Gym Hits", null)
+        val localBm = Bookmark(
+            id = "spotify:playlist:local_gym_hits",
+            contextUri = "spotify:playlist:local_gym_hits",
+            contextTitle = "Gym Hits",
+            trackTitle = "Pump It",
+            artist = "Artist",
+            trackUri = "spotify:track:pump",
+            positionMs = 5000L
+        )
+        assertEquals("spotify:playlist:canonical_workout", ResumeHelper.resolveEffectiveContextUri(localBm))
+    }
+
+    @Test
+    fun testComputeBookmarkIdentityCollection() {
+        val (id, ctx) = PlaybackTracker.computeBookmarkIdentity(
+            contextUri = null,
+            contextTitle = "Lieblingssongs",
+            album = "Album Name",
+            trackTitle = "Great Song",
+            trackUri = "spotify:track:song1",
+            contextTypeHint = "playlist"
+        )
+        assertEquals("spotify:collection:tracks", id)
+        assertEquals("spotify:collection:tracks", ctx)
+    }
 }
 

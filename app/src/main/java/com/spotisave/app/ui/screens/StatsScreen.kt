@@ -1,5 +1,8 @@
 package com.spotisave.app.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -31,12 +33,16 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,16 +62,15 @@ import com.spotisave.app.data.stats.ArtistStat
 import com.spotisave.app.data.stats.DayActivity
 import com.spotisave.app.data.stats.HistoryEntry
 import com.spotisave.app.data.stats.ListeningStats
+import com.spotisave.app.data.stats.PlaylistStat
+import com.spotisave.app.data.stats.TimeOfDayStat
 import com.spotisave.app.data.stats.TopTrackStat
 import com.spotisave.app.ui.screens.components.AsyncCoverImage
 import com.spotisave.app.ui.theme.AppleSystemGreen
 import com.spotisave.app.ui.theme.CanvasBlack
-import com.spotisave.app.ui.theme.HairlineBorder
-import com.spotisave.app.ui.theme.HairlineBorderSubtle
 import com.spotisave.app.ui.theme.LiquidGlassDefaults
 import com.spotisave.app.ui.theme.LocalIsDarkTheme
 import com.spotisave.app.ui.theme.SpotifyGreen
-import com.spotisave.app.ui.theme.SurfaceCard
 import com.spotisave.app.ui.theme.SurfaceCardElevated
 import com.spotisave.app.ui.theme.SurfaceCardLightElevated
 import com.spotisave.app.ui.theme.TextPrimary
@@ -108,10 +113,8 @@ private fun rememberStatsTokens(): StatsTokens {
 
 /**
  * Statistiken & Insights Dashboard.
- * Zeigt Gesamthörzeit, Track-Anzahl, Durchschnittsdauer,
- * Lieblings-Album, Meistgehörte Songs mit 1-Click Resume,
- * chronologische Historie mit relativen Zeitstempeln,
- * Lieblings-Künstler, Wochentagsverteilung, Hör-Persönlichkeit und Durchhör-Quote.
+ * Strukturierte Segment-Navigation ("Übersicht", "Top-Charts", "Verlauf")
+ * vermeidet visuelle Überfrachtung nach Apple HIG & Liquid Glass Richtlinien.
  */
 @Composable
 fun StatsScreen(
@@ -120,15 +123,17 @@ fun StatsScreen(
     modifier: Modifier = Modifier
 ) {
     val tokens = rememberStatsTokens()
+    val haptic = LocalHapticFeedback.current
+    var selectedSection by remember { mutableIntStateOf(0) } // 0: Übersicht, 1: Top-Charts, 2: Verlauf
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .testTag("stats_screen"),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 108.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Titel & Unterzeile
+        // 1. Titel & Unterzeile
         item {
             Column {
                 Text(
@@ -146,137 +151,521 @@ fun StatsScreen(
             }
         }
 
-        // Hinweis-Banner für leeren Zustand (Apple HIG Empty State)
+        // 2. Apple HIG Segmented Control / Pill Switcher (Übersicht / Top-Charts / Verlauf)
+        item {
+            StatsSegmentedControl(
+                selectedIndex = selectedSection,
+                onSelect = { idx ->
+                    if (selectedSection != idx) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        selectedSection = idx
+                    }
+                }
+            )
+        }
+
+        // Hinweis-Banner für leeren Zustand
         if (stats.totalBookmarksCount == 0 && stats.totalTracksCount == 0) {
             item {
                 StatsEmptyNoticeCard()
             }
         }
 
-        // 1. KPI-Grid (Zeile 1: Hörzeit & Tracks)
-        item {
+        // --- SEGMENT 0: ÜBERSICHT ---
+        if (selectedSection == 0) {
+            // KPI-Grid 1: Hörzeit & Tracks
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    KpiCard(
+                        title = "Gesamte Hörzeit",
+                        value = stats.formattedTotalTime,
+                        subtitle = "akkumulierte Zeit",
+                        icon = Icons.Default.Schedule,
+                        iconTint = SpotifyGreen,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    KpiCard(
+                        title = "Track-Anzahl",
+                        value = "${stats.totalTracksCount} Titel",
+                        subtitle = if (stats.totalBookmarksCount > 0) "${stats.totalBookmarksCount} Lesezeichen" else "gespeicherte Songs",
+                        icon = Icons.Default.MusicNote,
+                        iconTint = AppleSystemGreen,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            // KPI-Grid 2: Ø Dauer & Playlists
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    KpiCard(
+                        title = "Ø Track-Dauer",
+                        value = stats.formattedAvgTrackDuration,
+                        subtitle = "Durchschnitt pro Song",
+                        icon = Icons.Default.Timer,
+                        iconTint = Color(0xFF64D2FF),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    KpiCard(
+                        title = "Playlists & Alben",
+                        value = "${stats.totalTrackedPlaylists}",
+                        subtitle = "aktive Stationen",
+                        icon = Icons.Default.QueueMusic,
+                        iconTint = Color(0xFFFF9F0A),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            // Tageszeiten-Verteilung (Morgen, Nachmittag, Abend, Nacht)
+            if (stats.timeOfDayDistribution.isNotEmpty()) {
+                item {
+                    TimeOfDayDistributionCard(
+                        distribution = stats.timeOfDayDistribution,
+                        peakSlot = stats.peakTimeOfDaySlot
+                    )
+                }
+            }
+
+            // Wöchentliche Aktivität (Mo-So Balkendiagramm)
+            item {
+                WeeklyActivityCard(activities = stats.weeklyActivity)
+            }
+
+            // Hör-Persönlichkeit & Insights
+            item {
+                InsightsPersonaCard(
+                    persona = stats.listeningPersona,
+                    peakHours = stats.peakHourRange,
+                    completionRate = stats.completionRatePercent,
+                    completionLabel = stats.completionRateLabel,
+                    peakDay = stats.peakDayName,
+                    peakDayMinutes = stats.peakDayMinutes
+                )
+            }
+
+            // Lieblings-Album (falls vorhanden)
+            if (stats.topAlbum != null) {
+                item {
+                    TopAlbumCard(album = stats.topAlbum)
+                }
+            }
+        }
+
+        // --- SEGMENT 1: TOP-CHARTS ---
+        if (selectedSection == 1) {
+            // Top Playlists Ranking mit 1-Click Resume
+            if (stats.topPlaylists.isNotEmpty()) {
+                item {
+                    TopPlaylistsCard(
+                        playlists = stats.topPlaylists,
+                        onResume = onResumePlaylist
+                    )
+                }
+            } else if (!stats.topPlaylistTitle.isNullOrBlank()) {
+                item {
+                    TopPlaylistCard(
+                        stats = stats,
+                        onResume = {
+                            val bmToResume = stats.topBookmark ?: Bookmark(
+                                id = stats.topPlaylistContextUri ?: stats.topPlaylistTrackUri ?: "top_pl",
+                                contextUri = stats.topPlaylistContextUri,
+                                contextTitle = stats.topPlaylistTitle ?: "Playlist",
+                                trackTitle = stats.topPlaylistTitle ?: "Titel",
+                                artist = stats.topPlaylistArtist ?: "Spotify",
+                                trackUri = stats.topPlaylistTrackUri ?: "",
+                                coverUrl = stats.topPlaylistCover,
+                                positionMs = stats.topPlaylistProgressMs,
+                                durationMs = stats.topPlaylistDurationMs
+                            )
+                            onResumePlaylist(bmToResume)
+                        }
+                    )
+                }
+            }
+
+            // Meistgehörte Songs Ranking mit 1-Click Resume
+            if (stats.topSongs.isNotEmpty()) {
+                item {
+                    TopSongsCard(
+                        topSongs = stats.topSongs,
+                        onResume = onResumePlaylist
+                    )
+                }
+            }
+
+            // Lieblings-Künstler Ranking mit Prozent-Balken
+            if (stats.topArtists.isNotEmpty()) {
+                item {
+                    TopArtistsCard(artists = stats.topArtists)
+                }
+            }
+        }
+
+        // --- SEGMENT 2: VERLAUF ---
+        if (selectedSection == 2) {
+            if (stats.history.isNotEmpty()) {
+                item {
+                    HistoryCard(
+                        history = stats.history,
+                        onResume = onResumePlaylist
+                    )
+                }
+            } else {
+                item {
+                    StatsEmptySectionCard(
+                        title = "Noch kein Hörverlauf erfasst",
+                        message = "Sobald du Titel in Spotify abspielst, wird deine chronologische Historie hier mit relativen Zeitangaben festgehalten."
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Apple HIG Segmented Control mit Liquid Glass Meniskus & haptischem Feedback.
+ */
+@Composable
+private fun StatsSegmentedControl(
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit
+) {
+    val tokens = rememberStatsTokens()
+    val segments = listOf("Übersicht", "Top-Charts", "Verlauf")
+    val shape = RoundedCornerShape(24.dp)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(tokens.glassSurface)
+            .background(tokens.meniscusGleam)
+            .border(0.75.dp, tokens.specularRimSubtle, shape)
+            .padding(4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            segments.forEachIndexed { index, title ->
+                val isSelected = selectedIndex == index
+                val itemShape = RoundedCornerShape(20.dp)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                        .clip(itemShape)
+                        .background(if (isSelected) tokens.cardElevated else Color.Transparent)
+                        .clickable { onSelect(index) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = title,
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) tokens.textPrimary else tokens.textSecondary
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Tageszeiten-Verteilung Card (Morgen, Nachmittag, Abend, Nacht)
+ */
+@Composable
+private fun TimeOfDayDistributionCard(
+    distribution: List<TimeOfDayStat>,
+    peakSlot: String
+) {
+    val tokens = rememberStatsTokens()
+    val cardShape = RoundedCornerShape(20.dp)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .background(tokens.glassSurface)
+            .background(tokens.meniscusGleam)
+            .border(0.75.dp, tokens.specularRim, cardShape)
+            .padding(18.dp)
+    ) {
+        Column {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                KpiCard(
-                    title = "Gesamte Hörzeit",
-                    value = stats.formattedTotalTime,
-                    subtitle = "akkumulierte Zeit",
-                    icon = Icons.Default.Schedule,
-                    iconTint = SpotifyGreen,
-                    modifier = Modifier.weight(1f)
-                )
-
-                KpiCard(
-                    title = "Track-Anzahl",
-                    value = "${stats.totalTracksCount} Titel",
-                    subtitle = if (stats.totalBookmarksCount > 0) "${stats.totalBookmarksCount} Lesezeichen" else "gespeicherte Songs",
-                    icon = Icons.Default.MusicNote,
-                    iconTint = AppleSystemGreen,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
-        // 2. KPI-Grid (Zeile 2: Ø Dauer & Playlists)
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                KpiCard(
-                    title = "Ø Track-Dauer",
-                    value = stats.formattedAvgTrackDuration,
-                    subtitle = "Durchschnitt pro Song",
-                    icon = Icons.Default.Timer,
-                    iconTint = Color(0xFF64D2FF),
-                    modifier = Modifier.weight(1f)
-                )
-
-                KpiCard(
-                    title = "Playlists & Alben",
-                    value = "${stats.totalTrackedPlaylists}",
-                    subtitle = "aktive Stationen",
-                    icon = Icons.Default.QueueMusic,
-                    iconTint = Color(0xFFFF9F0A),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
-        // 3. Lieblings-Album (Top / most listened album)
-        if (stats.topAlbum != null) {
-            item {
-                TopAlbumCard(album = stats.topAlbum)
-            }
-        }
-
-        // 4. Meistgehörte Songs / Top-Songs Ranking (mit 1-Click Resume)
-        if (stats.topSongs.isNotEmpty()) {
-            item {
-                TopSongsCard(
-                    topSongs = stats.topSongs,
-                    onResume = onResumePlaylist
-                )
-            }
-        }
-
-        // 5. Lieblings-Künstler Ranking
-        if (stats.topArtists.isNotEmpty()) {
-            item {
-                TopArtistsCard(artists = stats.topArtists)
-            }
-        }
-
-        // 6. Hör-Persönlichkeit & Fokus Insights
-        item {
-            InsightsPersonaCard(
-                persona = stats.listeningPersona,
-                peakHours = stats.peakHourRange,
-                completionRate = stats.completionRatePercent,
-                completionLabel = stats.completionRateLabel,
-                peakDay = stats.peakDayName,
-                peakDayMinutes = stats.peakDayMinutes
-            )
-        }
-
-        // 7. Wöchentliche Aktivität (Balkendiagramm Mo-So)
-        item {
-            WeeklyActivityCard(activities = stats.weeklyActivity)
-        }
-
-        // 8. Top Playlist mit Fortschritt & 1-Click Resume
-        if (!stats.topPlaylistTitle.isNullOrBlank()) {
-            item {
-                TopPlaylistCard(
-                    stats = stats,
-                    onResume = {
-                        val bmToResume = stats.topBookmark ?: Bookmark(
-                            id = stats.topPlaylistContextUri ?: stats.topPlaylistTrackUri ?: "top_pl",
-                            contextUri = stats.topPlaylistContextUri,
-                            contextTitle = stats.topPlaylistTitle ?: "Playlist",
-                            trackTitle = stats.topPlaylistTitle ?: "Titel",
-                            artist = stats.topPlaylistArtist ?: "Spotify",
-                            trackUri = stats.topPlaylistTrackUri ?: "",
-                            coverUrl = stats.topPlaylistCover,
-                            positionMs = stats.topPlaylistProgressMs,
-                            durationMs = stats.topPlaylistDurationMs
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(tokens.cardElevated),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.WbSunny,
+                            contentDescription = null,
+                            tint = Color(0xFFFFD60A),
+                            modifier = Modifier.size(16.dp)
                         )
-                        onResumePlaylist(bmToResume)
                     }
-                )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Tageszeiten-Muster",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = tokens.textPrimary
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(tokens.cardElevated)
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = "Peak: $peakSlot",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SpotifyGreen
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                distribution.forEach { slot ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.width(96.dp)) {
+                            Text(
+                                text = slot.slotName,
+                                fontSize = 12.sp,
+                                fontWeight = if (slot.isPeak) FontWeight.Bold else FontWeight.Medium,
+                                color = if (slot.isPeak) tokens.textPrimary else tokens.textSecondary
+                            )
+                            Text(
+                                text = slot.slotRange.replace(" Uhr", ""),
+                                fontSize = 10.sp,
+                                color = tokens.textTertiary
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "${slot.minutes} Min.",
+                                    fontSize = 11.sp,
+                                    fontWeight = if (slot.isPeak) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (slot.isPeak) SpotifyGreen else tokens.textSecondary,
+                                    style = TextStyle(fontFeatureSettings = "tnum")
+                                )
+                                Text(
+                                    text = "${(slot.percentage * 100).toInt()}%",
+                                    fontSize = 11.sp,
+                                    color = tokens.textTertiary,
+                                    style = TextStyle(fontFeatureSettings = "tnum")
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            LinearProgressIndicator(
+                                progress = slot.percentage,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(4.dp)
+                                    .clip(RoundedCornerShape(2.dp)),
+                                color = if (slot.isPeak) SpotifyGreen else AppleSystemGreen,
+                                trackColor = tokens.cardElevated
+                            )
+                        }
+                    }
+                }
             }
         }
+    }
+}
 
-        // 9. Genaue Historie (Chronologische Listening History)
-        if (stats.history.isNotEmpty()) {
-            item {
-                HistoryCard(
-                    history = stats.history,
-                    onResume = onResumePlaylist
+/**
+ * Top Playlists Ranking mit 1-Click Resume, Fortschritt und Completion Rate.
+ */
+@Composable
+private fun TopPlaylistsCard(
+    playlists: List<PlaylistStat>,
+    onResume: (Bookmark) -> Unit
+) {
+    val tokens = rememberStatsTokens()
+    val haptic = LocalHapticFeedback.current
+    val cardShape = RoundedCornerShape(20.dp)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .background(tokens.glassSurface)
+            .background(tokens.meniscusGleam)
+            .border(0.75.dp, tokens.specularRim, cardShape)
+            .padding(18.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(tokens.cardElevated),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QueueMusic,
+                            contentDescription = null,
+                            tint = SpotifyGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Top-Playlists",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = tokens.textPrimary
+                    )
+                }
+
+                Text(
+                    text = "Top ${playlists.size}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = tokens.textTertiary
                 )
             }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                playlists.forEachIndexed { index, pl ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "#${index + 1}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (index == 0) SpotifyGreen else tokens.textSecondary,
+                            style = TextStyle(fontFeatureSettings = "tnum"),
+                            modifier = Modifier.width(26.dp)
+                        )
+
+                        AsyncCoverImage(
+                            coverUrl = pl.coverUrl,
+                            fallbackIcon = Icons.Default.QueueMusic,
+                            iconTint = if (index == 0) SpotifyGreen else tokens.textTertiary,
+                            iconSize = 22.dp,
+                            contentDescription = pl.title,
+                            modifier = Modifier.size(42.dp),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = pl.title,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = tokens.textPrimary,
+                                maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "${pl.formattedTotalTime} • ${pl.playCount} Titel",
+                                fontSize = 11.sp,
+                                color = SpotifyGreen,
+                                style = TextStyle(fontFeatureSettings = "tnum")
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // 44dp 1-Click Fortsetzen Button
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(if (index == 0) SpotifyGreen else tokens.cardElevated)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onResume(pl.bookmark)
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Wiedergeben: ${pl.title}",
+                                tint = if (index == 0) Color.Black else tokens.textPrimary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatsEmptySectionCard(title: String, message: String) {
+    val tokens = rememberStatsTokens()
+    val cardShape = RoundedCornerShape(18.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(cardShape)
+            .background(tokens.glassSurface)
+            .background(tokens.meniscusGleam)
+            .border(0.75.dp, tokens.specularRimSubtle, cardShape)
+            .padding(16.dp)
+    ) {
+        Column {
+            Text(
+                text = title,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = tokens.textPrimary
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = message,
+                fontSize = 12.sp,
+                color = tokens.textSecondary,
+                lineHeight = 16.sp
+            )
         }
     }
 }
@@ -453,7 +842,6 @@ private fun TopAlbumCard(album: AlbumStat) {
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Album Art Container (Apple HIG Liquid Glass Style)
                 AsyncCoverImage(
                     coverUrl = album.coverUrl,
                     fallbackIcon = Icons.Default.Album,
@@ -557,7 +945,6 @@ private fun TopSongsCard(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Rank Badge
                         Text(
                             text = "#${index + 1}",
                             fontSize = 13.sp,
@@ -567,7 +954,6 @@ private fun TopSongsCard(
                             modifier = Modifier.width(26.dp)
                         )
 
-                        // Artwork image (Apple HIG Liquid Glass Style)
                         AsyncCoverImage(
                             coverUrl = song.coverUrl,
                             fallbackIcon = Icons.Default.MusicNote,
@@ -580,7 +966,6 @@ private fun TopSongsCard(
 
                         Spacer(modifier = Modifier.width(10.dp))
 
-                        // Song Details
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = song.title,
@@ -607,7 +992,6 @@ private fun TopSongsCard(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // 1-Click Resume Button (Apple HIG 44pt Touch Target)
                         Box(
                             modifier = Modifier
                                 .size(44.dp)
@@ -690,7 +1074,7 @@ private fun HistoryCard(
             Spacer(modifier = Modifier.height(14.dp))
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                history.take(8).forEach { item ->
+                history.take(15).forEach { item ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -976,7 +1360,6 @@ private fun WeeklyActivityCard(activities: List<DayActivity>) {
                         verticalArrangement = Arrangement.Bottom,
                         modifier = Modifier.weight(1f)
                     ) {
-                        // Minutenwert über dem Balken
                         Text(
                             text = if (day.minutes > 0) "${day.minutes}m" else "0",
                             fontSize = 9.sp,
@@ -984,7 +1367,6 @@ private fun WeeklyActivityCard(activities: List<DayActivity>) {
                             modifier = Modifier.padding(bottom = 4.dp)
                         )
 
-                        // Vertikaler Balken mit flachem Baseline-Dot für inaktive Tage
                         val barHeight = if (day.minutes > 0) {
                             (day.fraction * 70f).coerceIn(10f, 70f).dp
                         } else {
@@ -1006,7 +1388,6 @@ private fun WeeklyActivityCard(activities: List<DayActivity>) {
 
                         Spacer(modifier = Modifier.height(6.dp))
 
-                        // Wochentag
                         Text(
                             text = day.dayName,
                             fontSize = 11.sp,
@@ -1051,7 +1432,6 @@ private fun TopPlaylistCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Cover Artwork
                 AsyncCoverImage(
                     coverUrl = stats.topPlaylistCover,
                     fallbackIcon = Icons.Default.QueueMusic,
@@ -1088,7 +1468,6 @@ private fun TopPlaylistCard(
                     )
                 }
 
-                // 1-Click Play Button (Apple HIG 44pt Touch Target)
                 Box(
                     modifier = Modifier
                         .size(44.dp)

@@ -10,6 +10,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Calendar
+import java.util.Locale
 
 class StatisticsEngineTest {
 
@@ -424,5 +426,67 @@ class StatisticsEngineTest {
         assertEquals("spotify:track:abc", bookmark.trackUri)
         assertEquals(115_000L, bookmark.positionMs)
         assertEquals(230_000L, bookmark.durationMs)
+    }
+
+    @Test
+    fun testPlaceholderFiltering() {
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:active", "Track"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:local_123", "Track"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:notification", "Track"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack(null, "Track"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:123", null))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:123", "Unbekannter Titel"))
+        assertFalse(StatisticsEngine.isPlaceholderTrack("spotify:track:123", "Valid Song"))
+    }
+
+    @Test
+    fun testGenericQueueFiltering() {
+        assertTrue(StatisticsEngine.isGenericQueueOrCorrupted("Warteschlange"))
+        assertTrue(StatisticsEngine.isGenericQueueOrCorrupted("Queue"))
+        assertTrue(StatisticsEngine.isGenericQueueOrCorrupted("wiedergabeschlange"))
+        assertTrue(StatisticsEngine.isGenericQueueOrCorrupted("Playing from playlist"))
+        assertFalse(StatisticsEngine.isGenericQueueOrCorrupted("My Playlist"))
+    }
+
+    @Test
+    fun testTimeOfDayDistribution() {
+        val cal = Calendar.getInstance(Locale.GERMANY)
+        cal.set(Calendar.HOUR_OF_DAY, 8)
+        val mTime = cal.timeInMillis
+        cal.set(Calendar.HOUR_OF_DAY, 14)
+        val aTime = cal.timeInMillis
+
+        val history = listOf(
+            HistoryTrackEntry("1", "spotify:track:1", "T1", "A1", "Alb1", "spotify:playlist:p1", "P1", 180_000L, 120_000L, mTime),
+            HistoryTrackEntry("2", "spotify:track:2", "T2", "A2", "Alb2", "spotify:playlist:p2", "P2", 300_000L, 240_000L, aTime)
+        )
+
+        val dist = StatisticsEngine.calculateTimeOfDayDistribution(emptyList(), history)
+        assertEquals(4, dist.size)
+        val morning = dist.find { it.slotName == "Morgen" }
+        val afternoon = dist.find { it.slotName == "Nachmittag" }
+
+        assertEquals(2, morning?.minutes)
+        assertEquals(4, afternoon?.minutes)
+        assertTrue(afternoon?.isPeak == true)
+        assertFalse(morning?.isPeak == true)
+    }
+
+    @Test
+    fun testTopPlaylistsRanking() {
+        val history = listOf(
+            HistoryTrackEntry("1", "spotify:track:1", "T1", "A1", "Alb1", "spotify:playlist:p1", "P1", 200_000L, 180_000L),
+            HistoryTrackEntry("2", "spotify:track:2", "T2", "A2", "Alb2", "spotify:playlist:p1", "P1", 200_000L, 200_000L),
+            HistoryTrackEntry("3", "spotify:track:3", "T3", "A3", "Alb3", "spotify:playlist:p2", "P2", 200_000L, 60_000L),
+            HistoryTrackEntry("4", "spotify:track:active", "T4", "A4", "Queue", "spotify:playlist:queue", "Warteschlange", 200_000L, 200_000L)
+        )
+
+        val top = StatisticsEngine.calculateTopPlaylists(emptyList(), history)
+        assertEquals(2, top.size)
+        assertEquals("P1", top[0].title)
+        assertEquals(380_000L, top[0].totalTimeMs)
+        assertEquals(95, top[0].completionRate)
+        assertEquals("P2", top[1].title)
+        assertEquals(30, top[1].completionRate)
     }
 }

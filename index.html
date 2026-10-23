@@ -1188,6 +1188,54 @@
         </div>
     </div>
 
+    <!-- STATS DASHBOARD BOTTOM SHEET / MODAL -->
+    <div class="modal-backdrop" id="stats-modal" onclick="closeStatsOnBackdrop(event)">
+        <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="stats-modal-title">
+            <div class="modal-grabber"></div>
+            <div class="modal-header">
+                <h3 class="modal-title" id="stats-modal-title">Statistiken & Einblicke</h3>
+                <button type="button" class="btn btn-icon-only" onclick="closeStatsModal()" aria-label="Schließen">✕</button>
+            </div>
+
+            <p style="font-size:0.8rem; color:var(--text-secondary); line-height:1.4;">
+                Live-Analyse deiner Hörgewohnheiten & Playlists aus verifizierten Spotify-Sessions.
+            </p>
+
+            <div class="metric-grid" style="margin-top:12px;">
+                <div class="metric-tile">
+                    <div class="metric-label">Gesamte Hörzeit</div>
+                    <div class="metric-value" id="stats-total-time" style="color:var(--accent-green);">0 Min.</div>
+                </div>
+                <div class="metric-tile">
+                    <div class="metric-label">Gespeicherte Playlists</div>
+                    <div class="metric-value" id="stats-playlist-count">0</div>
+                </div>
+                <div class="metric-tile">
+                    <div class="metric-label">Top-Station</div>
+                    <div class="metric-value" id="stats-top-station" style="font-size:0.88rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Keine</div>
+                </div>
+                <div class="metric-tile">
+                    <div class="metric-label">Hör-Typ</div>
+                    <div class="metric-value" id="stats-persona">Fokus ⚡️</div>
+                </div>
+            </div>
+
+            <div id="stats-top-playlists-container" style="margin-top:16px;">
+                <div style="font-size:0.82rem; font-weight:700; color:var(--text-primary); margin-bottom:8px;">Top-Playlists (1-Click Resume)</div>
+                <div id="stats-playlists-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:8px; margin-top:16px;">
+                <button type="button" class="btn btn-secondary" onclick="closeStatsModal(); openInspectorModal();">
+                    Technischen Sync-Inspektor öffnen ↗
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeStatsModal()">
+                    Fertig
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- 1-CLICK INTELLIGENT RESUME FALLBACK SHEET -->
     <div class="modal-backdrop" id="fallback-modal" onclick="closeFallbackOnBackdrop(event)">
         <div class="modal-sheet" role="dialog" aria-modal="true" aria-labelledby="fallback-title">
@@ -2365,12 +2413,14 @@
 
     setupSheetGestures('inspector-modal', '.modal-sheet', closeInspectorModal);
     setupSheetGestures('fallback-modal', '.modal-sheet', closeFallbackModal);
+    setupSheetGestures('stats-modal', '.modal-sheet', closeStatsModal);
 
     // Desktop Escape Key Dismissal
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             closeInspectorModal();
             closeFallbackModal();
+            closeStatsModal();
         }
     });
 
@@ -2463,6 +2513,80 @@
         }
     }
 
+    // --- STATS DASHBOARD SHEET ---
+    function openStatsModal() {
+        triggerHaptic('light');
+        updateStatsView();
+        const modal = document.getElementById('stats-modal');
+        if (modal) modal.classList.add('open');
+    }
+
+    function closeStatsModal() {
+        const modal = document.getElementById('stats-modal');
+        if (modal) modal.classList.remove('open');
+        const plBtn = document.getElementById('tab-btn-playlists');
+        const statsBtn = document.getElementById('tab-btn-stats');
+        if (plBtn) plBtn.classList.add('active');
+        if (statsBtn) statsBtn.classList.remove('active');
+    }
+
+    function closeStatsOnBackdrop(e) {
+        if (e.target.id === 'stats-modal') closeStatsModal();
+    }
+
+    function updateStatsView() {
+        const bookmarks = Object.values(getBookmarks()).filter(b => {
+            if (!b || !b.playlist_name) return false;
+            const name = b.playlist_name.trim().toLowerCase();
+            return name !== 'warteschlange' && name !== 'queue' && name !== 'wiedergabeschlange' &&
+                !name.startsWith('wiedergabe aus playlist') && !name.startsWith('playing from playlist');
+        });
+
+        const totalMs = bookmarks.reduce((acc, b) => acc + (b.progress_ms || 0), 0);
+        const totalMinutes = Math.floor(totalMs / 60000);
+        const hours = Math.floor(totalMinutes / 60);
+        const mins = totalMinutes % 60;
+        const formattedTotalTime = hours > 0 ? (mins > 0 ? `${hours} Std. ${mins} Min.` : `${hours} Std.`) : `${mins} Min.`;
+
+        const totalTimeEl = document.getElementById('stats-total-time');
+        const countEl = document.getElementById('stats-playlist-count');
+        const topStationEl = document.getElementById('stats-top-station');
+        const personaEl = document.getElementById('stats-persona');
+        const listEl = document.getElementById('stats-playlists-list');
+
+        if (totalTimeEl) totalTimeEl.innerText = formattedTotalTime;
+        if (countEl) countEl.innerText = String(bookmarks.length);
+
+        const sorted = [...bookmarks].sort((a, b) => (b.progress_ms || 0) - (a.progress_ms || 0));
+        const topBm = sorted[0];
+        if (topStationEl) topStationEl.innerText = topBm ? topBm.playlist_name : 'Noch keine';
+
+        const curHour = new Date().getHours();
+        const persona = (curHour >= 22 || curHour < 5) ? 'Nachteule 🦉' : (curHour < 12 ? 'Morgenmensch 🌅' : (curHour < 18 ? 'Fokus ⚡️' : 'Abend-Chiller 🌙'));
+        if (personaEl) personaEl.innerText = persona;
+
+        if (listEl) {
+            if (sorted.length === 0) {
+                listEl.innerHTML = '<div style="font-size:0.8rem; color:var(--text-tertiary); padding:10px 0;">Noch keine Playlists erfasst. Starte Spotify, um deine Hörzeit aufzuzeichnen.</div>';
+            } else {
+                listEl.innerHTML = sorted.slice(0, 5).map((b, idx) => `
+                    <div style="display:flex; align-items:center; justify-content:space-between; background:var(--bg-surface-elevated); padding:8px 12px; border-radius:12px; border:1px solid var(--border-subtle);">
+                        <div style="display:flex; align-items:center; gap:8px; min-width:0; flex:1;">
+                            <span style="font-size:0.75rem; font-weight:700; color:var(--accent-green); width:20px;">#${idx + 1}</span>
+                            <div style="min-width:0; flex:1;">
+                                <div style="font-size:0.82rem; font-weight:700; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(b.playlist_name)}</div>
+                                <div style="font-size:0.72rem; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(b.track_name)} • ${formatTime(b.progress_ms)}</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-secondary btn-sm" style="margin-left:8px;" onclick="closeStatsModal(); resumeBookmark('${b.playlist_id}')" aria-label="${escapeHtml(b.playlist_name)} fortsetzen">
+                            ▶
+                        </button>
+                    </div>
+                `).join('');
+            }
+        }
+    }
+
     function switchWebTab(tab) {
         triggerHaptic('selection');
         const plBtn = document.getElementById('tab-btn-playlists');
@@ -2470,11 +2594,12 @@
         if (tab === 'playlists') {
             if (plBtn) plBtn.classList.add('active');
             if (statsBtn) statsBtn.classList.remove('active');
+            closeStatsModal();
             window.scrollTo({ top: 0, behavior: 'smooth' });
         } else {
             if (plBtn) plBtn.classList.remove('active');
             if (statsBtn) statsBtn.classList.add('active');
-            openInspectorModal();
+            openStatsModal();
         }
     }
 

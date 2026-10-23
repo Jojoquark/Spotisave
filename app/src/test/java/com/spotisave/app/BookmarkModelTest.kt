@@ -7,12 +7,16 @@ import com.spotisave.app.data.model.HistoryTrackEntry
 import com.spotisave.app.data.model.PlaybackStateModel
 import com.spotisave.app.service.PlaybackTracker
 import com.spotisave.app.service.SpotifyNotificationListenerService
+import com.spotisave.app.data.stats.StatisticsEngine
 import com.spotisave.app.ui.util.ResumeHelper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Calendar
+import java.util.Locale
 
 class BookmarkModelTest {
 
@@ -1438,6 +1442,265 @@ class BookmarkModelTest {
         assertEquals("Nur die echte Spotify-Playlist darf importiert werden", 1, validPlaylistsOnly.size)
         assertEquals("spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", validPlaylistsOnly[0].id)
         assertEquals("Today's Top Hits", validPlaylistsOnly[0].contextTitle)
+    }
+
+    @Test
+    fun testStatisticsEnginePlaceholderFiltering() {
+        // Placeholder track URIs must be recognized and filtered out
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:active", "Coffee Morning"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:123:active", "Coffee Morning"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:notification", "Coffee Morning"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:456:notification", "Coffee Morning"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:local_12345", "Coffee Morning"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:local_track", "Coffee Morning"))
+
+        // Null, blank, or placeholder titles
+        assertTrue(StatisticsEngine.isPlaceholderTrack(null, "Coffee Morning"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("", "Coffee Morning"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("   ", "Coffee Morning"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:valid123", null))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:valid123", ""))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:valid123", "   "))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:valid123", "Unbekannter Titel"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:valid123", "unbekannter titel"))
+
+        // Legitimate Spotify tracks
+        assertFalse(StatisticsEngine.isPlaceholderTrack("spotify:track:valid123", "Coffee Morning"))
+        assertFalse(StatisticsEngine.isPlaceholderTrack("spotify:track:4cOdK2wGLETKBW3PvgPWqT", "Espresso"))
+    }
+
+    @Test
+    fun testStatisticsEngineGenericQueueFiltering() {
+        assertTrue(StatisticsEngine.isGenericQueueOrCorrupted("Warteschlange"))
+        assertTrue(StatisticsEngine.isGenericQueueOrCorrupted("warteschlange"))
+        assertTrue(StatisticsEngine.isGenericQueueOrCorrupted("Queue"))
+        assertTrue(StatisticsEngine.isGenericQueueOrCorrupted("queue"))
+        assertTrue(StatisticsEngine.isGenericQueueOrCorrupted("Wiedergabeschlange"))
+        assertTrue(StatisticsEngine.isGenericQueueOrCorrupted("Wiedergabe aus Playlist"))
+        assertTrue(StatisticsEngine.isGenericQueueOrCorrupted("Playing from playlist"))
+        assertTrue(StatisticsEngine.isGenericQueueOrCorrupted("spotify:playlist:local_warteschlange"))
+        assertTrue(StatisticsEngine.isGenericQueueOrCorrupted("In Warteschlange abspielen"))
+
+        // Legitimate playlist titles and null/empty
+        assertFalse(StatisticsEngine.isGenericQueueOrCorrupted("Chill Vibes"))
+        assertFalse(StatisticsEngine.isGenericQueueOrCorrupted("Roadtrip Hits"))
+        assertFalse(StatisticsEngine.isGenericQueueOrCorrupted(null))
+        assertFalse(StatisticsEngine.isGenericQueueOrCorrupted(""))
+        assertFalse(StatisticsEngine.isGenericQueueOrCorrupted("   "))
+    }
+
+    @Test
+    fun testStatisticsEngineTimeOfDayDistribution() {
+        val cal = Calendar.getInstance(Locale.GERMANY)
+
+        cal.set(Calendar.HOUR_OF_DAY, 8)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        val morningTime = cal.timeInMillis
+
+        cal.set(Calendar.HOUR_OF_DAY, 14)
+        val afternoonTime = cal.timeInMillis
+
+        cal.set(Calendar.HOUR_OF_DAY, 20)
+        val eveningTime = cal.timeInMillis
+
+        cal.set(Calendar.HOUR_OF_DAY, 2)
+        val nightTime = cal.timeInMillis
+
+        val historyEntries = listOf(
+            HistoryTrackEntry(
+                id = "h_morning",
+                trackUri = "spotify:track:m1",
+                trackTitle = "Morning Song",
+                artist = "Artist A",
+                album = "Album A",
+                contextUri = "spotify:playlist:morning_pl",
+                contextTitle = "Morning Playlist",
+                durationMs = 180_000L,
+                listenedMs = 120_000L, // 2 Min.
+                timestamp = morningTime
+            ),
+            HistoryTrackEntry(
+                id = "h_afternoon",
+                trackUri = "spotify:track:a1",
+                trackTitle = "Afternoon Song",
+                artist = "Artist B",
+                album = "Album B",
+                contextUri = "spotify:playlist:afternoon_pl",
+                contextTitle = "Afternoon Playlist",
+                durationMs = 360_000L,
+                listenedMs = 360_000L, // 6 Min. (Peak!)
+                timestamp = afternoonTime
+            ),
+            HistoryTrackEntry(
+                id = "h_evening",
+                trackUri = "spotify:track:e1",
+                trackTitle = "Evening Song",
+                artist = "Artist C",
+                album = "Album C",
+                contextUri = "spotify:playlist:evening_pl",
+                contextTitle = "Evening Playlist",
+                durationMs = 200_000L,
+                listenedMs = 180_000L, // 3 Min.
+                timestamp = eveningTime
+            ),
+            HistoryTrackEntry(
+                id = "h_night",
+                trackUri = "spotify:track:n1",
+                trackTitle = "Night Song",
+                artist = "Artist D",
+                album = "Album D",
+                contextUri = "spotify:playlist:night_pl",
+                contextTitle = "Night Playlist",
+                durationMs = 120_000L,
+                listenedMs = 60_000L, // 1 Min.
+                timestamp = nightTime
+            ),
+            // Placeholder and queue entries must be strictly ignored
+            HistoryTrackEntry(
+                id = "h_placeholder",
+                trackUri = "spotify:track:active",
+                trackTitle = "Unbekannter Titel",
+                artist = "Artist X",
+                album = "Warteschlange",
+                contextUri = "spotify:playlist:queue",
+                contextTitle = "Queue",
+                durationMs = 600_000L,
+                listenedMs = 600_000L,
+                timestamp = afternoonTime
+            )
+        )
+
+        val distribution = StatisticsEngine.calculateTimeOfDayDistribution(
+            bookmarks = emptyList(),
+            history = historyEntries
+        )
+
+        assertEquals(4, distribution.size)
+        val morning = distribution.find { it.slotName == "Morgen" }
+        val afternoon = distribution.find { it.slotName == "Nachmittag" }
+        val evening = distribution.find { it.slotName == "Abend" }
+        val night = distribution.find { it.slotName == "Nacht" }
+
+        assertNotNull(morning)
+        assertNotNull(afternoon)
+        assertNotNull(evening)
+        assertNotNull(night)
+
+        assertEquals("06:00 – 12:00 Uhr", morning?.slotRange)
+        assertEquals("12:00 – 18:00 Uhr", afternoon?.slotRange)
+        assertEquals("18:00 – 22:00 Uhr", evening?.slotRange)
+        assertEquals("22:00 – 06:00 Uhr", night?.slotRange)
+
+        assertEquals(2, morning?.minutes)
+        assertEquals(6, afternoon?.minutes)
+        assertEquals(3, evening?.minutes)
+        assertEquals(1, night?.minutes)
+
+        // Total minutes = 2 + 6 + 3 + 1 = 12 Min.
+        assertEquals(2f / 12f, morning?.percentage ?: 0f, 0.01f)
+        assertEquals(6f / 12f, afternoon?.percentage ?: 0f, 0.01f)
+        assertEquals(3f / 12f, evening?.percentage ?: 0f, 0.01f)
+        assertEquals(1f / 12f, night?.percentage ?: 0f, 0.01f)
+
+        assertTrue(afternoon?.isPeak == true)
+        assertFalse(morning?.isPeak == true)
+        assertFalse(evening?.isPeak == true)
+        assertFalse(night?.isPeak == true)
+    }
+
+    @Test
+    fun testStatisticsEngineCalculateTopPlaylistsAndCompletionRate() {
+        val now = System.currentTimeMillis()
+        val historyEntries = listOf(
+            HistoryTrackEntry(
+                id = "h_pl1_t1",
+                trackUri = "spotify:track:t1",
+                trackTitle = "Song One",
+                artist = "Band Alpha",
+                album = "Album Alpha",
+                contextUri = "spotify:playlist:top_alpha",
+                contextTitle = "Top Playlist Alpha",
+                durationMs = 200_000L,
+                listenedMs = 180_000L, // 90%
+                timestamp = now - 30_000L
+            ),
+            HistoryTrackEntry(
+                id = "h_pl1_t2",
+                trackUri = "spotify:track:t2",
+                trackTitle = "Song Two",
+                artist = "Band Alpha",
+                album = "Album Alpha",
+                contextUri = "spotify:playlist:top_alpha",
+                contextTitle = "Top Playlist Alpha",
+                durationMs = 200_000L,
+                listenedMs = 200_000L, // 100%
+                timestamp = now - 20_000L
+            ),
+            HistoryTrackEntry(
+                id = "h_pl2_t1",
+                trackUri = "spotify:track:t3",
+                trackTitle = "Beta Song",
+                artist = "Band Beta",
+                album = "Album Beta",
+                contextUri = "spotify:playlist:top_beta",
+                contextTitle = "Top Playlist Beta",
+                durationMs = 200_000L,
+                listenedMs = 60_000L, // 30%
+                timestamp = now - 10_000L
+            ),
+            // Corrupted / Warteschlange playlist entry: must be filtered out!
+            HistoryTrackEntry(
+                id = "h_corrupt",
+                trackUri = "spotify:track:t4",
+                trackTitle = "Corrupted Queue Track",
+                artist = "Unknown",
+                album = "Queue",
+                contextUri = "spotify:playlist:local_warteschlange",
+                contextTitle = "Warteschlange",
+                durationMs = 200_000L,
+                listenedMs = 200_000L,
+                timestamp = now
+            ),
+            // Placeholder track: must be filtered out!
+            HistoryTrackEntry(
+                id = "h_placeholder_entry",
+                trackUri = "spotify:track:active",
+                trackTitle = "Unbekannter Titel",
+                artist = "Unknown",
+                album = "Active",
+                contextUri = "spotify:playlist:active_placeholder",
+                contextTitle = "Active Placeholder",
+                durationMs = 150_000L,
+                listenedMs = 150_000L,
+                timestamp = now
+            )
+        )
+
+        val topPlaylists = StatisticsEngine.calculateTopPlaylists(
+            bookmarks = emptyList(),
+            history = historyEntries,
+            limit = 5
+        )
+
+        assertEquals("Genau 2 valide Playlists ermittelt (Warteschlange & Platzhalter gefiltert)", 2, topPlaylists.size)
+
+        val rank1 = topPlaylists[0]
+        assertEquals("Top Playlist Alpha", rank1.title)
+        assertEquals("spotify:playlist:top_alpha", rank1.contextUri)
+        assertEquals(2, rank1.playCount)
+        assertEquals(380_000L, rank1.totalTimeMs) // 180k + 200k = 380k
+        assertEquals(95, rank1.completionRate) // (90% + 100%) / 2 = 95%
+        assertNotNull("1-Click Resume Bookmark vorhanden", rank1.bookmark)
+        assertEquals("Top Playlist Alpha", rank1.bookmark.contextTitle)
+
+        val rank2 = topPlaylists[1]
+        assertEquals("Top Playlist Beta", rank2.title)
+        assertEquals("spotify:playlist:top_beta", rank2.contextUri)
+        assertEquals(1, rank2.playCount)
+        assertEquals(60_000L, rank2.totalTimeMs)
+        assertEquals(30, rank2.completionRate)
     }
 }
 

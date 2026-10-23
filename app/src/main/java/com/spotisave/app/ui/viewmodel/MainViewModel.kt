@@ -17,6 +17,7 @@ import com.spotisave.app.data.model.Bookmark
 import com.spotisave.app.data.model.HistoryTrackEntry
 import com.spotisave.app.data.model.PlaybackStateModel
 import com.spotisave.app.data.repository.BookmarkRepository
+import com.spotisave.app.data.stats.ArtistStat
 import com.spotisave.app.data.stats.ListeningStats
 import com.spotisave.app.data.stats.StatisticsEngine
 import com.spotisave.app.service.PlaybackTracker
@@ -98,15 +99,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _authStatusMessage = MutableStateFlow<String?>(null)
     val authStatusMessage: StateFlow<String?> = _authStatusMessage.asStateFlow()
 
+    private val _spotifyTopArtists = MutableStateFlow<List<ArtistStat>>(emptyList())
+    val spotifyTopArtists: StateFlow<List<ArtistStat>> = _spotifyTopArtists.asStateFlow()
+
     val listeningStats: StateFlow<ListeningStats> = combine(
         bookmarks,
         repository.listeningHistory,
-        activePlayback
-    ) { bmList, histList, playback ->
+        activePlayback,
+        _spotifyTopArtists
+    ) { bmList, histList, playback, topArtists ->
         StatisticsEngine.calculateStats(
             bookmarks = bmList,
             history = histList,
-            activePlayback = playback
+            activePlayback = playback,
+            spotifyTopArtists = topArtists
         )
     }.stateIn(
         scope = viewModelScope,
@@ -453,7 +459,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Synchronisiert den Spotify-Hörverlauf (/me/player/recently-played) und speichert neue Tracks in der History DB.
+     * Synchronisiert den Spotify-Hörverlauf (/me/player/recently-played) sowie Top-Künstler (/me/top/artists)
+     * und speichert neue Tracks in der History DB.
      */
     fun syncSpotifyHistory() {
         if (!authManager.isLoggedIn()) return
@@ -468,9 +475,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     resolveMissingPlaylistTitles()
                     Log.i("MainViewModel", "Spotify-History synchronisiert: ${tracks.size} Titel aktualisiert")
                 }
+
+                val topArtistsResult = apiClient.getTopArtists("short_term", 20)
+                val topArtists = topArtistsResult.getOrNull()
+                if (!topArtists.isNullOrEmpty()) {
+                    _spotifyTopArtists.value = topArtists
+                    Log.i("MainViewModel", "Spotify Top-Künstler synchronisiert: ${topArtists.size} Künstler erfasst")
+                }
             } catch (e: Exception) {
                 Log.d("MainViewModel", "Fehler bei syncSpotifyHistory: ${e.message}")
             }
         }
+    }
+
+    fun refreshStats() {
+        if (authManager.isLoggedIn()) {
+            syncSpotifyHistory()
+        }
+        repository.reloadBookmarks()
+        repository.reloadHistory()
     }
 }

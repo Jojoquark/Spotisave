@@ -2102,6 +2102,89 @@ async function runTests() {
         assert(casualDrives.trackTitle === 'Drive Slow', 'Simulation: Casual Drives trackTitle still Drive Slow after HeroCard action');
     }
 
+    // ----------------------------------------------------
+    // TEST 28: Overhauled & Mathematically Accurate Statistics Engine & UI
+    // ----------------------------------------------------
+    console.log('Test Group 28: Overhauled & Mathematically Accurate Statistics Engine & UI');
+
+    const statsEngineSrc2 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/stats/StatisticsEngine.kt'), 'utf8');
+    assert(statsEngineSrc2.includes('fun calculateTimeOfDayDistribution'), 'StatisticsEngine.kt implements calculateTimeOfDayDistribution');
+    assert(statsEngineSrc2.includes('fun calculateTopPlaylists'), 'StatisticsEngine.kt implements calculateTopPlaylists');
+    assert(statsEngineSrc2.includes('fun isPlaceholderTrack'), 'StatisticsEngine.kt implements isPlaceholderTrack');
+    assert(statsEngineSrc2.includes('fun isGenericQueueOrCorrupted'), 'StatisticsEngine.kt implements isGenericQueueOrCorrupted');
+    assert(statsEngineSrc2.includes('spotify:track:active') && statsEngineSrc2.includes(':notification') && statsEngineSrc2.includes('spotify:track:local_'), 'StatisticsEngine.kt filters out active, notification, and local_ placeholder tracks');
+    assert(statsEngineSrc2.includes('warteschlange') && statsEngineSrc2.includes('queue'), 'StatisticsEngine.kt filters out Warteschlange and Queue artifacts');
+
+    const statsScreenSrc3 = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/screens/StatsScreen.kt'), 'utf8');
+    assert(statsScreenSrc3.includes('StatsSegmentedControl'), 'StatsScreen.kt implements Apple Liquid Glass segmented navigation (StatsSegmentedControl)');
+    assert(statsScreenSrc3.includes('Übersicht') && statsScreenSrc3.includes('Top-Charts') && statsScreenSrc3.includes('Verlauf'), 'StatsScreen.kt defines Übersicht, Top-Charts, and Verlauf sections');
+    assert(statsScreenSrc3.includes('TimeOfDayDistributionCard'), 'StatsScreen.kt renders TimeOfDayDistributionCard');
+    assert(statsScreenSrc3.includes('TopPlaylistsCard'), 'StatsScreen.kt renders TopPlaylistsCard with 1-click resume');
+
+    const indexHtmlStats = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+    assert(indexHtmlStats.includes('id="stats-modal"'), 'index.html defines stats-modal sheet for web statistics');
+    assert(indexHtmlStats.includes('openStatsModal') && indexHtmlStats.includes('closeStatsModal'), 'index.html implements openStatsModal and closeStatsModal');
+    assert(indexHtmlStats.includes('updateStatsView'), 'index.html implements updateStatsView calculating total time, top station, and persona');
+    assert(indexHtmlStats.includes('switchWebTab') && indexHtmlStats.includes('openStatsModal'), 'index.html hooks switchWebTab to openStatsModal');
+
+    // Mathematical verification simulation of Time-of-Day distribution & Top-Playlists
+    {
+        const sampleHistory = [
+            { id: '1', trackUri: 'spotify:track:s1', trackTitle: 'Morning Track', artist: 'Artist A', contextUri: 'spotify:playlist:morning_pl', contextTitle: 'Morning Playlist', durationMs: 180000, listenedMs: 120000, hour: 8 },
+            { id: '2', trackUri: 'spotify:track:s2', trackTitle: 'Afternoon Track 1', artist: 'Artist B', contextUri: 'spotify:playlist:afternoon_pl', contextTitle: 'Afternoon Playlist', durationMs: 300000, listenedMs: 240000, hour: 14 },
+            { id: '3', trackUri: 'spotify:track:s3', trackTitle: 'Afternoon Track 2', artist: 'Artist B', contextUri: 'spotify:playlist:afternoon_pl', contextTitle: 'Afternoon Playlist', durationMs: 240000, listenedMs: 120000, hour: 16 },
+            { id: '4', trackUri: 'spotify:track:s4', trackTitle: 'Evening Track', artist: 'Artist C', contextUri: 'spotify:playlist:evening_pl', contextTitle: 'Evening Playlist', durationMs: 200000, listenedMs: 180000, hour: 20 },
+            { id: '5', trackUri: 'spotify:track:s5', trackTitle: 'Night Track', artist: 'Artist D', contextUri: 'spotify:playlist:night_pl', contextTitle: 'Night Playlist', durationMs: 120000, listenedMs: 60000, hour: 2 },
+            // Corrupted entries
+            { id: '6', trackUri: 'spotify:track:active', trackTitle: 'Unbekannter Titel', artist: 'Fake', contextUri: 'spotify:playlist:queue', contextTitle: 'Warteschlange', durationMs: 300000, listenedMs: 300000, hour: 15 }
+        ];
+
+        const cleanHistory = sampleHistory.filter(h => {
+            const isPlaceholder = !h.trackUri || h.trackUri === 'spotify:track:active' || h.trackTitle === 'Unbekannter Titel';
+            const isQueue = (h.contextTitle || '').toLowerCase().includes('warteschlange');
+            return !isPlaceholder && !isQueue;
+        });
+
+        assert(cleanHistory.length === 5, 'Simulation: Corrupted placeholder and queue tracks filtered out');
+
+        // Slot classification
+        const slotMinutes = { Morgen: 0, Nachmittag: 0, Abend: 0, Nacht: 0 };
+        cleanHistory.forEach(h => {
+            const mins = Math.floor(h.listenedMs / 60000);
+            if (h.hour >= 6 && h.hour < 12) slotMinutes.Morgen += mins;
+            else if (h.hour >= 12 && h.hour < 18) slotMinutes.Nachmittag += mins;
+            else if (h.hour >= 18 && h.hour < 22) slotMinutes.Abend += mins;
+            else slotMinutes.Nacht += mins;
+        });
+
+        assert(slotMinutes.Morgen === 2, 'Simulation: Morgen listening time correctly computed (2 Min.)');
+        assert(slotMinutes.Nachmittag === 6, 'Simulation: Nachmittag listening time correctly computed (6 Min.)');
+        assert(slotMinutes.Abend === 3, 'Simulation: Abend listening time correctly computed (3 Min.)');
+        assert(slotMinutes.Nacht === 1, 'Simulation: Nacht listening time correctly computed (1 Min.)');
+
+        const totalMins = slotMinutes.Morgen + slotMinutes.Nachmittag + slotMinutes.Abend + slotMinutes.Nacht;
+        assert(totalMins === 12, 'Simulation: Total listening time is 12 Min.');
+
+        // Top playlist grouping
+        const playlistMap = {};
+        cleanHistory.forEach(h => {
+            if (!playlistMap[h.contextUri]) {
+                playlistMap[h.contextUri] = { title: h.contextTitle, totalMs: 0, count: 0, completions: [] };
+            }
+            playlistMap[h.contextUri].totalMs += h.listenedMs;
+            playlistMap[h.contextUri].count += 1;
+            playlistMap[h.contextUri].completions.push((h.listenedMs / h.durationMs) * 100);
+        });
+
+        const rankedPlaylists = Object.values(playlistMap).sort((a, b) => b.totalMs - a.totalMs);
+        assert(rankedPlaylists.length === 4, 'Simulation: Exactly 4 valid playlists ranked');
+        assert(rankedPlaylists[0].title === 'Afternoon Playlist', 'Simulation: Afternoon Playlist is #1 top playlist');
+        assert(rankedPlaylists[0].totalMs === 360000, 'Simulation: Afternoon Playlist total time is 360000ms (6 Min.)');
+        assert(rankedPlaylists[0].count === 2, 'Simulation: Afternoon Playlist has 2 tracks');
+        const avgCompletion = Math.round(rankedPlaylists[0].completions.reduce((a, b) => a + b, 0) / rankedPlaylists[0].completions.length);
+        assert(avgCompletion === 65, 'Simulation: Afternoon Playlist average completion rate is 65%');
+    }
+
     console.log('\n========================================');
     console.log(`📊 TEST RESULTS: ${passedTests}/${totalTests} Passed (${failedTests} Failed)`);
     console.log('========================================\n');

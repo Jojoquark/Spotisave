@@ -457,8 +457,30 @@ class StatisticsEngineTest {
         val aTime = cal.timeInMillis
 
         val history = listOf(
-            HistoryTrackEntry("1", "spotify:track:1", "T1", "A1", "Alb1", "spotify:playlist:p1", "P1", 180_000L, 120_000L, mTime),
-            HistoryTrackEntry("2", "spotify:track:2", "T2", "A2", "Alb2", "spotify:playlist:p2", "P2", 300_000L, 240_000L, aTime)
+            HistoryTrackEntry(
+                id = "1",
+                trackUri = "spotify:track:1",
+                trackTitle = "T1",
+                artist = "A1",
+                album = "Alb1",
+                contextUri = "spotify:playlist:p1",
+                contextTitle = "P1",
+                durationMs = 180_000L,
+                listenedMs = 120_000L,
+                timestamp = mTime
+            ),
+            HistoryTrackEntry(
+                id = "2",
+                trackUri = "spotify:track:2",
+                trackTitle = "T2",
+                artist = "A2",
+                album = "Alb2",
+                contextUri = "spotify:playlist:p2",
+                contextTitle = "P2",
+                durationMs = 300_000L,
+                listenedMs = 240_000L,
+                timestamp = aTime
+            )
         )
 
         val dist = StatisticsEngine.calculateTimeOfDayDistribution(emptyList(), history)
@@ -475,10 +497,10 @@ class StatisticsEngineTest {
     @Test
     fun testTopPlaylistsRanking() {
         val history = listOf(
-            HistoryTrackEntry("1", "spotify:track:1", "T1", "A1", "Alb1", "spotify:playlist:p1", "P1", 200_000L, 180_000L),
-            HistoryTrackEntry("2", "spotify:track:2", "T2", "A2", "Alb2", "spotify:playlist:p1", "P1", 200_000L, 200_000L),
-            HistoryTrackEntry("3", "spotify:track:3", "T3", "A3", "Alb3", "spotify:playlist:p2", "P2", 200_000L, 60_000L),
-            HistoryTrackEntry("4", "spotify:track:active", "T4", "A4", "Queue", "spotify:playlist:queue", "Warteschlange", 200_000L, 200_000L)
+            HistoryTrackEntry(id = "1", trackUri = "spotify:track:1", trackTitle = "T1", artist = "A1", album = "Alb1", contextUri = "spotify:playlist:p1", contextTitle = "P1", durationMs = 200_000L, listenedMs = 180_000L),
+            HistoryTrackEntry(id = "2", trackUri = "spotify:track:2", trackTitle = "T2", artist = "A2", album = "Alb2", contextUri = "spotify:playlist:p1", contextTitle = "P1", durationMs = 200_000L, listenedMs = 200_000L),
+            HistoryTrackEntry(id = "3", trackUri = "spotify:track:3", trackTitle = "T3", artist = "A3", album = "Alb3", contextUri = "spotify:playlist:p2", contextTitle = "P2", durationMs = 200_000L, listenedMs = 60_000L),
+            HistoryTrackEntry(id = "4", trackUri = "spotify:track:active", trackTitle = "T4", artist = "A4", album = "Queue", contextUri = "spotify:playlist:queue", contextTitle = "Warteschlange", durationMs = 200_000L, listenedMs = 200_000L)
         )
 
         val top = StatisticsEngine.calculateTopPlaylists(emptyList(), history)

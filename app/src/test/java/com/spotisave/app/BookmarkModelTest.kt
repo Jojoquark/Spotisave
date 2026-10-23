@@ -1702,5 +1702,87 @@ class BookmarkModelTest {
         assertEquals(60_000L, rank2.totalTimeMs)
         assertEquals(30, rank2.completionRate)
     }
+
+    @Test
+    fun testAdvancedPlaceholderAndQueueDetection() {
+        // Plain local_ prefix without spotify:track:
+        assertTrue(StatisticsEngine.isPlaceholderTrack("local_track_12345", "My Song"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("local:audio:1", "My Song"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:local:artist:album:track:120", "My Song"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:active:session", "My Song"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:notification:update", "My Song"))
+
+        // Track title itself is corrupted queue label
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:valid999", "Warteschlange"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:valid999", "Queue"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:valid999", "Wiedergabeschlange"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:valid999", "Playing from playlist"))
+
+        // Valid track
+        assertFalse(StatisticsEngine.isPlaceholderTrack("spotify:track:valid999", "Valid Track Title"))
+    }
+
+    @Test
+    fun testTimeOfDayDistributionWithoutTruncationLoss() {
+        val cal = Calendar.getInstance(Locale.GERMANY)
+        cal.set(Calendar.HOUR_OF_DAY, 9)
+        val mTime = cal.timeInMillis
+
+        // 3 tracks of 45 seconds each in morning (45s * 3 = 135s = 2 min 15s)
+        // If truncated prematurely to minutes per track (45s -> 0 min each), total would be 0 min.
+        // With slotMs accumulation: 135s -> 2 min!
+        val history = listOf(
+            HistoryTrackEntry(id = "h1", trackUri = "spotify:track:1", trackTitle = "T1", artist = "A1", album = "Alb", contextUri = "spotify:playlist:p1", contextTitle = "P1", durationMs = 60_000L, listenedMs = 45_000L, timestamp = mTime),
+            HistoryTrackEntry(id = "h2", trackUri = "spotify:track:2", trackTitle = "T2", artist = "A2", album = "Alb", contextUri = "spotify:playlist:p1", contextTitle = "P1", durationMs = 60_000L, listenedMs = 45_000L, timestamp = mTime),
+            HistoryTrackEntry(id = "h3", trackUri = "spotify:track:3", trackTitle = "T3", artist = "A3", album = "Alb", contextUri = "spotify:playlist:p1", contextTitle = "P1", durationMs = 60_000L, listenedMs = 45_000L, timestamp = mTime)
+        )
+
+        val dist = StatisticsEngine.calculateTimeOfDayDistribution(emptyList(), history)
+        val morning = dist.find { it.slotName == "Morgen" }
+        assertNotNull(morning)
+        assertEquals(2, morning?.minutes) // 135_000L / 60_000L = 2 Min.
+    }
+
+    @Test
+    fun testSpotifyWebApITopTracksMerging() {
+        val localHistory = listOf(
+            HistoryTrackEntry(id = "h1", trackUri = "spotify:track:local1", trackTitle = "Local #1", artist = "Artist 1", album = "Alb1", contextUri = "spotify:playlist:p1", contextTitle = "P1", durationMs = 200_000L, listenedMs = 200_000L, timestamp = 1000L)
+        )
+
+        val webApiTopTracks = listOf(
+            com.spotisave.app.data.stats.TopTrackStat(
+                trackUri = "spotify:track:web1",
+                title = "Web Hit #1",
+                artist = "Star",
+                contextTitle = "Single",
+                coverUrl = null,
+                playCount = 10,
+                durationMs = 180_000L,
+                totalTimeMs = 1_800_000L,
+                formattedDuration = "3:00",
+                formattedTotalTime = "30 Min.",
+                bookmark = Bookmark(id = "bm_web1", contextTitle = "Single", trackTitle = "Web Hit #1", artist = "Star", trackUri = "spotify:track:web1", positionMs = 0L, durationMs = 180_000L)
+            )
+        )
+
+        val merged = StatisticsEngine.calculateTopSongs(
+            bookmarks = emptyList(),
+            history = localHistory,
+            limit = 5,
+            spotifyTopTracks = webApiTopTracks
+        )
+
+        assertEquals(2, merged.size)
+        assertEquals("Local #1", merged[0].title)
+        assertEquals("Web Hit #1", merged[1].title)
+    }
+
+    @Test
+    fun testTimeFormatterSubMinuteFormatting() {
+        assertEquals("0 Min.", com.spotisave.app.ui.util.TimeFormatter.formatHoursAndMinutes(0L))
+        assertEquals("< 1 Min.", com.spotisave.app.ui.util.TimeFormatter.formatHoursAndMinutes(35_000L))
+        assertEquals("1 Min.", com.spotisave.app.ui.util.TimeFormatter.formatHoursAndMinutes(60_000L))
+        assertEquals("1 Std. 15 Min.", com.spotisave.app.ui.util.TimeFormatter.formatHoursAndMinutes(4_500_000L))
+    }
 }
 

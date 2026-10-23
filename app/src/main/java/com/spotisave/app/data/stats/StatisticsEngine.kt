@@ -16,12 +16,21 @@ object StatisticsEngine {
      */
     fun isPlaceholderTrack(trackUri: String?, trackTitle: String?): Boolean {
         if (trackTitle.isNullOrBlank() || trackTitle.equals("Unbekannter Titel", ignoreCase = true)) return true
+        if (isGenericQueueOrCorrupted(trackTitle)) return true
         if (trackUri.isNullOrBlank()) return true
         val clean = trackUri.trim()
         return clean == "spotify:track:active" ||
             clean.endsWith(":active") ||
             clean.endsWith(":notification") ||
-            clean.startsWith("spotify:track:local_")
+            clean.contains(":active:") ||
+            clean.contains(":notification:") ||
+            clean.startsWith("spotify:track:local_") ||
+            clean.startsWith("spotify:local") ||
+            clean.startsWith("local_") ||
+            clean.startsWith("local:") ||
+            clean.contains("local_") ||
+            clean.contains(":active") ||
+            clean.contains(":notification")
     }
 
     /**
@@ -50,7 +59,24 @@ object StatisticsEngine {
         bookmarks = bookmarks,
         history = emptyList(),
         activePlayback = activePlayback,
-        spotifyTopArtists = emptyList()
+        spotifyTopArtists = emptyList(),
+        spotifyTopTracks = emptyList()
+    )
+
+    /**
+     * Überladene Einstiegsmethode für Aufrufe ohne SpotifyTopTracks.
+     */
+    fun calculateStats(
+        bookmarks: List<Bookmark>,
+        history: List<HistoryTrackEntry>,
+        activePlayback: PlaybackStateModel? = null,
+        spotifyTopArtists: List<ArtistStat> = emptyList()
+    ): ListeningStats = calculateStats(
+        bookmarks = bookmarks,
+        history = history,
+        activePlayback = activePlayback,
+        spotifyTopArtists = spotifyTopArtists,
+        spotifyTopTracks = emptyList()
     )
 
     /**
@@ -62,7 +88,8 @@ object StatisticsEngine {
         bookmarks: List<Bookmark>,
         history: List<HistoryTrackEntry>,
         activePlayback: PlaybackStateModel? = null,
-        spotifyTopArtists: List<ArtistStat> = emptyList()
+        spotifyTopArtists: List<ArtistStat> = emptyList(),
+        spotifyTopTracks: List<TopTrackStat> = emptyList()
     ): ListeningStats {
         // 0. Bereinigung aller Eingabedaten von Platzhalter-Tracks und Warteschlangen-Artefakten
         val cleanHistory = history.filter { h ->
@@ -70,6 +97,7 @@ object StatisticsEngine {
             !isGenericQueueOrCorrupted(h.contextTitle) &&
             !isGenericQueueOrCorrupted(h.album) &&
             !isGenericQueueOrCorrupted(h.id) &&
+            !isGenericQueueOrCorrupted(h.trackTitle) &&
             h.durationMs >= 0L
         }
 
@@ -77,6 +105,7 @@ object StatisticsEngine {
             !isPlaceholderTrack(b.trackUri, b.trackTitle) &&
             !isGenericQueueOrCorrupted(b.contextTitle) &&
             !isGenericQueueOrCorrupted(b.id) &&
+            !isGenericQueueOrCorrupted(b.trackTitle) &&
             b.durationMs >= 0L
         }
 
@@ -181,10 +210,10 @@ object StatisticsEngine {
         val topDurationMs = primaryTopPlaylist?.bookmark?.durationMs ?: topBm?.durationMs ?: 0L
 
         // 4. Lieblings-Album (nach akkumulierter Hörzeit und Titelanzahl)
-        val topAlbum = calculateTopAlbum(bookmarks, history)
+        val topAlbum = calculateTopAlbum(cleanBookmarks, cleanHistory)
 
         // 5. Meistgehörte Songs / Top-Songs Ranking (mit 1-Click Resume)
-        val topSongs = calculateTopSongs(bookmarks, history)
+        val topSongs = calculateTopSongs(cleanBookmarks, cleanHistory, limit = 5, spotifyTopTracks = spotifyTopTracks)
 
         // 6. Genaue Historie (Chronologische Listening History mit 'vor X Min.')
         val historyList = calculateHistory(cleanBookmarks, cleanHistory)
@@ -293,38 +322,52 @@ object StatisticsEngine {
         bookmarks: List<Bookmark>,
         history: List<HistoryTrackEntry> = emptyList()
     ): List<TimeOfDayStat> {
-        val slotMinutes = IntArray(4) // 0: Morgen, 1: Nachmittag, 2: Abend, 3: Nacht
+        val slotMs = LongArray(4) // 0: Morgen, 1: Nachmittag, 2: Abend, 3: Nacht
         val cal = Calendar.getInstance(Locale.GERMANY)
 
-        val cleanHistory = history.filter { !isPlaceholderTrack(it.trackUri, it.trackTitle) }
-        val cleanBookmarks = bookmarks.filter { !isPlaceholderTrack(it.trackUri, it.trackTitle) }
+        val cleanHistory = history.filter {
+            !isPlaceholderTrack(it.trackUri, it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.contextTitle) &&
+            !isGenericQueueOrCorrupted(it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.id)
+        }
+        val cleanBookmarks = bookmarks.filter {
+            !isPlaceholderTrack(it.trackUri, it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.contextTitle) &&
+            !isGenericQueueOrCorrupted(it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.id)
+        }
 
         if (cleanHistory.isNotEmpty()) {
             for (h in cleanHistory) {
                 cal.timeInMillis = h.timestamp
                 val hour = cal.get(Calendar.HOUR_OF_DAY)
-                val mins = (h.listenedMs / 60000L).toInt().coerceAtLeast(0)
+                val ms = h.listenedMs.coerceAtLeast(0L)
                 val idx = when (hour) {
                     in 6..11 -> 0
                     in 12..17 -> 1
                     in 18..21 -> 2
                     else -> 3
                 }
-                slotMinutes[idx] += mins
+                slotMs[idx] += ms
             }
         } else {
             for (b in cleanBookmarks) {
                 cal.timeInMillis = b.timestamp
                 val hour = cal.get(Calendar.HOUR_OF_DAY)
-                val mins = (b.positionMs / 60000L).toInt().coerceAtLeast(0)
+                val ms = b.positionMs.coerceAtLeast(0L)
                 val idx = when (hour) {
                     in 6..11 -> 0
                     in 12..17 -> 1
                     in 18..21 -> 2
                     else -> 3
                 }
-                slotMinutes[idx] += mins
+                slotMs[idx] += ms
             }
+        }
+
+        val slotMinutes = IntArray(4) { idx ->
+            (slotMs[idx] / 60000L).toInt().coerceAtLeast(0)
         }
 
         val totalMinutes = slotMinutes.sum().coerceAtLeast(1)
@@ -365,6 +408,10 @@ object StatisticsEngine {
         val cleanHistory = history.filter {
             !isPlaceholderTrack(it.trackUri, it.trackTitle) &&
             !isGenericQueueOrCorrupted(it.contextTitle) &&
+            !isGenericQueueOrCorrupted(it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.id) &&
+            it.contextUri?.startsWith("spotify:playlist:local_") != true &&
+            !it.id.startsWith("spotify:playlist:local_") &&
             (it.contextUri?.startsWith("spotify:playlist:") == true ||
                 (it.contextTitle.isNotBlank() && it.contextTitle != "Spotify" && it.contextUri?.startsWith("spotify:album:") != true))
         }
@@ -411,7 +458,11 @@ object StatisticsEngine {
         val playlistBookmarks = bookmarks.filter {
             it.isPlaylist &&
             !isPlaceholderTrack(it.trackUri, it.trackTitle) &&
-            !isGenericQueueOrCorrupted(it.contextTitle)
+            !isGenericQueueOrCorrupted(it.contextTitle) &&
+            !isGenericQueueOrCorrupted(it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.id) &&
+            !it.id.startsWith("spotify:playlist:local_") &&
+            it.contextUri?.startsWith("spotify:playlist:local_") != true
         }
 
         if (playlistBookmarks.isEmpty()) return emptyList()
@@ -446,7 +497,9 @@ object StatisticsEngine {
         val cleanHistory = history.filter {
             !isPlaceholderTrack(it.trackUri, it.trackTitle) &&
             !isGenericQueueOrCorrupted(it.album) &&
-            !isGenericQueueOrCorrupted(it.contextTitle)
+            !isGenericQueueOrCorrupted(it.contextTitle) &&
+            !isGenericQueueOrCorrupted(it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.id)
         }
 
         if (cleanHistory.isNotEmpty()) {
@@ -483,7 +536,9 @@ object StatisticsEngine {
 
         val cleanBookmarks = bookmarks.filter {
             !isPlaceholderTrack(it.trackUri, it.trackTitle) &&
-            !isGenericQueueOrCorrupted(it.contextTitle)
+            !isGenericQueueOrCorrupted(it.contextTitle) &&
+            !isGenericQueueOrCorrupted(it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.id)
         }
         if (cleanBookmarks.isEmpty()) return null
 
@@ -523,19 +578,22 @@ object StatisticsEngine {
     fun calculateTopSongs(
         bookmarks: List<Bookmark>,
         history: List<HistoryTrackEntry> = emptyList(),
-        limit: Int = 5
+        limit: Int = 5,
+        spotifyTopTracks: List<TopTrackStat> = emptyList()
     ): List<TopTrackStat> {
         val cleanHistory = history.filter {
             !isPlaceholderTrack(it.trackUri, it.trackTitle) &&
-            !isGenericQueueOrCorrupted(it.contextTitle)
+            !isGenericQueueOrCorrupted(it.contextTitle) &&
+            !isGenericQueueOrCorrupted(it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.id)
         }
 
-        if (cleanHistory.isNotEmpty()) {
+        val localTopSongs: List<TopTrackStat> = if (cleanHistory.isNotEmpty()) {
             val grouped = cleanHistory.groupBy {
                 if (it.trackUri.isNotBlank()) it.trackUri else "${it.trackTitle} - ${it.artist}"
             }
 
-            return grouped.map { (_, entries) ->
+            grouped.map { (_, entries) ->
                 val latest = entries.maxByOrNull { it.timestamp } ?: entries.first()
                 val playCount = entries.size
                 val totalTimeMs = entries.sumOf { it.listenedMs.coerceAtLeast(0L) }
@@ -563,39 +621,57 @@ object StatisticsEngine {
             }
             .sortedWith(compareByDescending<TopTrackStat> { it.totalTimeMs }.thenByDescending { it.playCount })
             .take(limit)
+        } else {
+            val cleanBookmarks = bookmarks.filter {
+                !isPlaceholderTrack(it.trackUri, it.trackTitle) &&
+                !isGenericQueueOrCorrupted(it.contextTitle) &&
+                !isGenericQueueOrCorrupted(it.trackTitle) &&
+                !isGenericQueueOrCorrupted(it.id)
+            }
+            if (cleanBookmarks.isEmpty()) {
+                emptyList()
+            } else {
+                val grouped = cleanBookmarks.groupBy {
+                    if (it.trackUri.isNotBlank()) it.trackUri else "${it.trackTitle} - ${it.artist}"
+                }
+
+                grouped.map { (_, bms) ->
+                    val bestBm = bms.maxByOrNull { it.positionMs } ?: bms.first()
+                    val playCount = bms.size
+                    val totalTimeMs = bms.sumOf { it.positionMs.coerceAtLeast(0L) }
+                    val durationMs = bestBm.durationMs
+                    TopTrackStat(
+                        trackUri = bestBm.trackUri,
+                        title = bestBm.trackTitle,
+                        artist = bestBm.artist,
+                        contextTitle = if (bestBm.contextTitle.isNotBlank() && bestBm.contextTitle != "Spotify" && !isGenericQueueOrCorrupted(bestBm.contextTitle)) bestBm.contextTitle else "Single",
+                        coverUrl = bestBm.coverUrl,
+                        playCount = playCount,
+                        durationMs = durationMs,
+                        totalTimeMs = totalTimeMs,
+                        formattedDuration = TimeFormatter.formatTime(durationMs),
+                        formattedTotalTime = TimeFormatter.formatHoursAndMinutes(totalTimeMs),
+                        bookmark = bestBm
+                    )
+                }
+                .sortedWith(compareByDescending<TopTrackStat> { it.totalTimeMs }.thenByDescending { it.playCount })
+                .take(limit)
+            }
         }
 
-        val cleanBookmarks = bookmarks.filter {
-            !isPlaceholderTrack(it.trackUri, it.trackTitle) &&
-            !isGenericQueueOrCorrupted(it.contextTitle)
-        }
-        if (cleanBookmarks.isEmpty()) return emptyList()
-
-        val grouped = cleanBookmarks.groupBy {
-            if (it.trackUri.isNotBlank()) it.trackUri else "${it.trackTitle} - ${it.artist}"
+        if (spotifyTopTracks.isEmpty()) {
+            return localTopSongs
         }
 
-        return grouped.map { (_, bms) ->
-            val bestBm = bms.maxByOrNull { it.positionMs } ?: bms.first()
-            val playCount = bms.size
-            val totalTimeMs = bms.sumOf { it.positionMs.coerceAtLeast(0L) }
-            val durationMs = bestBm.durationMs
-            TopTrackStat(
-                trackUri = bestBm.trackUri,
-                title = bestBm.trackTitle,
-                artist = bestBm.artist,
-                contextTitle = if (bestBm.contextTitle.isNotBlank() && bestBm.contextTitle != "Spotify" && !isGenericQueueOrCorrupted(bestBm.contextTitle)) bestBm.contextTitle else "Single",
-                coverUrl = bestBm.coverUrl,
-                playCount = playCount,
-                durationMs = durationMs,
-                totalTimeMs = totalTimeMs,
-                formattedDuration = TimeFormatter.formatTime(durationMs),
-                formattedTotalTime = TimeFormatter.formatHoursAndMinutes(totalTimeMs),
-                bookmark = bestBm
-            )
+        // Spotify Web API Top Tracks ergänzen oder auffüllen
+        val combined = localTopSongs.toMutableList()
+        for (sp in spotifyTopTracks) {
+            if (combined.size >= limit) break
+            if (combined.none { it.trackUri == sp.trackUri || it.title.equals(sp.title, ignoreCase = true) }) {
+                combined.add(sp)
+            }
         }
-        .sortedWith(compareByDescending<TopTrackStat> { it.totalTimeMs }.thenByDescending { it.playCount })
-        .take(limit)
+        return combined.take(limit)
     }
 
     /**
@@ -686,12 +762,22 @@ object StatisticsEngine {
         history: List<HistoryTrackEntry> = emptyList()
     ): List<DayActivity> {
         val days = listOf("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
-        val minutesPerDay = IntArray(7)
+        val msPerDay = LongArray(7)
 
         val cal = Calendar.getInstance(Locale.GERMANY)
 
-        val cleanHistory = history.filter { !isPlaceholderTrack(it.trackUri, it.trackTitle) }
-        val cleanBookmarks = bookmarks.filter { !isPlaceholderTrack(it.trackUri, it.trackTitle) }
+        val cleanHistory = history.filter {
+            !isPlaceholderTrack(it.trackUri, it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.contextTitle) &&
+            !isGenericQueueOrCorrupted(it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.id)
+        }
+        val cleanBookmarks = bookmarks.filter {
+            !isPlaceholderTrack(it.trackUri, it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.contextTitle) &&
+            !isGenericQueueOrCorrupted(it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.id)
+        }
 
         if (cleanHistory.isNotEmpty()) {
             for (h in cleanHistory) {
@@ -707,8 +793,7 @@ object StatisticsEngine {
                     Calendar.SUNDAY -> 6
                     else -> 0
                 }
-                val mins = (h.listenedMs / 60000L).toInt().coerceAtLeast(0)
-                minutesPerDay[index] += mins
+                msPerDay[index] += h.listenedMs.coerceAtLeast(0L)
             }
         } else {
             for (b in cleanBookmarks) {
@@ -724,9 +809,12 @@ object StatisticsEngine {
                     Calendar.SUNDAY -> 6
                     else -> 0
                 }
-                val mins = (b.positionMs / 60000L).toInt().coerceAtLeast(0)
-                minutesPerDay[index] += mins
+                msPerDay[index] += b.positionMs.coerceAtLeast(0L)
             }
+        }
+
+        val minutesPerDay = IntArray(7) { idx ->
+            (msPerDay[idx] / 60000L).toInt().coerceAtLeast(0)
         }
 
         val maxMinutes = (minutesPerDay.maxOrNull() ?: 0).coerceAtLeast(0)
@@ -753,8 +841,18 @@ object StatisticsEngine {
         bookmarks: List<Bookmark>,
         history: List<HistoryTrackEntry> = emptyList()
     ): Pair<String, String> {
-        val cleanHistory = history.filter { !isPlaceholderTrack(it.trackUri, it.trackTitle) }
-        val cleanBookmarks = bookmarks.filter { !isPlaceholderTrack(it.trackUri, it.trackTitle) }
+        val cleanHistory = history.filter {
+            !isPlaceholderTrack(it.trackUri, it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.contextTitle) &&
+            !isGenericQueueOrCorrupted(it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.id)
+        }
+        val cleanBookmarks = bookmarks.filter {
+            !isPlaceholderTrack(it.trackUri, it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.contextTitle) &&
+            !isGenericQueueOrCorrupted(it.trackTitle) &&
+            !isGenericQueueOrCorrupted(it.id)
+        }
 
         val sourceTimestamps = if (cleanHistory.isNotEmpty()) {
             cleanHistory.map { it.timestamp }
@@ -784,9 +882,9 @@ object StatisticsEngine {
         }
 
         val persona = when (peakHour) {
-            in 22..23, in 0..4 -> "Nachteule 🦉"
-            in 5..10 -> "Morgenmensch 🌅"
-            in 11..16 -> "Fokus-Nachmittag ⚡️"
+            in 22..23, in 0..5 -> "Nachteule 🦉"
+            in 6..11 -> "Morgenmensch 🌅"
+            in 12..17 -> "Fokus-Nachmittag ⚡️"
             else -> "Abend-Chiller 🌙"
         }
 

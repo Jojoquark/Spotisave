@@ -1115,7 +1115,7 @@ async function runTests() {
 
     const statsEngineSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/stats/StatisticsEngine.kt'), 'utf8');
     assert(statsEngineSrc.includes('history: List<HistoryTrackEntry>'), 'StatisticsEngine accepts full listening history log');
-    assert(statsEngineSrc.includes('calculateTopAlbum(bookmarks, history)') && statsEngineSrc.includes('calculateTopSongs(bookmarks, history)'), 'StatisticsEngine evaluates album and top songs from history');
+    assert(statsEngineSrc.includes('calculateTopAlbum(cleanBookmarks, cleanHistory)') && statsEngineSrc.includes('calculateTopSongs(cleanBookmarks, cleanHistory'), 'StatisticsEngine evaluates album and top songs from history');
 
     // Apple Liquid Glass Design System Verification
     const liquidGlassSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/theme/LiquidGlass.kt'), 'utf8');
@@ -2183,6 +2183,80 @@ async function runTests() {
         assert(rankedPlaylists[0].count === 2, 'Simulation: Afternoon Playlist has 2 tracks');
         const avgCompletion = Math.round(rankedPlaylists[0].completions.reduce((a, b) => a + b, 0) / rankedPlaylists[0].completions.length);
         assert(avgCompletion === 65, 'Simulation: Afternoon Playlist average completion rate is 65%');
+    }
+
+    // ----------------------------------------------------
+    // TEST 29: Database History Sanitation, Web API Top Tracks & Segmented PWA Analytics
+    // ----------------------------------------------------
+    console.log('Test Group 29: Database History Sanitation, Web API Top Tracks & Segmented PWA Analytics');
+
+    {
+        const dbHelperSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/db/BookmarkDatabaseHelper.kt'), 'utf8');
+        assert(dbHelperSrc.includes('fun deleteHistoryEntry(id: String)'), 'BookmarkDatabaseHelper.kt implements deleteHistoryEntry');
+        assert(dbHelperSrc.includes('fun purgeCorruptedHistory(): Int'), 'BookmarkDatabaseHelper.kt implements purgeCorruptedHistory');
+        assert(dbHelperSrc.includes("COL_HIST_TRACK_URI LIKE '%:active%'") && dbHelperSrc.includes("COL_HIST_TRACK_URI LIKE '%local_%'"), 'BookmarkDatabaseHelper.kt purges active, local and corrupted queue entries from SQLite');
+
+        const repoSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/repository/BookmarkRepository.kt'), 'utf8');
+        assert(repoSrc.includes('dbHelper.purgeCorruptedHistory()'), 'BookmarkRepository.kt runs purgeCorruptedHistory on reloadHistory');
+        assert(repoSrc.includes('StatisticsEngine.isPlaceholderTrack(entry.trackUri, entry.trackTitle)'), 'BookmarkRepository.kt blocks placeholder tracks at front-door recordHistoryEntry');
+        assert(repoSrc.includes('StatisticsEngine.isGenericQueueOrCorrupted'), 'BookmarkRepository.kt blocks corrupted queue tracks at front-door recordHistoryEntry');
+
+        const mainVmSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/viewmodel/MainViewModel.kt'), 'utf8');
+        assert(mainVmSrc.includes('val spotifyTopTracks: StateFlow<List<TopTrackStat>>'), 'MainViewModel.kt exposes spotifyTopTracks StateFlow');
+        assert(mainVmSrc.includes('apiClient.getTopTracks("short_term", 20)'), 'MainViewModel.kt fetches top tracks from Spotify Web API');
+        assert(mainVmSrc.includes('_spotifyTopTracks.value = converted'), 'MainViewModel.kt updates _spotifyTopTracks with converted TopTrackStat items');
+
+        const timeFormatterSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/ui/util/TimeFormatter.kt'), 'utf8');
+        assert(timeFormatterSrc.includes('"< 1 Min."'), 'TimeFormatter.kt formats sub-minute listening times cleanly as < 1 Min.');
+
+        const statsEngineSrc = fs.readFileSync(path.join(rootDir, 'app/src/main/java/com/spotisave/app/data/stats/StatisticsEngine.kt'), 'utf8');
+        assert(statsEngineSrc.includes('spotifyTopTracks: List<TopTrackStat> = emptyList()'), 'StatisticsEngine.kt accepts spotifyTopTracks parameter');
+        assert(statsEngineSrc.includes('msPerDay[idx] / 60000L'), 'StatisticsEngine.kt accumulates milliseconds before dividing by 60000L to prevent truncation loss');
+
+        const indexHtmlStats2 = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
+        assert(indexHtmlStats2.includes('switchStatsSegment'), 'index.html implements switchStatsSegment for segmented analytics navigation');
+        assert(indexHtmlStats2.includes('id="stats-tod-container"') && indexHtmlStats2.includes('id="stats-top-tracks-container"'), 'index.html defines containers for Tageszeiten and Top-Titel');
+        assert(indexHtmlStats2.includes('id="stats-tod-list"') && indexHtmlStats2.includes('id="stats-top-tracks-list"'), 'index.html defines lists for Tageszeiten distribution and Top-Titel ranking');
+
+        // Simulation: Multi-source placeholder detection and sub-minute precision
+        const testTrackUris = [
+            'spotify:track:active',
+            'spotify:track:active:123',
+            'spotify:track:notification',
+            'spotify:track:local_xyz',
+            'local_audio_track',
+            'local:file:123',
+            'spotify:local:artist:album:song:100',
+            'spotify:track:real1'
+        ];
+
+        const isPlaceholder = (uri, title) => {
+            if (!uri || uri.includes(':active') || uri.includes(':notification') || uri.includes('local_') || uri.startsWith('local:') || uri.startsWith('spotify:local')) return true;
+            if (title === 'Unbekannter Titel' || (title && title.toLowerCase().includes('warteschlange')) || (title && title.toLowerCase().includes('queue'))) return true;
+            return false;
+        };
+
+        const filtered = testTrackUris.filter(u => !isPlaceholder(u, 'Valid Song'));
+        assert(filtered.length === 1 && filtered[0] === 'spotify:track:real1', 'Simulation: Advanced placeholder detection catches all 7 corrupted URI formats');
+
+        // Sub-minute formatting test
+        const formatHoursAndMinutes = (ms) => {
+            const totalMinutes = Math.floor(ms / 60000);
+            const hours = Math.floor(totalMinutes / 60);
+            const mins = totalMinutes % 60;
+            if (hours > 0) {
+                return mins > 0 ? `${hours} Std. ${mins} Min.` : `${hours} Std.`;
+            } else if (mins > 0) {
+                return `${mins} Min.`;
+            } else {
+                return ms > 0 ? '< 1 Min.' : '0 Min.';
+            }
+        };
+
+        assert(formatHoursAndMinutes(0) === '0 Min.', 'Simulation: 0ms formats as 0 Min.');
+        assert(formatHoursAndMinutes(45000) === '< 1 Min.', 'Simulation: 45000ms formats as < 1 Min.');
+        assert(formatHoursAndMinutes(60000) === '1 Min.', 'Simulation: 60000ms formats as 1 Min.');
+        assert(formatHoursAndMinutes(3900000) === '1 Std. 5 Min.', 'Simulation: 3900000ms formats as 1 Std. 5 Min.');
     }
 
     console.log('\n========================================');

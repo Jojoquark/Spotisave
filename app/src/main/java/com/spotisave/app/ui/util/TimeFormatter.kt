@@ -50,8 +50,10 @@ object TimeFormatter {
         val minutes = totalMinutes % 60L
         return if (hours > 0) {
             if (minutes > 0) "${hours} Std. ${minutes} Min." else "${hours} Std."
-        } else {
+        } else if (minutes > 0) {
             "${minutes} Min."
+        } else {
+            "< 1 Min."
         }
     }
 }

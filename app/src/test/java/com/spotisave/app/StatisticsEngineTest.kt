@@ -511,4 +511,70 @@ class StatisticsEngineTest {
         assertEquals("P2", top[1].title)
         assertEquals(30, top[1].completionRate)
     }
+
+    @Test
+    fun testAdvancedPlaceholderAndCorruptedDetection() {
+        assertTrue(StatisticsEngine.isPlaceholderTrack("local_my_track", "Title"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("local:123", "Title"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:local:a:b:c:10", "Title"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:active:token", "Title"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:notification:silent", "Title"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:valid1", "Warteschlange"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:valid1", "Queue"))
+        assertTrue(StatisticsEngine.isPlaceholderTrack("spotify:track:valid1", "Wiedergabeschlange"))
+        assertFalse(StatisticsEngine.isPlaceholderTrack("spotify:track:valid1", "Real Song Name"))
+    }
+
+    @Test
+    fun testTimeOfDayDistributionFractionalMinutes() {
+        val cal = Calendar.getInstance(Locale.GERMANY)
+        cal.set(Calendar.HOUR_OF_DAY, 8)
+        val mTime = cal.timeInMillis
+
+        // 2 tracks of 50 seconds = 100 seconds = 1 minute 40 seconds -> should be 1 minute
+        val history = listOf(
+            HistoryTrackEntry(id = "1", trackUri = "spotify:track:1", trackTitle = "T1", artist = "A1", album = "Alb", contextUri = "spotify:playlist:p1", contextTitle = "P1", durationMs = 60_000L, listenedMs = 50_000L, timestamp = mTime),
+            HistoryTrackEntry(id = "2", trackUri = "spotify:track:2", trackTitle = "T2", artist = "A2", album = "Alb", contextUri = "spotify:playlist:p1", contextTitle = "P1", durationMs = 60_000L, listenedMs = 50_000L, timestamp = mTime)
+        )
+
+        val dist = StatisticsEngine.calculateTimeOfDayDistribution(emptyList(), history)
+        val morning = dist.find { it.slotName == "Morgen" }
+        assertEquals(1, morning?.minutes) // 100_000 ms / 60_000 ms = 1 Min.
+    }
+
+    @Test
+    fun testPersonaAlignmentWithTimeOfDaySlots() {
+        val cal = Calendar.getInstance(Locale.GERMANY)
+        // Set timestamp in Nacht (e.g. 03:00)
+        cal.set(Calendar.HOUR_OF_DAY, 3)
+        val nHistory = listOf(
+            HistoryTrackEntry(id = "1", trackUri = "spotify:track:1", trackTitle = "T1", artist = "A1", album = "Alb", contextUri = "spotify:playlist:p1", contextTitle = "P1", durationMs = 60_000L, listenedMs = 60_000L, timestamp = cal.timeInMillis)
+        )
+        val (nPersona, _) = StatisticsEngine.calculatePersonaAndHours(emptyList(), nHistory)
+        assertEquals("Nachteule 🦉", nPersona)
+
+        // Set timestamp in Morgen (08:00)
+        cal.set(Calendar.HOUR_OF_DAY, 8)
+        val mHistory = listOf(
+            HistoryTrackEntry(id = "2", trackUri = "spotify:track:2", trackTitle = "T2", artist = "A2", album = "Alb", contextUri = "spotify:playlist:p1", contextTitle = "P1", durationMs = 60_000L, listenedMs = 60_000L, timestamp = cal.timeInMillis)
+        )
+        val (mPersona, _) = StatisticsEngine.calculatePersonaAndHours(emptyList(), mHistory)
+        assertEquals("Morgenmensch 🌅", mPersona)
+
+        // Set timestamp in Nachmittag (14:00)
+        cal.set(Calendar.HOUR_OF_DAY, 14)
+        val aHistory = listOf(
+            HistoryTrackEntry(id = "3", trackUri = "spotify:track:3", trackTitle = "T3", artist = "A3", album = "Alb", contextUri = "spotify:playlist:p1", contextTitle = "P1", durationMs = 60_000L, listenedMs = 60_000L, timestamp = cal.timeInMillis)
+        )
+        val (aPersona, _) = StatisticsEngine.calculatePersonaAndHours(emptyList(), aHistory)
+        assertEquals("Fokus-Nachmittag ⚡️", aPersona)
+
+        // Set timestamp in Abend (20:00)
+        cal.set(Calendar.HOUR_OF_DAY, 20)
+        val eHistory = listOf(
+            HistoryTrackEntry(id = "4", trackUri = "spotify:track:4", trackTitle = "T4", artist = "A4", album = "Alb", contextUri = "spotify:playlist:p1", contextTitle = "P1", durationMs = 60_000L, listenedMs = 60_000L, timestamp = cal.timeInMillis)
+        )
+        val (ePersona, _) = StatisticsEngine.calculatePersonaAndHours(emptyList(), eHistory)
+        assertEquals("Abend-Chiller 🌙", ePersona)
+    }
 }

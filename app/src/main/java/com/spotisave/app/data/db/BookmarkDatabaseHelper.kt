@@ -380,6 +380,31 @@ class BookmarkDatabaseHelper(context: Context) : SQLiteOpenHelper(
     }
 
     @Synchronized
+    fun deleteHistoryEntry(id: String): Int {
+        val db = writableDatabase
+        return db.delete(TABLE_HISTORY, "$COL_HIST_ID = ?", arrayOf(id))
+    }
+
+    @Synchronized
+    fun purgeCorruptedHistory(): Int {
+        val db = writableDatabase
+        val whereClause = """
+            $COL_HIST_TRACK_URI LIKE '%:active%' OR
+            $COL_HIST_TRACK_URI LIKE '%:notification%' OR
+            $COL_HIST_TRACK_URI LIKE '%local_%' OR
+            $COL_HIST_TRACK_URI LIKE 'spotify:local%' OR
+            $COL_HIST_TRACK_TITLE = 'Unbekannter Titel' OR
+            LOWER($COL_HIST_TRACK_TITLE) LIKE '%warteschlange%' OR
+            LOWER($COL_HIST_TRACK_TITLE) LIKE '%queue%' OR
+            LOWER($COL_HIST_CONTEXT_TITLE) LIKE '%warteschlange%' OR
+            LOWER($COL_HIST_CONTEXT_TITLE) LIKE '%queue%' OR
+            LOWER($COL_HIST_ID) LIKE '%warteschlange%' OR
+            LOWER($COL_HIST_ID) LIKE '%queue%'
+        """.trimIndent()
+        return db.delete(TABLE_HISTORY, whereClause, null)
+    }
+
+    @Synchronized
     fun clearHistory(): Int {
         val db = writableDatabase
         return db.delete(TABLE_HISTORY, null, null)

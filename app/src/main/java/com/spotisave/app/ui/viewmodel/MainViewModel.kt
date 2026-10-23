@@ -20,6 +20,8 @@ import com.spotisave.app.data.repository.BookmarkRepository
 import com.spotisave.app.data.stats.ArtistStat
 import com.spotisave.app.data.stats.ListeningStats
 import com.spotisave.app.data.stats.StatisticsEngine
+import com.spotisave.app.data.stats.TopTrackStat
+import com.spotisave.app.ui.util.TimeFormatter
 import com.spotisave.app.service.PlaybackTracker
 import com.spotisave.app.service.SpotifyForegroundService
 import com.spotisave.app.service.SpotifyNotificationListenerService
@@ -102,17 +104,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _spotifyTopArtists = MutableStateFlow<List<ArtistStat>>(emptyList())
     val spotifyTopArtists: StateFlow<List<ArtistStat>> = _spotifyTopArtists.asStateFlow()
 
+    private val _spotifyTopTracks = MutableStateFlow<List<TopTrackStat>>(emptyList())
+    val spotifyTopTracks: StateFlow<List<TopTrackStat>> = _spotifyTopTracks.asStateFlow()
+
     val listeningStats: StateFlow<ListeningStats> = combine(
         bookmarks,
         repository.listeningHistory,
         activePlayback,
-        _spotifyTopArtists
-    ) { bmList, histList, playback, topArtists ->
+        _spotifyTopArtists,
+        _spotifyTopTracks
+    ) { bmList, histList, playback, topArtists, topTracks ->
         StatisticsEngine.calculateStats(
             bookmarks = bmList,
             history = histList,
             activePlayback = playback,
-            spotifyTopArtists = topArtists
+            spotifyTopArtists = topArtists,
+            spotifyTopTracks = topTracks
         )
     }.stateIn(
         scope = viewModelScope,
@@ -481,6 +488,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (!topArtists.isNullOrEmpty()) {
                     _spotifyTopArtists.value = topArtists
                     Log.i("MainViewModel", "Spotify Top-Künstler synchronisiert: ${topArtists.size} Künstler erfasst")
+                }
+
+                val topTracksResult = apiClient.getTopTracks("short_term", 20)
+                val topTracks = topTracksResult.getOrNull()
+                if (!topTracks.isNullOrEmpty()) {
+                    val converted = topTracks.mapIndexed { index, track ->
+                        TopTrackStat(
+                            trackUri = track.uri,
+                            title = track.name,
+                            artist = track.artistName,
+                            contextTitle = track.albumName,
+                            coverUrl = track.coverUrl,
+                            playCount = (topTracks.size - index).coerceAtLeast(1),
+                            durationMs = track.durationMs,
+                            totalTimeMs = track.durationMs * (topTracks.size - index),
+                            formattedDuration = TimeFormatter.formatTime(track.durationMs),
+                            formattedTotalTime = TimeFormatter.formatHoursAndMinutes(track.durationMs * (topTracks.size - index)),
+                            bookmark = Bookmark(
+                                id = track.uri,
+                                contextUri = null,
+                                contextTitle = track.albumName,
+                                trackTitle = track.name,
+                                artist = track.artistName,
+                                trackUri = track.uri,
+                                coverUrl = track.coverUrl,
+                                positionMs = 0L,
+                                durationMs = track.durationMs
+                            )
+                        )
+                    }
+                    _spotifyTopTracks.value = converted
+                    Log.i("MainViewModel", "Spotify Top-Tracks synchronisiert: ${topTracks.size} Titel erfasst")
                 }
             } catch (e: Exception) {
                 Log.d("MainViewModel", "Fehler bei syncSpotifyHistory: ${e.message}")

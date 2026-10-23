@@ -5,6 +5,7 @@ import com.spotisave.app.data.db.BookmarkDatabaseHelper
 import com.spotisave.app.data.model.Bookmark
 import com.spotisave.app.data.model.HistoryTrackEntry
 import com.spotisave.app.data.model.PlaybackStateModel
+import com.spotisave.app.data.stats.StatisticsEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -68,6 +69,7 @@ class BookmarkRepository private constructor(context: Context) {
 
     fun reloadHistory() {
         scope.launch {
+            dbHelper.purgeCorruptedHistory()
             val list = dbHelper.getAllHistory()
             _listeningHistory.value = list
         }
@@ -189,6 +191,9 @@ class BookmarkRepository private constructor(context: Context) {
     }
 
     fun recordHistoryEntry(entry: HistoryTrackEntry) {
+        if (StatisticsEngine.isPlaceholderTrack(entry.trackUri, entry.trackTitle)) return
+        if (StatisticsEngine.isGenericQueueOrCorrupted(entry.trackTitle) ||
+            StatisticsEngine.isGenericQueueOrCorrupted(entry.id)) return
         scope.launch {
             dbHelper.insertOrUpdateHistory(entry)
             val updated = dbHelper.getAllHistory()
